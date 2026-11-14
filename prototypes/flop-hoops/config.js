@@ -10,6 +10,9 @@ window.CONFIG = {
 
   // ---- Match ----
   win_score: { value: 5, min: 1, max: 11, step: 1 },          // baskets to win
+  ai_skill: { value: 0.6, min: 0, max: 1, step: 0.05 },           // CPU: 0 sloppy and slow, 1 sharp and quick
+  ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at middling skill
+  ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at zero skill
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   score_time: { value: 1.4, min: 0.8, max: 4, step: 0.1 },     // s of celebration after a basket
@@ -21,6 +24,7 @@ window.CONFIG = {
   jump_hold_time: { value: 0.28, min: 0.05, max: 0.6, step: 0.01 }, // s of holding that lifts a jump to full height
   jump_forward: { value: 1.0, min: 0, max: 8, step: 0.1 },     // px/step push toward the hoop you attack
   jump_chase: { value: 0.9, min: 0, max: 8, step: 0.1 },       // px/step pull toward the play on each hop
+  hop_reach: { value: 6, min: 0, max: 12, step: 0.5 },            // px/step sideways a hop gets when leaning a full swing that way
   jump_spin: { value: 0.075, min: 0, max: 0.3, step: 0.005 },  // rad/step forward tip on each jump
   jump_tilt_mix: { value: 0.6, min: 0, max: 1, step: 0.05 },   // 0 = straight up, 1 = along the body
   jump_jitter: { value: 0.08, min: 0, max: 0.3, step: 0.01 },  // +- fraction of random jump strength
@@ -87,6 +91,10 @@ window.CONFIG = {
   rock_angle: { value: 0.55, min: 0, max: 0.9, step: 0.01 },    // rad of the forward-and-back rock while planted
   rock_rate: { value: 0.75, min: 0.2, max: 3, step: 0.05 },      // rocks a second
   rock_follow: { value: 0.6, min: 0.05, max: 1, step: 0.05 },   // how tightly a planted body tracks its swing
+  rock_engage: { value: 0.75, min: 0.3, max: 1.5, step: 0.05 },  // rad of tilt under which the planted swing takes over
+  rock_max_turn: { value: 0.05, min: 0.01, max: 0.2, step: 0.005 }, // rad/step the swing may turn the body at most
+  rock_max_speed: { value: 8, min: 2, max: 20, step: 0.5 },       // px/step the swing may move any body part at most
+  player_max_speed: { value: 22, min: 10, max: 30, step: 1 },     // px/step cap on every body part (not during a dunk)
   getup_time: { value: 0.7, min: 0.1, max: 3, step: 0.05 },     // s lying down before springing back up
   getup_pop: { value: 7, min: 0, max: 15, step: 0.5 },          // px/step upward pop when getting up
   body_width: { value: 28, min: 12, max: 50, step: 1 },         // px torso width

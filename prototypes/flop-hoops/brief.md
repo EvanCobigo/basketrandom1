@@ -40,6 +40,8 @@ After play: make the court less wide, and the character heads one pixel wider, m
 
 After play: make the menu more retro with a retro font. add a background for the menu, dropshadow for the text. add animations to the buttons in the menu.
 
+After play: create an AI to play against. Debug the movement to remove erratic launching into the air and into the basket.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -86,6 +88,8 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Only opponents collide; teammates pass through each other
 - [x] Planted players pivot on their feet, swinging evenly forward and back (±0.55 rad) at a beat that never fades, so a well-timed hop carries them far; fallen players get back up
 - [x] While a team has the ball, its key moves only the carrier: the teammate stays planted
+- [x] VS CPU mode: the computer plays the Tealbacks with the same two keys a person has (hops on the swing to the ball, shoots by distance with some error, taps to dunk, jumps to block, sometimes passes); 2 PLAYERS mode on one keyboard
+- [x] No erratic launches: the planted swing takes over only near upright and turns no faster than itself; a tumbling body's hop is steered no harder than a full swing; body parts capped at 22 px/step outside dunks; hops carry by the lean (hop_reach)
 - [x] Shots: one arc per cock-back and spot (forward 3.5-14, up 11-13, 1 s cock-back); lean, drift and momentum change nothing; strong aim help toward the rim's centre
 - [x] Bounce key: hold to wind up, let go to bounce the ball forward as a pass; a pass slips through opponents for 0.3 s and they cannot catch it for 0.6 s
 - [x] Dribble: tapping the bounce key bounces the ball at the feet while the player slides forward; each tap in a row adds sway and bounce error until the ball gets away (about 14 taps)
@@ -105,6 +109,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - ragdoll physics · in the slice
 - round venues and looks · in the slice
 - local 2-player · in the slice
+- CPU opponent · in the slice
 - menus and game states · in the slice
 - ball handling (grab, shoot, dunk, fadeaway, block) · in the slice
 
@@ -118,7 +123,6 @@ Every touch is contested from second one: the skill is timing your hop against t
 - Round modifiers (removed after play)
 
 ## Out of scope
-- An AI opponent: change it after play
 - Online play: needs a server, not built yet (two players on one keyboard instead)
 - Leagues and seasons: grow it
 

@@ -237,16 +237,18 @@ const Physics = (() => {
     const phase = w.time * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7;
     const dribbling = p.dribbleT > 0;
     if (dribbling) p.dribbleT -= dt;
-    const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < 1.1 && !dribbling;
+    // the swing only takes over once the body is fairly upright: a player who lands tilted is
+    // righted gently by the upright spring first, never snapped round in one step
+    const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < T.rock_engage && !dribbling;
     if (swinging) {
       const next = Math.sin(phase + T.rock_rate * Math.PI * 2 * dt) * T.rock_angle;   // where the swing should be next step
-      const om = lerp(torso.angularVelocity, wrap(next - a), T.rock_follow);             // rad/step
+      const om = clamp(lerp(torso.angularVelocity, wrap(next - a), T.rock_follow), -T.rock_max_turn, T.rock_max_turn); // rad/step, never faster than the swing itself
       const piv = p.legs.reduce((q, l) => {
         const c = Math.cos(l.angle), sn = Math.sin(l.angle), hl = p.dims.legL / 2;
         return { x: q.x + (l.position.x - sn * hl) / 2, y: q.y + (l.position.y + c * hl) / 2 };
       }, { x: 0, y: 0 });
       for (const part of [torso, p.head, ...p.legs]) {
-        Body.setVelocity(part, { x: -om * (part.position.y - piv.y), y: om * (part.position.x - piv.x) });
+        Body.setVelocity(part, { x: clamp(-om * (part.position.y - piv.y), -T.rock_max_speed, T.rock_max_speed), y: clamp(om * (part.position.x - piv.x), -T.rock_max_speed, T.rock_max_speed) });
         Body.setAngularVelocity(part, om);
       }
     } else {
@@ -293,13 +295,15 @@ const Physics = (() => {
     if (held && grounded && p.cd <= 0 && (!h || fresh)) {
       const v = vFull * T.jump_tap_frac * (1 + (w.rng() * 2 - 1) * T.jump_jitter);
       const m = T.jump_tilt_mix;
-      let jx = Math.sin(a) * m, jy = -(1 - m) - Math.cos(a) * m;
+      const ja = clamp(a, -T.rock_angle, T.rock_angle);   // a tumbling body steers no harder than a full swing
+      let jx = Math.sin(ja) * m, jy = -(1 - m) - Math.cos(ja) * m;
       if (jy > -0.35) jy = -0.35;            // even upside down, a jump goes up a little
       const n = Math.hypot(jx, jy); jx /= n; jy /= n;
       const c = carrier(w);
       const goalX = c && c.team === p.team ? attackedHoop(w, p).cx : w.ball.position.x;
       const chase = clamp((goalX - torso.position.x) / 200, -1, 1) * T.jump_chase;
-      const vx = jx * v + p.dir * T.jump_forward + chase, vy = jy * v;
+      // the swing steers the hop: lean one way and the hop carries you that way, up to hop_reach
+      const vx = jx * v + Math.sin(ja) / Math.sin(T.rock_angle) * T.hop_reach + p.dir * T.jump_forward + chase, vy = jy * v;
       for (const part of p.parts) {
         Body.setVelocity(part, { x: part.velocity.x * 0.25 + vx, y: Math.min(part.velocity.y, 0) * 0.25 + vy });
       }
@@ -618,7 +622,7 @@ const Physics = (() => {
       else w.trail = null;
     }
     capSpeed(ball, T.ball_max_speed);
-    for (const p of w.players) for (const part of p.parts) capSpeed(part, 30);
+    for (const p of w.players) if (!(w.dunk && w.dunk.p === p)) for (const part of p.parts) capSpeed(part, T.player_max_speed);
 
     for (const h of w.hoops) {   // the net drags a free ball passing through it: the swish
       if (!w.hold && ball.position.x > h.x1 && ball.position.x < h.x2 && ball.position.y > h.rimY && ball.position.y < h.rimY + 56) {
