@@ -225,6 +225,17 @@ const Render = (() => {
     venue(ctx, w, W, H);
     for (const x of [w.L - 40, w.R + 40]) sparkMachine(ctx, x, F(), w.sparkT || 0, t);
     for (const h of w.hoops) hoopBack(ctx, h);
+    if (w.hold) { // the dunk zone: a floor marker under the attacked rim while its carrier is near
+      const hp = w.hold.p, h = w.hoops.find(q => q.team === hp.team), dir = hp.dir, C = CONFIG;
+      const near = (h.cx - hp.torso.position.x) * dir;
+      if (near > -20 && near < C.dunk_reach_x.value * 2.4) {
+        const x0 = h.cx - dir * C.dunk_ground_x.value, x1 = h.cx - dir * C.dunk_min_gap.value, ready = w.hold.dunkReady;
+        ctx.fillStyle = ready ? (Math.floor(t * 8) % 2 ? '#ffd23f' : '#ffffff') : 'rgba(255,255,255,0.35)';
+        ctx.fillRect(Math.min(x0, x1), F() + 6, Math.abs(x1 - x0), 5);
+        ctx.fillStyle = ready ? '#ffd23f' : 'rgba(255,255,255,0.35)';
+        ctx.fillRect(x0 - 2, F() + 3, 4, 11); ctx.fillRect(x1 - 2, F() + 3, 4, 11);
+      }
+    }
     const B = pose(w.ball, al), r = w.ball.r;
     for (const p of w.players) {
       if (w.hustle[p.team]) { // a trailing team's hustle: a flickering block glow at the feet

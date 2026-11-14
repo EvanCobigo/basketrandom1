@@ -31,8 +31,28 @@ const Settings = (() => {
   const defaults = {};
   for (const k of Object.keys(CONFIG)) if (tunable(k)) defaults[k] = CONFIG[k].value;
 
-  /** Rows for the menu: section headers and value rows, in order. */
-  function rows() {
+  // The short list the menu opens with: plain names, a plain line about each, and a plain way to
+  // read the value. Everything else stays in the full list behind ADVANCED.
+  const pct = (v, k) => Math.round(v / defaults[k] * 100) + '%';
+  const level = v => v <= 0 ? 'OFF' : v <= 0.75 ? 'LOW' : v <= 1.5 ? 'NORMAL' : 'LOTS';
+  const SIMPLE = [
+    { key: 'volume', label: 'SOUND VOLUME', desc: 'HOW LOUD THE GAME IS.', fmt: v => Math.round(v * 100) + '%' },
+    { key: 'win_score', label: 'POINTS TO WIN', desc: 'FIRST TEAM TO THIS MANY POINTS WINS. LONG SHOTS ARE WORTH 2.', fmt: v => String(v) },
+    { key: 'ai_level', label: 'CPU LEVEL', desc: 'HOW GOOD THE COMPUTER IS IN A VS CPU MATCH (1 ROOKIE TO 5 LEGEND).', fmt: v => ['ROOKIE', 'AMATEUR', 'PRO', 'ALL-STAR', 'LEGEND'][v - 1] || String(v) },
+    { key: 'game_speed', label: 'GAME SPEED', desc: 'SLOWER IS EASIER TO FOLLOW, FASTER IS MORE FRANTIC.', fmt: (v, k) => pct(v, k) },
+    { key: 'jump_height', label: 'JUMP POWER', desc: 'HOW HIGH A FULL JUMP GOES.', fmt: (v, k) => pct(v, k) },
+    { key: 'dunk_reach_x', label: 'DUNK REACH', desc: 'HOW CLOSE TO THE RIM YOU NEED TO BE TO DUNK. SMALLER IS HARDER.', fmt: (v, k) => pct(v, k) },
+    { key: 'particles', label: 'PARTICLES', desc: 'HOW MANY SPARKS, DUST PUFFS AND CONFETTI THE EFFECTS MAKE.', fmt: level },
+    { key: 'shake', label: 'SCREEN SHAKE', desc: 'HOW HARD THE SCREEN SHAKES ON BIG PLAYS.', fmt: v => v <= 0 ? 'OFF' : v <= 8 ? 'LOW' : v <= 20 ? 'NORMAL' : 'HIGH' },
+    { key: 'crowd_rows', label: 'CROWD SIZE', desc: 'HOW MANY ROWS OF FANS WATCH THE GAME.', fmt: v => v <= 0 ? 'NONE' : v + (v === 1 ? ' ROW' : ' ROWS') },
+    { key: 'pixel_size', label: 'PIXEL SIZE', desc: 'BIGGER MEANS CHUNKIER, MORE RETRO GRAPHICS.', fmt: v => v.toFixed(1) },
+    { key: 'scanlines', label: 'SCANLINES', desc: 'THE FAINT TV LINES OVER THE COURT.', fmt: v => v <= 0 ? 'OFF' : Math.round(v / 0.5 * 100) + '%' },
+  ];
+  const simpleOf = k => SIMPLE.find(x => x.key === k);
+
+  /** Rows for the menu: section headers and value rows, in order (or just the short list). */
+  function rows(simple) {
+    if (simple) return SIMPLE.filter(x => tunable(x.key)).map(x => ({ key: x.key }));
     const left = new Set(Object.keys(defaults)), out = [];
     for (const [title, test] of SECTIONS) {
       const keys = [...left].filter(k => Array.isArray(test) ? test.includes(k) : test(k));
@@ -43,8 +63,11 @@ const Settings = (() => {
     return out;
   }
 
-  /** "jump_tap_frac" -> "JUMP TAP FRAC". */
-  const label = k => k.replace(/_/g, ' ').toUpperCase();
+  /** "jump_tap_frac" -> "JUMP TAP FRAC"; the short list has its own plain names. */
+  const label = (k, simple) => simple && simpleOf(k) ? simpleOf(k).label : k.replace(/_/g, ' ').toUpperCase();
+  const describe = k => simpleOf(k) ? simpleOf(k).desc : '';
+  /** The value in plain words, for the short list. */
+  const showSimple = k => simpleOf(k).fmt(CONFIG[k].value, k);
 
   /** The value as the menu shows it: whole numbers plain, otherwise to the step's decimals. */
   function show(k) {
@@ -80,5 +103,5 @@ const Settings = (() => {
   function reset() { for (const k of Object.keys(defaults)) CONFIG[k].value = defaults[k]; save(); dispatchEvent(new Event('tune')); }
   const changed = k => CONFIG[k].value !== defaults[k];
 
-  return { rows, label, show, set, nudge, share, load, reset, changed };
+  return { rows, label, describe, showSimple, show, set, nudge, share, load, reset, changed };
 })();

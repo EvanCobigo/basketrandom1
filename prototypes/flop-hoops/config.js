@@ -48,8 +48,12 @@ window.CONFIG = {
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
-  dunk_body_range: { value: 175, min: 60, max: 300, step: 5 },  // px from the carrier's body to the rim where TAP TO DUNK shows (standing or flying)
-  dunk_time: { value: 0.75, min: 0.08, max: 1.5, step: 0.01 },  // s the slam motion takes
+  dunk_min_gap: { value: 24, min: 0, max: 80, step: 2 },          // px a dunker must be from the rim, on the court side (under or behind it never dunks)
+  dunk_ground_x: { value: 70, min: 20, max: 160, step: 2 },       // px from the rim a standing carrier may start a dunk
+  dunk_reach_x: { value: 110, min: 40, max: 220, step: 5 },       // px from the rim a jump may top out and still dunk
+  dunk_fall_limit: { value: 4, min: 0, max: 12, step: 0.5 },      // px/step downward speed above which a falling dunker is too late
+  oop_bonus: { value: 1.3, min: 1, max: 2, step: 0.05 },          // an alley-oop catch gets this much more dunk reach
+  dunk_time: { value: 0.6, min: 0.08, max: 1.5, step: 0.01 },  // s the slam motion takes
   dunk_hang: { value: 0.18, min: 0, max: 0.6, step: 0.02 },      // s the dunker hangs on the rim after the slam
   dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk or windmill ends hanging on the rim
   dunk_rim_hang: { value: 0.9, min: 0.2, max: 2, step: 0.05 },    // s of hanging on the rim when it happens
@@ -146,6 +150,7 @@ window.CONFIG = {
 
 
   // ---- Look and juice ----
+  particles: { value: 1.5, min: 0, max: 3, step: 0.25 },          // how many particles every effect makes (0 turns them off)
   crowd_rows: { value: 3, min: 0, max: 5, step: 1 },              // rows of fans in the stands
   crowd_gaps: { value: 0.12, min: 0, max: 0.9, step: 0.01 },     // share of empty seats
   crowd_hype_time: { value: 2.2, min: 0.3, max: 6, step: 0.1 },  // s the crowd stays on its feet after sparks fly

@@ -69,13 +69,14 @@ const AI = (() => {
       const foeNear = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - p.torso.position.x) < 90);
       const foeClose = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - p.torso.position.x) < 150);
       const mateAhead = mate && (mate.torso.position.x - p.torso.position.x) * dir > 40;
-      const mateAtRim = mate && Math.hypot(mate.torso.position.x - hoop.cx, mate.torso.position.y - hoop.rimY) < T.dunk_body_range * 0.95;
+      const mateGap = mate ? (hoop.cx - mate.torso.position.x) * dir : -1e9;   // the teammate's distance from the rim, court side positive
+      const mateAtRim = mate && mateGap >= T.dunk_min_gap && mateGap <= T.dunk_reach_x * T.oop_bonus;
       const passFor = d => clamp(0.3 + d / 600, T.dribble_threshold + 0.05, 1) * T.bounce_charge_time;   // how long to wind a pass of d px
       // level 5: the alley-oop. A teammate is at the rim: bounce it to them; the catch brings up the dunk
       if (level >= 5 && mateAtRim && mateAhead) { c.bounce = true; c.bholdT = passFor(Math.abs(mate.torso.position.x - p.torso.position.x)); c.dribs = 0; return c; }
       // level 5 also feeds a teammate who is well ahead and much nearer the hoop: the set-up for one
       const mateX = mate ? Math.abs(hoop.cx - mate.torso.position.x) : 1e9;
-      if (level >= 5 && mateAhead && mateX < X - 150 && mateX < T.dunk_body_range * 1.6 && c.rng() < 0.6) { c.bounce = true; c.bholdT = passFor(Math.abs(mate.torso.position.x - p.torso.position.x)); c.dribs = 0; return c; }
+      if (level >= 5 && mateAhead && mateX < X - 150 && mateX < T.dunk_reach_x * 2.2 && c.rng() < 0.6) { c.bounce = true; c.bholdT = passFor(Math.abs(mate.torso.position.x - p.torso.position.x)); c.dribs = 0; return c; }
       // level 3+: crowded, with a teammate further upcourt: pass, sometimes
       if (level >= 3 && foeNear && mateAhead && c.rng() < 0.5) { c.bounce = true; c.bholdT = passFor(Math.abs(mate.torso.position.x - p.torso.position.x)); c.dribs = 0; return c; }
       // open on its own half: the long shot is worth 2, so it is taken rather than dribbled away
@@ -85,7 +86,8 @@ const AI = (() => {
       // level 3+: too far to dunk and not shooting long: dribble upcourt, a few at a time
       const maxDribs = level >= 4 ? 6 : 3;
       // (never into a defender: crowded, it shoots or passes instead of dribbling the ball away)
-      if (level >= 3 && !longShot && !foeNear && X > T.dunk_body_range + 30 && c.dribs < maxDribs) { c.bounce = true; c.bholdT = tap; c.dribs++; return c; }
+      const gap = (hoop.cx - p.torso.position.x) * dir;                          // court side of the rim is positive
+      if (level >= 3 && !longShot && !foeNear && gap > T.dunk_ground_x && c.dribs < maxDribs) { c.bounce = true; c.bholdT = tap; c.dribs++; return c; }
       // otherwise shoot: cock back for a time that fits the distance, misjudged more at low levels
       const want = clamp((X - 140) / 620, 0.05, 1) + (c.rng() * 2 - 1) * T.ai_error * (1 - skill);
       c.jump = true; c.holdT = clamp(want, 0.03, 1) * T.shot_charge_time; c.dribs = 0;
@@ -96,7 +98,7 @@ const AI = (() => {
     const lb = w.lastBouncer;
     if (!hold && lb && lb.team === c.team && lb.dribbleT > 0) {
       const hoop = w.hoops.find(h => h.team === c.team), X = Math.abs(hoop.cx - lb.torso.position.x);
-      const more = X > T.dunk_body_range + 30 && c.dribs < (level >= 4 ? 6 : 3) && !lb.queued;
+      const more = (hoop.cx - lb.torso.position.x) * lb.dir > T.dunk_ground_x && c.dribs < (level >= 4 ? 6 : 3) && !lb.queued;
       // level 4+ taps in rhythm, as the ball rises; level 3 taps whenever, so its dribble gets sloppy
       if (more && (level >= 4 ? ball.velocity.y < -0.5 : c.rng() < 0.12)) { c.bounce = true; c.bholdT = tap; c.dribs++; }
       return c;

@@ -193,25 +193,28 @@ function reset() {
 const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
 function callout(s, team) { state.toast = s; state.toastT = 1.1; state.toastTeam = team; }
 function onPhysEvent(ev) {
-  if (ev.type === 'jump') { sfx.jump(ev.team); return; }
+  if (ev.type === 'jump') { sfx.jump(ev.team); puff(ev.x, ev.y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 24 }); return; }
   if (ev.type === 'dribble') { sfx.bounce(0.2); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
-  if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; events.push({ type: 'grab', team: ev.team }); return; }
+  if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; puff(ev.x, ev.y, 6, { speed: 150, life: 0.3, colors: ['#ffffff', '#ffd23f', Render.TEAM_COLORS[ev.team]], size: 6, g: 200, drag: 0.85 }); events.push({ type: 'grab', team: ev.team }); return; }
   if (ev.type === 'shoot' || ev.type === 'fadeaway') {
     sfx.shoot(ev.charge); events.push({ type: ev.type, team: ev.team });
+    puff(ev.x, ev.y, 4, { speed: 130, life: 0.3, colors: ['#ffffff', Render.TEAM_COLORS[ev.team]], size: 6, g: 100, drag: 0.88 });
+    if (ev.perfect) puff(ev.x, ev.y, 10, { speed: 300, life: 0.55, colors: Render.RAINBOW, size: 7, g: 300, drag: 0.9 });
     if (ev.perfect) { callout('PERFECT!', ev.team); sfx.perfect(); }
     else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
     return;
   }
-  if (ev.type === 'dribbleout') { sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
-  if (ev.type === 'bounce') { sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
+  if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
+  if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team); world.hype = Math.max(world.hype || 0, 0.7); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
-  if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 10, { speed: 320, life: 0.45, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; state.hitstop = tune.dunk_hitstop; events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
+  if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; state.hitstop = tune.dunk_hitstop; events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
+  if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
   if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
   if (ev.type !== 'hit' || ev.speed < 1.2) return;
   if (ev.on === 'floor' && ev.speed > 3) puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 14 });
-  if (ev.on === 'rim' && ev.speed > 2) puff(ev.x, ev.y, 4, { speed: 220, life: 0.25, colors: ['#ffd23f', '#ffffff'], size: 6, g: 600 });
+  if (ev.on === 'rim' && ev.speed > 2) puff(ev.x, ev.y, 6, { speed: 220, life: 0.25, colors: ['#ffd23f', '#ffffff'], size: 6, g: 600 });
   if (ev.on === 'player') { sfx.bop(ev.speed); events.push({ type: 'touch', team: ev.team }); }
   else if (ev.on === 'floor') sfx.floor(ev.speed);
   else if (ev.on === 'board') { sfx.board(ev.speed); if (ev.hoop) ev.hoop.wobble = 1; }
@@ -287,7 +290,7 @@ function score(hoop) {
   state.score[team] += pts; state.pops[team] = pts === 2 ? 1.6 : 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
   hoop.sway = 1.5;
   const c = [Render.TEAM_COLORS[team], '#ffd23f', '#ffffff', Render.TEAM_DARK[team]];
-  for (let i = 0; i < 36; i++) {
+  for (let i = 0, n = Math.round(54 * tune.particles / 1.5); i < n; i++) {
     state.particles.push({ x: (hoop.x1 + hoop.x2) / 2, y: hoop.rimY + 20, vx: (rng() - 0.5) * 900, vy: -200 - rng() * 700,
       a: rng() * 6, va: (rng() - 0.5) * 20, life: 1.2 + rng() * 0.8, c: c[i % 4] });
   }
@@ -295,7 +298,7 @@ function score(hoop) {
   world.hype = Math.max(world.hype || 0, 0.45);   // every basket lifts the crowd a little
   if (own && shot.kind === 'fade') sparkShow();
   sfx.cheer(own && (shot.kind === 'dunk' || shot.perfect) ? 1 : 0.6);
-  puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 6, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
+  puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 9, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
   events.push({ type: 'score', team, points: pts, score: state.score.slice() });
   if (pts === 2) sparkShow();   // a long shot gets the sparks too
   state.winner = Scoring.winner(state.score, tune.win_score);
@@ -306,6 +309,7 @@ let fxSeed = 7;
 function fxr() { fxSeed = (fxSeed * 1103515245 + 12345) & 0x7fffffff; return fxSeed / 0x7fffffff; }
 /** Spawn n particles at (x, y): spread is the launch speed in px/s, up its upward bias, g gravity. */
 function puff(x, y, n, o) {
+  n = tune.particles <= 0 ? 0 : Math.max(1, Math.round(n * tune.particles));   // the Particles setting scales every burst
   for (let i = 0; i < n; i++) {
     const a = o.angle !== undefined ? o.angle + (fxr() - 0.5) * (o.cone || Math.PI) : fxr() * Math.PI * 2;
     const sp = o.speed * (0.5 + fxr() * 0.5);
@@ -316,10 +320,20 @@ function puff(x, y, n, o) {
 /** The cold-spark machines at both court edges fountain for a moment. */
 function sparkShow() { if (world) { world.sparkT = tune.spark_time; world.hype = Math.max(world.hype || 0, 1); } sfx.sparks(); }
 function updateJuice(dt) {
+  state.fxTick = (state.fxTick || 0) + 1;
+  if (world && state.fxTick % 2 === 0) {
+    const b = world.ball, tr = world.trail;
+    if (tr && b.shot && b.shot === tr.shot && !world.hold) {   // a sparkle trail behind a shot, in the trail's colour
+      const col = tr.mode === 'rainbow' ? Render.RAINBOW : tr.mode === 'green' ? [Render.CONTESTED] : tr.mode === 'blue' ? [Render.FADE_BLUE] : ['#ffffff'];
+      puff(b.position.x, b.position.y, 1, { speed: 40, life: 0.4, colors: col, size: 6, g: 0, drag: 0.93 });
+    }
+    if (world.dunk && world.dunk.slammed && world.dunk.hang) puff(world.dunk.p.torso.position.x, world.dunk.p.torso.position.y - 20, 1, { speed: 50, angle: -Math.PI / 2, cone: 1.2, life: 0.5, colors: ['#ffd23f', '#ff9a1f'], size: 6, g: -120, drag: 0.95 });
+  }
+  if (world && state.fxTick % 6 === 0) for (const q of world.players) if (world.hustle[q.team]) puff(q.torso.position.x, Physics.FLOOR_Y - 6, 1, { speed: 50, angle: -Math.PI / 2, cone: 0.9, life: 0.5, colors: ['#ffd23f', '#ff9a3c'], size: 6, g: -150, drag: 0.95 });
   if (world && world.hype > 0) world.hype = Math.max(0, world.hype - dt / tune.crowd_hype_time);
   if (world && world.sparkT > 0) {   // icy sparks fountaining up from both machines
     world.sparkT -= dt;
-    for (const x of [world.L - 40, world.R + 40]) puff(x, Physics.FLOOR_Y - 44, 2, { speed: 520, angle: -Math.PI / 2, cone: 0.35, life: 0.8, colors: Render.ICE, size: 6, g: 900, drag: 0.99 });
+    for (const x of [world.L - 40, world.R + 40]) puff(x, Physics.FLOOR_Y - 44, 3, { speed: 520, angle: -Math.PI / 2, cone: 0.35, life: 0.8, colors: Render.ICE, size: 6, g: 900, drag: 0.99 });
   }
   if (state.fire) {   // flames licking up off the rim after a dunk
     const f = state.fire, h = f.hoop; f.t -= dt;
@@ -354,9 +368,12 @@ function levelClick(x, y) {
 }
 
 // ---- Settings menu: every coefficient in config.js, by section ----------------------------
-const SET = { x: 120, y: 150, w: 1040, rowH: 28, show: 15, sliderX: 760, sliderW: 340 };
-let settingsRows = Settings.rows(), settingsSel = 1, settingsTop = 0, settingsFrom = 'title', repeatT = 0;
-function openSettings() { settingsFrom = scene; settingsRows = Settings.rows(); scene = 'settings'; }
+const SET_ADV = { x: 120, y: 150, w: 1040, rowH: 28, show: 15, sliderX: 760, sliderW: 340 };
+const SET_SIMPLE = { x: 160, y: 150, w: 960, rowH: 38, show: 11, sliderX: 650, sliderW: 330 };
+let settingsAdvanced = false, SET = SET_SIMPLE;   // opens on the short, plain list; ADVANCED shows every coefficient
+let settingsRows = Settings.rows(true), settingsSel = 0, settingsTop = 0, settingsFrom = 'title', repeatT = 0;
+function setSettingsMode(adv) { settingsAdvanced = adv; SET = adv ? SET_ADV : SET_SIMPLE; settingsRows = Settings.rows(!adv); settingsSel = adv ? 1 : 0; settingsTop = 0; }
+function openSettings() { settingsFrom = scene; setSettingsMode(settingsAdvanced); scene = 'settings'; }
 function settingsMove(n) {
   let i = settingsSel;
   for (let k = 0; k < Math.abs(n); k++) {
@@ -580,7 +597,8 @@ const scenes = {
       else { drawGame(); }
       overlay(0.55);
       ptext('SETTINGS', W / 2, 62, 8, '#ffd23f', { outline: true, shadow: 6 });
-      ptext('UP/DOWN PICK  ·  LEFT/RIGHT CHANGE (HOLD TO RUN)  ·  CLICK OR DRAG A SLIDER  ·  WHEEL SCROLLS', W / 2, 112, 2, '#e6ddff');
+      ptext(settingsAdvanced ? 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE (HOLD TO RUN)  ·  CLICK OR DRAG A SLIDER  ·  WHEEL SCROLLS' : 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE  ·  OR CLICK A BAR', W / 2, 112, 2, '#e6ddff');
+      const sm = !settingsAdvanced, fs = sm ? 3 : 2, bh = sm ? 12 : 8;
       ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + 8, SET.y - 8, SET.w, SET.rowH * SET.show + 16);
       ctx.fillStyle = Render.INK; ctx.fillRect(SET.x - 4, SET.y - 16, SET.w + 8, SET.rowH * SET.show + 24);
       ctx.fillStyle = '#21183f'; ctx.fillRect(SET.x, SET.y - 12, SET.w, SET.rowH * SET.show + 16);
@@ -590,21 +608,26 @@ const scenes = {
         if (row.header) { ptext(row.header, SET.x + 24, y, 3, '#ffd23f', { align: 'left' }); continue; }
         const k = row.key, sel = i === settingsSel;
         if (sel) { ctx.fillStyle = '#3a2d6a'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, SET.w - 12, SET.rowH - 4); }
-        ptext(Settings.label(k), SET.x + 44, y, 2, Settings.changed(k) ? '#ff9a3c' : '#ffffff', { align: 'left', shadow: 2 });
-        ptext(Settings.show(k), SET.sliderX - 24, y, 2, '#fff1a8', { align: 'right', shadow: 2 });
-        ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX, y - 4, SET.sliderW, 8);
-        ctx.fillStyle = sel ? '#1fc2b1' : '#5d6480'; ctx.fillRect(SET.sliderX, y - 4, SET.sliderW * Settings.share(k), 8);
-        ctx.fillStyle = sel ? '#ffffff' : '#c9c3e0'; ctx.fillRect(SET.sliderX + SET.sliderW * Settings.share(k) - 5, y - 9, 10, 18);
+        ptext(Settings.label(k, sm), SET.x + 44, y, fs, !sm && Settings.changed(k) ? '#ff9a3c' : '#ffffff', { align: 'left', shadow: 2 });
+        ptext(sm ? Settings.showSimple(k) : Settings.show(k), SET.sliderX - 24, y, fs, '#fff1a8', { align: 'right', shadow: 2 });
+        ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW, bh);
+        ctx.fillStyle = sel ? '#1fc2b1' : '#5d6480'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW * Settings.share(k), bh);
+        ctx.fillStyle = sel ? '#ffffff' : '#c9c3e0'; ctx.fillRect(SET.sliderX + SET.sliderW * Settings.share(k) - 5, y - bh, 10, bh * 2);
         if (sel && Math.floor(state.t * 4) % 2) { ctx.fillStyle = '#ffffff'; for (let q = 0; q < 3; q++) ctx.fillRect(SET.x + 18 + q * 3, y - (3 - q) * 3, 3, (3 - q) * 6); }
       }
-      // scroll bar
-      const total = settingsRows.length, barH = SET.rowH * SET.show;
-      ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8, 8, barH);
-      ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8 + barH * settingsTop / total, 8, Math.max(16, barH * SET.show / total));
-      ptext('ORANGE NAMES ARE CHANGED FROM THE DEFAULT. SIZES OF BODIES AND COURT APPLY FROM THE NEXT ROUND.', W / 2, 600, 2, '#c9c3e0');
+      if (settingsAdvanced) {   // scroll bar for the long list
+        const total = settingsRows.length, barH = SET.rowH * SET.show;
+        ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8, 8, barH);
+        ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8 + barH * settingsTop / total, 8, Math.max(16, barH * SET.show / total));
+        ptext('ORANGE NAMES ARE CHANGED FROM THE DEFAULT. SIZES OF BODIES AND COURT APPLY FROM THE NEXT ROUND.', W / 2, 600, 2, '#c9c3e0');
+      } else {                  // a plain line about the highlighted setting
+        const row = settingsRows[settingsSel];
+        if (row) ptext(Settings.describe(row.key), W / 2, 596, 2, '#e6ddff');
+      }
       buttons = [];
-      btn('BACK', W / 2 - 290, 628, 260, 58, () => { scene = settingsFrom; }, '', 4);
-      btn('RESET ALL', W / 2 + 30, 628, 260, 58, () => Settings.reset(), '', 4);
+      btn('BACK', 210, 628, 260, 58, () => { scene = settingsFrom; }, '', 4);
+      btn(settingsAdvanced ? 'SIMPLE' : 'ADVANCED', 510, 628, 260, 58, () => setSettingsMode(!settingsAdvanced), '', 4);
+      btn('RESET ALL', 810, 628, 260, 58, () => Settings.reset(), '', 4);
     },
   },
   card: { // the round card: physics frozen while it flips in

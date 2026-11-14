@@ -51,6 +51,8 @@ After play: add an animation to the shooting where the back arm is extended and 
 
 After play: make the dunks slower so the animations are easier to see. make the windmill dunk rotate clockwise not counter clockwise, the arm should stay max length and rotate till the ball is inside the hoop. revert to previous version with the shooting animations, the bent wrist looks perfect, don't change, but keep the arms from swaying too much while not shooting. A realistic jump shot doesn't have much movement from the back arm when shooting. code AI to be able to dribble and do advanced things like alley oop etcetera, but make it scale based on a difficulty slider to choose how hard the ai is and what the functionalities that entail in the main menu.
 
+After play: speed up the dunks a bit. add more particles to things. Simplify the settings menu to make it more player accessible. The dunks should be harder to hit, make it so that you need to be closer to the rim to be able to start a dunk, you cannot be behind the basket, as in you need to be on the side that faces the center of the court, when you're jumping near the rim, the prompt should allow you to dunk, but only if your jump trajectory can coincide with a quality dunk animation.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -100,7 +102,10 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Planted players pivot on their feet, swinging evenly forward and back (±0.55 rad) at a beat that never fades, so a well-timed hop carries them far; fallen players get back up
 - [x] While a team has the ball, its key moves only the carrier: the teammate stays planted
 - [x] Shooting form: the shooting arm trails forward with the wrist bent palm-down; the back arm lifts only slightly (0.3 rad) as a guide and barely moves; idle arms hang toward straight down instead of swinging with the body
-- [x] Slower dunks (about 0.75 to 1.3 s) so the motion reads; a dunk straight off a teammate's pass is an ALLEY-OOP
+- [x] Dunks of about 0.6 to 1 s (a touch quicker than before, still readable); a dunk straight off a teammate's pass is an ALLEY-OOP
+- [x] Harder dunks: a dunk can only start from the court side of the rim, at least 24 px from it; standing it needs to be within 70 px; in the air the flight must top out within 110 px of the rim with the hand above it and not be dropping fast (an alley-oop catch gets 30% more reach). TAP TO DUNK only shows then, with a marker on the floor showing the zone
+- [x] Settings open on a short plain list of 11 (sound, points to win, CPU level, game speed, jump power, dunk reach, particles, screen shake, crowd size, pixel size, scanlines) with a line about each; ADVANCED shows every coefficient
+- [x] More particles, scaled by a PARTICLES setting: take-off and landing dust, catch sparkles, shot and perfect-shot bursts, a sparkle trail behind shots, block and steal bursts, hustle embers, a bigger dunk burst with embers while hanging, richer confetti and net flecks
 - [x] Three dunk styles at random: tomahawk (cocked behind the head, swung down), windmill (the arm at full length turning clockwise, mirrored for the team facing left, until the ball is in the hoop), honey dip (hanging by the forearm inside the rim); tomahawks and windmills hang on the rim half the time
 - [x] Every dribble carries the dribbler a little forward; a dribbled ball passes through opponents' bodies and only an opponent's hand can steal it
 - [x] Polish: points float up off the rim, a few frozen frames on a dunk's slam, darker screen corners, camera flashes in the crowd when it is hyped

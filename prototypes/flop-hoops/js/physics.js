@@ -92,12 +92,15 @@ const Physics = (() => {
    * @param {(ev: object) => void} onEvent receives {type, ...} for sound and callouts
    */
   function createWorld(S, T, rng, onEvent) {
+    const rawEvent = onEvent;
+    onEvent = ev => { if (ev.x === undefined && wRef.ball) { ev.x = wRef.ball.position.x; ev.y = wRef.ball.position.y; } rawEvent(ev); };
+    const wRef = {};
     const engine = Engine.create({ enableSleeping: false });
     engine.gravity.y = T.gravity * S.grav;
     engine.positionIterations = 10; engine.velocityIterations = 8; engine.constraintIterations = 4;
     const half = S.courtW / 2, L = CX - half, R = CX + half;
-    const w = { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
-      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, dribbleBall: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] };
+    const w = Object.assign(wRef, { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
+      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, dribbleBall: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] });
 
     const statics = [
       box(CX, FLOOR_Y + 200, 4000, 400, 'floor', { friction: 1 }),
@@ -321,7 +324,7 @@ const Physics = (() => {
       }
       Body.setAngularVelocity(torso, torso.angularVelocity + p.dir * T.jump_spin);
       p.cd = T.jump_cooldown; p.sinceJump = 0; p.sinceGround = 99; p.sinceFoot = 99; p.boosting = true;
-      w.onEvent({ type: 'jump', team: p.team });
+      w.onEvent({ type: 'jump', team: p.team, x: p.torso.position.x, y: w.floorY });
     } else if (p.boosting && held && p.sinceJump < T.jump_hold_time && torso.velocity.y < 0) {
       const add = vFull * (1 - T.jump_tap_frac) / (T.jump_hold_time * 60);
       for (const part of p.parts) Body.setVelocity(part, { x: part.velocity.x, y: part.velocity.y - add });
@@ -480,12 +483,36 @@ const Physics = (() => {
   }
 
   /**
-   * Whether the carrier can dunk now: standing or in the air, the body within T.dunk_body_range of
-   * the rim (measured in both directions), and on the court side of it.
+   * Where a body flying with this position and velocity tops out, with the body's air drag.
+   * Returns {x, y, steps}; a body already falling is at its top now.
    */
-  function dunkReady(w, T, p, hoop) {
-    return Math.hypot(p.torso.position.x - hoop.cx, p.torso.position.y - hoop.rimY) < T.dunk_body_range
-      && (hoop.boardX - p.torso.position.x) * p.dir > 0;
+  function apexOf(x, y, vx, vy, g, air) {
+    const keep = 1 - air;
+    let steps = 0;
+    while (vy < 0 && steps < 200) { x += vx; y += vy; vx *= keep; vy = vy * keep + g; steps++; }
+    return { x, y, steps, vy };
+  }
+
+  /**
+   * Whether the carrier can start a dunk now. Dunks are close-range and one-sided:
+   *  - the body must be on the court side of the rim, at least T.dunk_min_gap from it (under or
+   *    behind the rim is never a dunk);
+   *  - standing: within T.dunk_ground_x of the rim (the dunk then lifts the player up to it);
+   *  - in the air: the real flight has to top out inside T.dunk_reach_x of the rim with the hand
+   *    above the rim, and not be dropping faster than T.dunk_fall_limit (a flight arcing past or
+   *    away from the rim, or one that is already too late, gets no prompt);
+   *  - a catch straight off a teammate's pass (alley-oop) gets T.oop_bonus times the reach.
+   */
+  function dunkReady(w, T, p, hoop, fromPass) {
+    const t = p.torso, dir = p.dir, bonus = fromPass ? T.oop_bonus : 1;
+    const gap = (hoop.cx - t.position.x) * dir;
+    if (gap < T.dunk_min_gap) return false;
+    if (p.sinceGround <= 0.08) return gap <= T.dunk_ground_x * bonus;       // on the floor: close enough?
+    if (t.velocity.y > T.dunk_fall_limit) return false;                      // already dropping too fast
+    const top = apexOf(t.position.x, t.position.y, t.velocity.x, t.velocity.y, gravityPx(w), t.frictionAir);
+    const apexGap = (hoop.cx - top.x) * dir;
+    const handTop = top.y - p.dims.torsoH / 2 + 10 - p.dims.armL;
+    return apexGap >= T.dunk_min_gap && apexGap <= T.dunk_reach_x * bonus && handTop <= hoop.rimY - w.ball.r * 0.4;
   }
 
   const DUNK_STYLES = ['tomahawk', 'windmill', 'elbow'];
@@ -640,8 +667,11 @@ const Physics = (() => {
       else if (bk) { h.bouncing = true; h.bcharge = Math.min(1, h.bcharge + dt / T.bounce_charge_time); }
       if (h.bouncing && !bk) { bounce(w, T); return; }
       const hoop = attackedHoop(w, p);
-      h.dunkReady = dunkReady(w, T, p, hoop);
-      if (h.dunkReady && k && !h.prevK) { startDunk(w, T, hoop); return; }   // near the rim: a tap of jump dunks
+      h.dunkReady = dunkReady(w, T, p, hoop, h.fromPass && h.t < T.oop_window);
+      // near the rim: a tap of jump dunks. The prompt that was showing a step ago counts too, since the
+      // same press also takes off, and by now the player is already in the air
+      if ((h.dunkReady || h.wasReady) && k && !h.prevK) { startDunk(w, T, hoop); return; }
+      h.wasReady = h.dunkReady;
       h.prevK = k;
       if ((h.cocking && !k) || h.t > T.hold_max) { shoot(w, T); return; }
       for (const q of w.players) { // a defender's hand box over the held ball: stolen
@@ -720,5 +750,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle };
+  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady };
 })();
