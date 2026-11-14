@@ -101,8 +101,8 @@ const Render = (() => {
   }
 
   /** A squircle path (superellipse, exponent 4) of half-size r around the origin. */
-  function squirclePath(ctx, r) {
-    const pts = Physics.squircle(r, 32);
+  function squirclePath(ctx, r, e = 4) {
+    const pts = Physics.squircle(r, 32, e);
     ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
   }
 
@@ -136,7 +136,7 @@ const Render = (() => {
 
     ctx.save(); ctx.translate(A.x, A.y); ctx.rotate(A.a);
     ctx.beginPath(); ctx.rect(-d.armW / 2, -d.armL / 2, d.armW, d.armL); ink(ctx, look.skin, 5);
-    ctx.beginPath(); ctx.rect(-d.armW * 0.9, d.armL / 2 - d.armW * 0.7, d.armW * 1.8, d.armW * 1.6); ink(ctx, look.skin, 4);
+    ctx.beginPath(); ctx.rect(-d.armW * 0.6, d.armL / 2 - d.armW * 0.5, d.armW * 1.2, d.armW * 1.1); ink(ctx, look.skin, 4); // a small hand
     ctx.restore();
   }
 
@@ -145,8 +145,9 @@ const Render = (() => {
   function ball(ctx, x, y, r, a, withShadow = true) {
     if (withShadow) shadow(ctx, x, y, r);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-    squirclePath(ctx, r); ink(ctx, '#e8591a', Math.max(4, r * 0.18));
-    squirclePath(ctx, r - 1); ctx.save(); ctx.clip();
+    const e = CONFIG.ball_shape.value;
+    squirclePath(ctx, r, e); ink(ctx, '#e8591a', Math.max(4, r * 0.18));
+    squirclePath(ctx, r - 1, e); ctx.save(); ctx.clip();
     ctx.strokeStyle = INK; ctx.lineWidth = Math.max(3, r * 0.12);
     ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.moveTo(0, -r); ctx.lineTo(0, r);
     ctx.moveTo(-r * 0.45, -r); ctx.quadraticCurveTo(-r * 0.95, 0, -r * 0.45, r);

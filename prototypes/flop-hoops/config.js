@@ -33,15 +33,15 @@ window.CONFIG = {
   regrab_delay: { value: 0.4, min: 0, max: 1.5, step: 0.05 },   // s before a player who let go can grab again
   belly_margin: { value: 6, min: 0, max: 30, step: 1 },          // px the abdomen catch reaches past the torso
   hand_box: { value: 78, min: 20, max: 120, step: 2 },          // px side of the square catch box around each hand
-  shot_charge_time: { value: 1, min: 0.2, max: 2.5, step: 0.05 }, // s of holding to reach full shot power
+  shot_charge_time: { value: 1.0, min: 0.2, max: 2.5, step: 0.05 }, // s of holding to reach full shot power
   hold_max: { value: 4, min: 1, max: 6, step: 0.1 },          // s a ball can be held before it fires itself
-  shot_vx_min: { value: 3, min: 0, max: 15, step: 0.5 },      // px/step forward speed on a quick release
-  shot_vx_max: { value: 13, min: 4, max: 24, step: 0.5 },       // px/step forward speed fully cocked
-  shot_vy_min: { value: 9.5, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
-  shot_vy_max: { value: 11, min: 4, max: 22, step: 0.5 },       // px/step upward speed fully cocked (barely more)
-  fade_vy_bonus: { value: 2, min: 0, max: 8, step: 0.5 },     // px/step extra loft on a fadeaway
+  shot_vx_min: { value: 3.5, min: 0, max: 15, step: 0.5 },      // px/step forward speed on a quick release
+  shot_vx_max: { value: 14, min: 4, max: 24, step: 0.5 },       // px/step forward speed fully cocked
+  shot_vy_min: { value: 11, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
+  shot_vy_max: { value: 13, min: 4, max: 22, step: 0.5 },       // px/step upward speed fully cocked (barely more)
+  fade_vy_bonus: { value: 2.5, min: 0, max: 8, step: 0.5 },     // px/step extra loft on a fadeaway
   fade_vx_mul: { value: 0.9, min: 0.5, max: 1.3, step: 0.05 },  // fadeaway forward speed multiplier
-  shot_tilt: { value: 0.15, min: 0, max: 1.5, step: 0.05 },      // how much body lean bends the arc
+  shot_tilt: { value: 0.5, min: 0, max: 1.5, step: 0.05 },      // how much body lean bends the arc
   shot_assist: { value: 0.25, min: 0, max: 1, step: 0.05 },     // pull toward a speed that reaches the rim
   fade_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },      // a fadeaway's extra aim help
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
@@ -68,11 +68,13 @@ window.CONFIG = {
   rock_follow: { value: 0.6, min: 0.05, max: 1, step: 0.05 },   // how tightly a planted body tracks its swing
   getup_time: { value: 0.7, min: 0.1, max: 3, step: 0.05 },     // s lying down before springing back up
   getup_pop: { value: 7, min: 0, max: 15, step: 0.5 },          // px/step upward pop when getting up
-  body_width: { value: 24, min: 12, max: 50, step: 1 },         // px torso width
+  body_width: { value: 20, min: 12, max: 50, step: 1 },         // px torso width
   limb_width: { value: 11, min: 5, max: 20, step: 1 },          // px leg width (arms are 0.8 of it)
-  arm_width: { value: 16, min: 6, max: 30, step: 1 },           // px arm thickness
-  head_size: { value: 14, min: 8, max: 30, step: 1 },           // px head half-size
-  arm_length: { value: 92, min: 40, max: 140, step: 2 },        // px arm length
+  arm_width: { value: 12, min: 6, max: 30, step: 1 },           // px arm thickness
+  head_size: { value: 11, min: 8, max: 30, step: 1 },           // px head half-size
+  arm_length: { value: 64, min: 40, max: 140, step: 2 },        // px shoulder to fingertip: an 82" wingspan less the shoulders, halved
+  torso_length: { value: 54, min: 30, max: 90, step: 1 },       // px hip to shoulder (a 6 ft 6 in player at about 2 px per inch)
+  leg_length: { value: 88, min: 40, max: 120, step: 1 },        // px floor to hip
   upright_damp: { value: 3.5, min: 0, max: 15, step: 0.5 },    // 1/s damping on torso spin
   leg_stiffness: { value: 0.22, min: 0, max: 1, step: 0.01 },  // how hard legs swing back under the hips
   leg_follow: { value: 0.3, min: 0, max: 1, step: 0.05 },      // 0 floppy legs, 1 rigid legs
@@ -83,6 +85,7 @@ window.CONFIG = {
 
   // ---- Ball ----
   ball_radius: { value: 25, min: 16, max: 60, step: 1 },       // px
+  ball_shape: { value: 2.6, min: 2, max: 5, step: 0.1 },        // ball outline exponent: 2 round, 4 squircle
   ball_bounce: { value: 0.8, min: 0.3, max: 0.98, step: 0.01 },// restitution
   ball_mass: { value: 1.3, min: 0.3, max: 5, step: 0.1 },      // Matter mass units
   ball_kick: { value: 2.6, min: 0, max: 8, step: 0.1 },        // px/step extra pop off any body hit
@@ -93,9 +96,9 @@ window.CONFIG = {
   drop_height: { value: 430, min: 200, max: 520, step: 10 },   // px above the floor the ball drops from
 
   // ---- Court ----
-  court_width: { value: 1160, min: 900, max: 1240, step: 10 }, // px
+  court_width: { value: 980, min: 900, max: 1240, step: 10 }, // px
   rim_height: { value: 235, min: 200, max: 420, step: 5 },     // px from floor to rim
-  rim_span_min: { value: 58, min: 60, max: 160, step: 2 },     // px rim opening (grows with the ball)
+  rim_span_min: { value: 65, min: 60, max: 160, step: 2 },     // px rim opening (grows with the ball)
   rim_ball_ratio: { value: 1.3, min: 1.05, max: 2, step: 0.05 }, // rim opening as a multiple of the ball's width
   board_height: { value: 110, min: 60, max: 200, step: 5 },    // px backboard height
   board_inset: { value: 40, min: 20, max: 120, step: 2 },      // px from side wall to backboard

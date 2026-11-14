@@ -21,6 +21,9 @@ After play: create a hitbox that surrounds the hand of the character, if more th
 
 After play: shorten the height of the rims, and remove all modifiers. make the heads smaller. make it much more retro without as much detail, specifically the background, keep it simplistic like the jerseys. have the ball have a white trail on firing. The trail should be a rainbow if it is perfectly alligned with the goal. Make the firing a bit slower, and the arms beefier now. allow for backwards swinging, the characters should be pivoting off their foot, but swinging both left to right, not only middle to right and slowly slowing down, it should never be slowing down. add some more features you deem fit. the characters are not picking up the balls consistently currently.
 
+After play: make the ball rounder, the hands smaller, the arms shorter, make the court smaller, basketball hoop is of good size. bring ball mechanics back to what they were like earlier. make the human proportions seem to be of someone of about 6'6 height, with +4 wingspan.
+Answer: Which earlier ball mechanics: Iteration 2 shots.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -34,7 +37,7 @@ After play: shorten the height of the rims, and remove all modifiers. make the h
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters with small squircle heads, long beefy arms and plain shirts; a squircle ball with a white trail when fired (rainbow on a perfect line); small, low hoops; thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 6 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); hoops kept at their size (65 px rim, 10 ft high) on a narrower court; thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -66,6 +69,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Dunks near the rim, fadeaways when drifting or leaning away, blocks and steals by defenders
 - [x] Only opponents collide; teammates pass through each other
 - [x] Planted players pivot on their feet, swinging evenly forward and back at a beat that never fades; fallen players get back up
+- [x] Shots as in iteration 2: forward 3.5-14, up 11-13, 1 s cock-back, body lean bends the throw
 - [x] Slower game speed; players eased apart so they never pile into one blob
 - [x] Fired ball trail: white, rainbow with a PERFECT! callout when lined up with the rim
 - [x] SWISH and PERFECT SWISH baskets; HUSTLE higher jumps for a team 2+ points behind; pickup flash

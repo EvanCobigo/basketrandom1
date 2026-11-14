@@ -27,12 +27,15 @@ const Physics = (() => {
       { isStatic: true, friction: 0.8, restitution: 0.1, collisionFilter: staticFilter }, extra)), kind);
   }
 
-  /** Points of a squircle (superellipse, exponent 4) of half-size r, for the ball's body and drawing. */
-  function squircle(r, n = 28) {
-    const pts = [];
+  /**
+   * Points of a superellipse of half-size r: exponent e = 2 is a circle, 4 a squircle. Used for
+   * the ball's body and for drawing the ball and heads.
+   */
+  function squircle(r, n = 28, e = 4) {
+    const pts = [], k = 2 / e;
     for (let i = 0; i < n; i++) {
       const t = (i / n) * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
-      pts.push({ x: r * Math.sign(c) * Math.sqrt(Math.abs(c)), y: r * Math.sign(s) * Math.sqrt(Math.abs(s)) });
+      pts.push({ x: r * Math.sign(c) * Math.abs(c) ** k, y: r * Math.sign(s) * Math.abs(s) ** k });
     }
     return pts;
   }
@@ -41,8 +44,8 @@ const Physics = (() => {
   function makePlayer(x, team, idx, S, look, T) {
     const dir = team === 0 ? 1 : -1;
     const d = {
-      torsoW: T.body_width, torsoH: 62 * S.torso, headR: T.head_size * S.head,
-      legL: 52 * S.leg, legW: T.limb_width, armL: T.arm_length * S.arm, armW: T.arm_width,
+      torsoW: T.body_width, torsoH: T.torso_length * S.torso, headR: T.head_size * S.head,
+      legL: T.leg_length * S.leg, legW: T.limb_width, armL: T.arm_length * S.arm, armW: T.arm_width,
     };
     d.headS = d.headR * 1.8;   // squircle head, side length
     const hipY = FLOOR_Y - d.legL + 3;
@@ -120,7 +123,7 @@ const Physics = (() => {
     }
 
     // a squircle ball: it rolls with a slight lumpy wobble
-    w.ball = tag(Bodies.fromVertices(CX, FLOOR_Y - T.drop_height, [squircle(S.ballR)], { restitution: S.bounce,
+    w.ball = tag(Bodies.fromVertices(CX, FLOOR_Y - T.drop_height, [squircle(S.ballR, 28, T.ball_shape)], { restitution: S.bounce,
       friction: 0.05, frictionStatic: 0.1, frictionAir: T.ball_air,
       collisionFilter: { group: 0, category: CAT.BALL, mask: CAT.STATIC | CAT.TEAM0 | CAT.TEAM1 } }), 'ball');
     w.ball.r = S.ballR;
@@ -345,7 +348,7 @@ const Physics = (() => {
     const disc = vy * vy - 2 * g * Y;
     if (X > 30 && disc > 0) vx = lerp(vx, X / ((vy + Math.sqrt(disc)) / g), fade ? T.fade_assist : T.shot_assist);
     // the body's lean turns the throw with it: tipped forward flattens it, leaning back lofts it
-    const tilt = clamp(a * T.shot_tilt, -0.25, 0.25), ct = Math.cos(tilt), st = Math.sin(tilt);
+    const tilt = a * T.shot_tilt, ct = Math.cos(tilt), st = Math.sin(tilt);
     const x0 = vx * p.dir, y0 = -vy;
     release(w, T, 0.2);
     Body.setVelocity(ball, { x: x0 * ct - y0 * st + p.torso.velocity.x * 0.25, y: x0 * st + y0 * ct });
