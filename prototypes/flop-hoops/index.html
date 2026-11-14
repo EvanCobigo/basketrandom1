@@ -272,10 +272,13 @@ function score(hoop) {
     shot.perfect = soft;
     if (world.trail && world.trail.shot === shot) world.trail.mode = soft ? 'rainbow' : shot.kind === 'fade' ? 'blue' : 'green';
   }
+  const pts = Scoring.points(own ? shot : null, hoop.cx, world.cx);
   state.scoreKind = own ? (shot.perfect ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
     : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
+  if (pts === 2) state.scoreKind = (shot.perfect ? 'PERFECT ' : '') + 'LONG SHOT!';
+  state.points = pts;
   state.toastT = 0; // the score banner names the shot; no callout on top of it
-  state.score[team]++; state.pops[team] = 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
+  state.score[team] += pts; state.pops[team] = pts === 2 ? 1.6 : 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
   hoop.sway = 1.5;
   const c = [Render.TEAM_COLORS[team], '#ffd23f', '#ffffff', Render.TEAM_DARK[team]];
   for (let i = 0; i < 36; i++) {
@@ -287,7 +290,8 @@ function score(hoop) {
   if (own && shot.kind === 'fade') sparkShow();
   sfx.cheer(own && (shot.kind === 'dunk' || shot.perfect) ? 1 : 0.6);
   puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 6, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
-  events.push({ type: 'score', team, score: state.score.slice() });
+  events.push({ type: 'score', team, points: pts, score: state.score.slice() });
+  if (pts === 2) sparkShow();   // a long shot gets the sparks too
   state.winner = Scoring.winner(state.score, tune.win_score);
   scene = 'scored';
 }
@@ -513,7 +517,7 @@ const scenes = {
       btn('2 PLAYERS', W / 2 + 30, 506, 270, 74, () => newMatch('2p'), 'ONE KEYBOARD', 4);
       btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3);
       btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
-      ptext(`FIRST TO ${tune.win_score} BASKETS WINS  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 22, 2, '#c9c3e0');
+      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 22, 2, '#c9c3e0');
     },
   },
   settings: {
@@ -597,7 +601,7 @@ const scenes = {
       const k = Math.min(1, state.scoredT / 0.25), team = state.scorer;
       ctx.save(); ctx.translate(W / 2, 250); ctx.scale(k, k); ctx.rotate(-0.04);
       text(`${Render.TEAM_NAMES[team].toUpperCase()} SCORE!`, 0, 0, 64, Render.TEAM_COLORS[team], { weight: 900, stroke: 11 });
-      text(state.scoreKind, 0, 62, 40, '#ffd23f', { weight: 900, stroke: 8 });
+      text(state.scoreKind + (state.points === 2 ? '  +2' : '  +1'), 0, 62, 40, state.points === 2 ? '#ff9a3c' : '#ffd23f', { weight: 900, stroke: 8 });
       text(`${state.score[0]} - ${state.score[1]}`, 0, 116, 36, '#ffffff', { weight: 900, stroke: 7 });
       ctx.restore();
       buttons = [];

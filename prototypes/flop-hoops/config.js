@@ -9,7 +9,7 @@ window.CONFIG = {
   volume: { value: 0.5, min: 0, max: 1, step: 0.05 },
 
   // ---- Match ----
-  win_score: { value: 5, min: 1, max: 11, step: 1 },          // baskets to win
+  win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
   ai_skill: { value: 0.6, min: 0, max: 1, step: 0.05 },           // CPU: 0 sloppy and slow, 1 sharp and quick
   ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at middling skill
   ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at zero skill

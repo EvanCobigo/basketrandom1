@@ -387,7 +387,8 @@ const Physics = (() => {
     Body.setVelocity(ball, { x: vx * p.dir, y: -vy });
     Body.setAngularVelocity(ball, -p.dir * 0.2);
     const line = predictLine(w, T, hoop);
-    ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect: line.perfect, onTarget: line.onTarget, clean: true };
+    ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect: line.perfect, onTarget: line.onTarget, clean: true,
+      fromX: ball.position.x };   // where it was released: past the centre line, it is worth two
     // white by default; rainbow only for a clean perfect line; turns green only if an on-target shot touches rim or board
     // rainbow on a perfect line; blue for a fadeaway heading in; white otherwise (settled again if it scores)
     w.trail = { pts: [], mode: line.perfect ? 'rainbow' : fade && line.onTarget ? 'blue' : 'white', t: 0, shot: ball.shot };

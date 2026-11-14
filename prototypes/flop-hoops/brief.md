@@ -45,6 +45,8 @@ After play: create an AI to play against. Debug the movement to remove erratic l
 After play: create a settings menu, and make it so that all of these coefficients can be changed. lower pixelation effect. add a live audience in the back that is heads that bob up and down and accentuate with the sparks
 After play: improve dribbling mechanic
 
+After play: make it so that shots past the halfway point of the court count for two points, dunks count as one. make it play to 12
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -71,15 +73,15 @@ Every touch is contested from second one: the skill is timing your hop against t
 ## Core loop
 - Time hops to tip and shove the ball toward the opponent's hoop
 - Score → score animation → round reset with new random settings
-- First to 5 → victory screen → rematch
+- First to 12 points (long shots 2, everything else 1) → victory screen → rematch
 
 ## Goal & fail state
-- Win: first team to 5 baskets. Lose: the other team reaches 5 first.
+- Win: first team to 12 points. Lose: the other team reaches 12 first. A jump shot released on the far side of the centre line scores 2; dunks, close shots and scrambles score 1.
 
 ## Features
 - [x] Multi-body ragdoll players (head, torso, arms, legs) on one key per team
 - [x] Ball physics with ground, player, rim and backboard collisions
-- [x] Basket detection, scoreboard, score animation, screen shake, round reset
+- [x] Basket detection, scoreboard, score animation, screen shake, round reset; long shots from past the centre line score 2 (+2 LONG SHOT! with sparks), dunks and everything else 1; first to 12
 - [x] Rounds: same rules every round (no modifiers); venue colours and player looks change
 - [x] Settings menu (title and pause): every coefficient in config.js by section, with sliders, keys and mouse; saved in this browser; RESET ALL
 - [x] A live crowd in the stands: heads bobbing on their own beats, on their feet with arms up when the sparks fly and on every basket
