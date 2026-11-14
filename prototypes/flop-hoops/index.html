@@ -133,6 +133,19 @@ const sfx = {
   grab() { tone(392, 0.06, 'square', 0.08); tone(523, 0.08, 'square', 0.06, 0.05); },
   shoot(c) { tone(300 + c * 300, 0.16, 'triangle', 0.14, 0, 700 + c * 500); },
   dunk() { tone(110, 0.3, 'square', 0.22, 0, 55); noise(0.25, 0.35, 700); },
+  cheer(big) { // a crowd: two bands of noise swelling and fading, a few rising whoops on top
+    if (!audio || muted) return;
+    const ac = audio.ac, t = ac.currentTime;
+    for (const [f, q] of [[900, 0.8], [1700, 1.2]]) {
+      const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain();
+      src.buffer = audio.noise; src.loop = true; bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18 * big, t + 0.25);
+      g.gain.setValueAtTime(0.18 * big, t + 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+      src.connect(bp).connect(g).connect(audio.out); src.start(t); src.stop(t + 1.9);
+    }
+    [0.1, 0.32, 0.55].forEach((d, i) => tone(380 + i * 70, 0.35, 'sine', 0.035 * big, d, 760 + i * 90));
+  },
+  sparks() { noise(0.9, 0.12, 5200); noise(0.5, 0.08, 3000, 0.15); },
   bounce(c) { tone(200 + c * 120, 0.09, 'triangle', 0.16, 0, 120); },
   perfect() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, 'square', 0.06, i * 0.05)); },
   block() { noise(0.12, 0.3, 1600); tone(180, 0.12, 'square', 0.12, 0, 90); },
@@ -144,7 +157,7 @@ let scene, state, world = null, pauseFrom = 'play', prevVenue = '';
 function reset() {
   seed = Number(params.get('seed')) || CONFIG.seed;
   state = { t: 0, score: [0, 0], round: 0, venue: '', settings: null, cardT: 0, scoredT: 0,
-    scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
+    dribble: null, fire: null, scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
   prevVenue = '';
 }
 const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
@@ -159,10 +172,10 @@ function onPhysEvent(ev) {
     else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
     return;
   }
-  if (ev.type === 'dribbleout') { sfx.bounce(0.1); events.push({ type: 'dribbleout', team: ev.team }); return; }
+  if (ev.type === 'dribbleout') { sfx.bounce(0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2 }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
   if (ev.type === 'bounce') { sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); events.push({ type: 'dunkstart', team: ev.team }); return; }
-  if (ev.type === 'dunk') { puff(ev.x, ev.y, 10, { speed: 320, life: 0.45, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
+  if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 10, { speed: 320, life: 0.45, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
   if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
@@ -213,6 +226,11 @@ const DUST = () => (world && Render.VENUES[world.S.venue].line) || '#ffffff';
 const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
 function score(hoop) {
   const team = hoop.team, shot = world.ball.shot, own = shot && shot.team === team;
+  if (own && shot.kind !== 'dunk') {
+    const soft = (shot.hardest || 0) <= tune.soft_touch;   // clean, or only a soft kiss of rim or board: what happened, not the prediction
+    shot.perfect = soft;
+    if (world.trail && world.trail.shot === shot) world.trail.mode = soft ? 'rainbow' : shot.kind === 'fade' ? 'blue' : 'green';
+  }
   state.scoreKind = own ? (shot.perfect ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
     : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
   state.toastT = 0; // the score banner names the shot; no callout on top of it
@@ -224,6 +242,8 @@ function score(hoop) {
       a: rng() * 6, va: (rng() - 0.5) * 20, life: 1.2 + rng() * 0.8, c: c[i % 4] });
   }
   sfx.swish();
+  if (own && shot.kind === 'fade') sparkShow();
+  sfx.cheer(own && (shot.kind === 'dunk' || shot.perfect) ? 1 : 0.6);
   puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 6, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
   events.push({ type: 'score', team, score: state.score.slice() });
   state.winner = Scoring.winner(state.score, tune.win_score);
@@ -241,10 +261,23 @@ function puff(x, y, n, o) {
       a: 0, va: 0, life: o.life * (0.7 + fxr() * 0.3), max: o.life, c: o.colors[i % o.colors.length], size: o.size || 8, g: o.g ?? 900, drag: o.drag ?? 0.9 });
   }
 }
+/** The cold-spark machines at both court edges fountain for a moment. */
+function sparkShow() { if (world) world.sparkT = tune.spark_time; sfx.sparks(); }
 function updateJuice(dt) {
+  if (world && world.sparkT > 0) {   // icy sparks fountaining up from both machines
+    world.sparkT -= dt;
+    for (const x of [world.L - 40, world.R + 40]) puff(x, Physics.FLOOR_Y - 44, 2, { speed: 520, angle: -Math.PI / 2, cone: 0.35, life: 0.8, colors: Render.ICE, size: 6, g: 900, drag: 0.99 });
+  }
+  if (state.fire) {   // flames licking up off the rim after a dunk
+    const f = state.fire, h = f.hoop; f.t -= dt;
+    const k = Math.max(0, f.t / tune.fire_time);
+    puff(h.x1 + fxr() * (h.x2 - h.x1), h.rimY - 2, k > 0.3 ? 2 : 1, { speed: 60, angle: -Math.PI / 2, cone: 0.8, life: 0.45, colors: ['#ffe23b', '#ff9a1f', '#ff3b3b'], size: 9, g: -260, drag: 0.95 });
+    if (f.t <= 0) state.fire = null;
+  }
   state.pops = state.pops.map(p => Math.max(0, p - dt * 2.5));
   state.shake = Math.max(0, state.shake - dt * tune.shake * 2.2);
   state.toastT = Math.max(0, state.toastT - dt);
+  if (state.dribble) { state.dribble.t -= dt; if (state.dribble.t <= 0) state.dribble = null; }
   if (world && world.flash) world.flash.t = Math.max(0, world.flash.t - dt);
   for (const p of state.particles) { const d = Math.pow(p.drag ?? 0.99, dt * 60); p.vy += (p.g ?? 1400) * dt; p.vx *= d; p.vy *= p.g === 0 ? d : 1; p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt; p.life -= dt; }
   state.particles = state.particles.filter(p => p.life > 0 && p.y < H + 20);
@@ -274,6 +307,7 @@ function buildPalette(S) {
   for (const kit of S.kits) { cols.add(kit.jersey); cols.add(kit.shorts); }
   for (const team of S.looks) for (const l of team) { cols.add(l.skin); cols.add(l.shoe); }
   for (const c of Render.RAINBOW) cols.add(c);
+  for (const c of [Render.FADE_BLUE, ...Render.ICE, '#3a3f55', '#5d6480', '#24283a']) cols.add(c);
   cols.add(Render.CONTESTED);
   const out = [...cols].map(hexRGB);
   palette = out; paletteCache = new Map();
@@ -322,6 +356,10 @@ function drawGame(opts = {}) {
       const t = world.hustle[0] ? 0 : 1;
       text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128, 16, Render.TEAM_COLORS[t], { stroke: 4 });
     }
+  }
+  if (state.dribble && state.dribble.n > 1 && scene === 'play') { // the dribble chain: the more in a row, the shakier
+    const d = state.dribble, shaky = d.n >= 5;
+    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : ''}`, W / 2, 154, 18, shaky ? '#ff5b5b' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
   }
   if (world && world.hold && world.hold.dunkReady && (scene === 'play')) {
     const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;

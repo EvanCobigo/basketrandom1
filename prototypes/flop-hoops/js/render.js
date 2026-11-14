@@ -159,22 +159,33 @@ const Render = (() => {
   }
 
   const RAINBOW = ['#ff3b3b', '#ff9a1f', '#ffe23b', '#3bd66b', '#3ba7ff', '#9b5bff'];
-  const CONTESTED = '#7ee08a'; // the trail of an on-target shot that touched rim or backboard
+  const CONTESTED = '#7ee08a'; // the trail of a shot that scored after a real touch of rim or backboard
+  const FADE_BLUE = '#5aa8ff'; // the trail of a fadeaway that is going in
+  const ICE = ['#ffffff', '#cfefff', '#8fd6ff'];
   /** The fired ball's trail: blocks that shrink toward the tail; white, rainbow on a perfect line, green when contested. */
   function trail(ctx, tr, r, t) {
     const n = tr.pts.length;
     for (let i = 0; i < n; i++) {
-      const q = tr.pts[i], k = (i + 1) / n, sz = Math.max(4, r * 1.1 * k);
-      ctx.fillStyle = tr.mode === 'rainbow' ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : tr.mode === 'green' ? CONTESTED : '#ffffff';
+      const q = tr.pts[i], k = (i + 1) / n, sz = Math.max(6, r * CONFIG.trail_width.value * k);
+      ctx.fillStyle = tr.mode === 'rainbow' ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : tr.mode === 'green' ? CONTESTED : tr.mode === 'blue' ? FADE_BLUE : '#ffffff';
       ctx.globalAlpha = 0.35 + 0.6 * k;
       ctx.fillRect(q.x - sz / 2, q.y - sz / 2, sz, sz);
     }
     ctx.globalAlpha = 1;
   }
 
+  /** A cold-spark machine: a squat box with a nozzle; it glows while it fires. */
+  function sparkMachine(ctx, x, f, on, t) {
+    ctx.beginPath(); ctx.rect(x - 22, f - 30, 44, 30); ink(ctx, '#3a3f55', 5);
+    ctx.beginPath(); ctx.rect(x - 9, f - 42, 18, 12); ink(ctx, '#5d6480', 4);
+    ctx.fillStyle = on > 0 ? (Math.floor(t * 16) % 2 ? '#cfefff' : '#8fd6ff') : '#24283a';
+    ctx.fillRect(x - 14, f - 22, 28, 8);
+  }
+
   /** The whole court: venue, hoops, players, ball, nets. */
   function world(ctx, w, al, t, W, H) {
     venue(ctx, w, W, H);
+    for (const x of [w.L - 40, w.R + 40]) sparkMachine(ctx, x, F(), w.sparkT || 0, t);
     for (const h of w.hoops) hoopBack(ctx, h);
     const B = pose(w.ball, al), r = w.ball.r;
     for (const p of w.players) {
@@ -278,6 +289,6 @@ const Render = (() => {
     if (b.hint) text(ctx, b.hint, b.x + b.w / 2, b.y + b.h + 22, 16, '#ffffff', { weight: 700, stroke: 4 });
   }
 
-  return { RAINBOW, CONTESTED, VENUES, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
+  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();

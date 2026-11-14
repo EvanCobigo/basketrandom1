@@ -32,6 +32,8 @@ After play: make it so that when you bounce the ball, the enemies cannot grab it
 
 After play: make the perfect effect easier to proc, as in if the ball hits the rim very slightly it counts as a perfect / or make the rim slightly larger and I mean really slightly larger. Make the dunking easier to do, the dunking should prompt when the player has the ball and is near the basket, even when standing on the ground, and it should be a tap of the jump key to proc a dunk, also when passing, the ball should pass through the enemy, (make sure this is a short time frame). add more particles to things, but make the particles feel polished - not just excessive. the ball should be held either at the base of the hand, or on the palm of the hand. currently it's being held on the chest without touching the arm.
 
+After play: make the dunk animation smoother and add a crowd cheer. thicken the ball trail. Make the ball trail green if it is going to score a point, but not cleanly. make the rainbow effect easier to attain by allowing for small imperfections in the ball scoring to still allow for rainbow. make the dribbling more intuitive, do with that as you will. make the ball bouncing mechanism work for dribbling, so basically when you semi-spam press the down direction key, the ball bounces down and the player slides forward adding more and more swaying as they go so that the ball eventually is too hard to control (dribbling shouldn't be preferred, but it should be available), and make it so that if the ball is passed to the other character on the same team, and it hits their legs or chest, it automatically gets picked up. make fadeaway jumpers that are going in a blue trail, make a fire effect around the rim when there's a dunk. Make cold spark machines on the sides that flare up when something happens that is cool (like a fadeaway jumper or a dunk for now)
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -79,12 +81,15 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Planted players pivot on their feet, swinging evenly forward and back at a beat that never fades; fallen players get back up
 - [x] Shots: one arc per cock-back and spot (forward 3.5-14, up 11-13, 1 s cock-back); lean, drift and momentum change nothing; strong aim help toward the rim's centre
 - [x] Bounce key: hold to wind up, let go to bounce the ball forward as a pass; a pass slips through opponents for 0.3 s and they cannot catch it for 0.6 s
-- [x] Dribble: a quick tap bounces the ball at the feet while the player leans in and hops forward with it, catching it back
+- [x] Dribble: tapping the bounce key bounces the ball at the feet while the player slides forward; each tap in a row adds sway and bounce error until the ball gets away (about 14 taps)
 - [x] Dunk: with the ball near your hoop, standing or flying, TAP TO DUNK shows; a tap of the jump key dunks: the ball arcs in over the rim and the dunker is carried up to it
 - [x] Quicker pace than iteration 4 (game speed 0.9, shorter round card and celebration); players eased apart so they never pile into one blob
-- [x] Fired ball trail: white; rainbow with a PERFECT! callout on a line through the rim (a graze of up to 5 px still counts); green if any other on-target shot touches rim or backboard before going through
+- [x] Fired ball trail (thicker): white; rainbow on a perfect line or when it scores with at most a soft touch; green when it scores after a real touch; blue for a fadeaway heading in
 - [x] The ball is held in the palm, just past the hand, whatever the arm's angle at the catch
 - [x] Particles, few and short: landing and bounce dust, rim sparks, net flecks, a dunk burst, tidier score confetti
+- [x] Dunk: eased, smoother motion with a short hang on the rim; the rim burns for a moment after
+- [x] Cold-spark machines at both court edges fountain on a dunk or a made fadeaway; a crowd cheers every basket, louder for dunks and perfect shots
+- [x] A pass that hits the teammate's legs or chest is picked straight up
 - [x] SWISH and PERFECT SWISH baskets; HUSTLE higher jumps for a team 2+ points behind; pickup flash
 - [x] Catches checked every step: larger hand box, abdomen overlap
 
