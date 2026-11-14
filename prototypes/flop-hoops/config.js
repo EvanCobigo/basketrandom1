@@ -46,14 +46,23 @@ window.CONFIG = {
   fade_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },      // a fadeaway's extra aim help
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
-  dunk_reach: { value: 10, min: 0, max: 60, step: 1 },          // px beyond the rim's edge a dunk still catches
-  dunk_height: { value: 120, min: 40, max: 220, step: 5 },      // px above the rim the ball may be to dunk
-  dunk_below: { value: 25, min: 0, max: 120, step: 5 },        // px below the rim the ball may still be to dunk
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
+  dunk_range: { value: 80, min: 20, max: 200, step: 5 },        // px from the ball to the spot above the rim where a dunk is on
+  dunk_body_range: { value: 150, min: 60, max: 300, step: 5 },  // px from the dunker's body to the rim
+  dunk_time: { value: 0.22, min: 0.08, max: 0.6, step: 0.01 },  // s the slam motion takes
+  dunk_lift: { value: 24, min: 0, max: 80, step: 2 },            // px the ball arcs up before coming down through
   block_window: { value: 0.9, min: 0.2, max: 2, step: 0.05 },   // s after a shot a defender's touch is a block
   block_pop: { value: 8, min: 2, max: 16, step: 0.5 },          // px/step a blocked ball flies back
   strip_speed: { value: 9, min: 3, max: 20, step: 0.5 },        // px/step hit that knocks a held ball loose
   steal_guard: { value: 0.35, min: 0, max: 1.5, step: 0.05 },   // s after a grab nobody can steal it
+  bounce_charge_time: { value: 0.8, min: 0.2, max: 2, step: 0.05 }, // s of holding the bounce key for the longest pass
+  bounce_vx_min: { value: 0.8, min: 0, max: 10, step: 0.5 },      // px/step forward speed of a quick dribble
+  bounce_vx_max: { value: 11, min: 3, max: 20, step: 0.5 },     // px/step forward speed of a full pass
+  bounce_vy_min: { value: 4, min: 0, max: 15, step: 0.5 },      // px/step downward throw of a quick dribble
+  bounce_vy_max: { value: 6, min: 0, max: 15, step: 0.5 },      // px/step downward throw of a full pass
+  bounce_ignore: { value: 0.35, min: 0, max: 1, step: 0.05 },    // s the bouncer's body ignores their own bounce
+  dribble_reach: { value: 70, min: 0, max: 160, step: 5 },       // px from the hand a rising dribble is caught back
+  bounce_regrab: { value: 0.3, min: 0, max: 1, step: 0.05 },    // s before the bouncer can catch it again
   perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
   trail_length: { value: 18, min: 0, max: 60, step: 1 },        // steps of ball trail behind a fired shot
   hustle_gap: { value: 2, min: 1, max: 10, step: 1 },           // points behind before a team hustles
@@ -71,11 +80,11 @@ window.CONFIG = {
   body_width: { value: 28, min: 12, max: 50, step: 1 },         // px torso width
   limb_width: { value: 15, min: 5, max: 20, step: 1 },          // px leg width (arms are 0.8 of it)
   arm_width: { value: 15, min: 6, max: 30, step: 1 },           // px arm thickness
-  head_size: { value: 11, min: 8, max: 30, step: 1 },           // px head half-size
+  head_size: { value: 10.7, min: 8, max: 30, step: 0.1 },           // px head half-size
   head_shape: { value: 8, min: 2, max: 12, step: 0.5 },         // head outline exponent: 2 round, 4 squircle, 8+ nearly square
-  arm_length: { value: 64, min: 40, max: 140, step: 2 },        // px shoulder to fingertip: an 82" wingspan less the shoulders, halved
-  torso_length: { value: 54, min: 30, max: 90, step: 1 },       // px hip to shoulder (a 6 ft 6 in player at about 2 px per inch)
-  leg_length: { value: 88, min: 40, max: 120, step: 1 },        // px floor to hip
+  arm_length: { value: 62, min: 40, max: 140, step: 2 },        // px shoulder to fingertip: an 82" wingspan less the shoulders, halved
+  torso_length: { value: 53, min: 30, max: 90, step: 1 },       // px hip to shoulder (a 6 ft 4 in player at about 2 px per inch)
+  leg_length: { value: 86, min: 40, max: 120, step: 1 },        // px floor to hip
   upright_damp: { value: 3.5, min: 0, max: 15, step: 0.5 },    // 1/s damping on torso spin
   leg_stiffness: { value: 0.22, min: 0, max: 1, step: 0.01 },  // how hard legs swing back under the hips
   leg_follow: { value: 0.3, min: 0, max: 1, step: 0.05 },      // 0 floppy legs, 1 rigid legs

@@ -26,11 +26,13 @@ Answer: Which earlier ball mechanics: Iteration 2 shots.
 
 After play: make the ball smaller, the hoops a bit larger, and everything should be a lot more blocky, make the characters be thicker. the gameplay loop should be a bit faster now, not as slow. the hoops should be able to fit 1.4 balls.
 
+After play: Preserve existing assets and visual effects. The basketball, basketball rims, and rainbow trail are currently perfect; treat them as locked. Green trail when a shot heading into the basket touches rim or backboard; debug the rainbow trail (it once activated when it should not have); keep the rainbow intact otherwise. Characters 6'4" instead of 6'6", same proportions and style; ball size unchanged. Decouple the horizontal launch from the character's horizontal momentum; keep the vertical launch. New second key to bounce the ball: hold for strength and distance, release to bounce; natural bouncing; dribble and pass to a teammate; must not interfere with shooting. Dunk: available when a carrier is close to the rim (position relative to the rim, not just horizontal distance), with a dunking motion, the ball going in through a controlled motion; no dunks from too far or without the ball. Test shooting, bouncing, passing, dunking, rim and backboard collisions and trail transitions independently.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
 
-**Controls:** Player 1 W, Player 2 Up Arrow; each key drives both of that team's players. Planted players swing evenly forward and back about their feet: hop on the swing to move that way. Tap to hop, hold to jump higher. The ball snaps to a hand when over half of it is in the hand box, or when it hits the abdomen (never the feet). With the ball, hold to cock back and let go to fire; after a catch made with the key down, let go once first. Esc or P pauses.
+**Controls:** Player 1 W (jump/shoot) and S (bounce/pass), Player 2 Up and Down; each key drives both of that team's players. Planted players swing evenly forward and back about their feet: hop on the swing to move that way. Tap to hop, hold to jump higher. The ball snaps to a hand when over half of it is in the hand box, or when it hits the abdomen (never the feet). With the ball, hold jump to cock back and let go to fire (near the rim: dunk); hold bounce and let go to bounce it forward, short for a dribble, long for a pass; after a catch made with a key down, let go of it once first. Esc or P pauses.
 
 **Question:** Does one key plus floppy physics give a match that is chaotic, funny and still winnable on skill?
 
@@ -39,7 +41,7 @@ After play: make the ball smaller, the hoops a bit larger, and everything should
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 6 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court; everything chunkier (5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court; everything chunkier (5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -68,12 +70,14 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held
-- [x] Dunks near the rim, fadeaways when drifting or leaning away, blocks and steals by defenders
+- [x] Fadeaways when drifting or leaning away, blocks and steals by defenders
 - [x] Only opponents collide; teammates pass through each other
 - [x] Planted players pivot on their feet, swinging evenly forward and back at a beat that never fades; fallen players get back up
-- [x] Shots as in iteration 2: forward 3.5-14, up 11-13, 1 s cock-back, body lean bends the throw
+- [x] Shots as in iteration 2 (forward 3.5-14, up 11-13, 1 s cock-back, body lean bends the throw); the shooter's own movement adds nothing to the launch
+- [x] Bounce key: hold to wind up, let go to bounce the ball forward; short dribbles come back to the dribbler, long bounces are passes
+- [x] Dunk: near the rim in the air (ball and body measured to the rim), letting go of the cocked shot dunks: the ball arcs in over the rim and the dunker is carried to it
 - [x] Quicker pace than iteration 4 (game speed 0.9, shorter round card and celebration); players eased apart so they never pile into one blob
-- [x] Fired ball trail: white, rainbow with a PERFECT! callout when lined up with the rim
+- [x] Fired ball trail: white; rainbow with a PERFECT! callout on a clean line through the rim; green if an on-target shot touches rim or backboard before going through
 - [x] SWISH and PERFECT SWISH baskets; HUSTLE higher jumps for a team 2+ points behind; pickup flash
 - [x] Catches checked every step: larger hand box, abdomen overlap
 
@@ -85,7 +89,9 @@ Every touch is contested from second one: the skill is timing your hop against t
 - ball handling (grab, shoot, dunk, fadeaway, block) · in the slice
 
 ## Keep
--
+- the basketball *(you said)* · pins: ball_radius 21, ball_shape 2.6
+- the basketball rims *(you said)* · pins: rim_ball_ratio 1.4, rim_span_min 40, rim_height 235, board_height 135
+- the rainbow trail *(you said)* · pins: trail_length 18, perfect_window 0.25
 
 ## Avoid
 - Basket Random's name, art, characters and UI

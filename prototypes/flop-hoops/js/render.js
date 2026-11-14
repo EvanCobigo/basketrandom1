@@ -159,12 +159,13 @@ const Render = (() => {
   }
 
   const RAINBOW = ['#ff3b3b', '#ff9a1f', '#ffe23b', '#3bd66b', '#3ba7ff', '#9b5bff'];
-  /** The fired ball's trail: blocks that shrink toward the tail, white, or rainbow on a perfect line. */
+  const CONTESTED = '#7ee08a'; // the trail of an on-target shot that touched rim or backboard
+  /** The fired ball's trail: blocks that shrink toward the tail; white, rainbow on a perfect line, green when contested. */
   function trail(ctx, tr, r, t) {
     const n = tr.pts.length;
     for (let i = 0; i < n; i++) {
       const q = tr.pts[i], k = (i + 1) / n, sz = Math.max(4, r * 1.1 * k);
-      ctx.fillStyle = tr.rainbow ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : '#ffffff';
+      ctx.fillStyle = tr.mode === 'rainbow' ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : tr.mode === 'green' ? CONTESTED : '#ffffff';
       ctx.globalAlpha = 0.35 + 0.6 * k;
       ctx.fillRect(q.x - sz / 2, q.y - sz / 2, sz, sz);
     }
@@ -193,8 +194,14 @@ const Render = (() => {
     if (w.hold) { // the carrier's cock-back charge, a block meter over the head
       const p = w.hold.p, Hd = pose(p.head, al), bw = 52, x = Hd.x - bw / 2, y = Hd.y - p.dims.headS - 22;
       ctx.beginPath(); ctx.rect(x, y, bw, 12); ink(ctx, '#1d1a2b', 4);
-      ctx.fillStyle = !w.hold.armed ? '#8a83a8' : w.hold.charge >= 1 ? '#ffd23f' : TEAM_COLORS[p.team];
-      ctx.fillRect(x + 2, y + 2, (bw - 4) * Math.max(w.hold.armed ? 0 : 1, Math.floor(w.hold.charge * 8) / 8), 8);
+      const bnc = w.hold.bouncing, c = bnc ? w.hold.bcharge : w.hold.charge;
+      ctx.fillStyle = bnc ? '#7ad0ff' : !w.hold.armed ? '#8a83a8' : c >= 1 ? '#ffd23f' : TEAM_COLORS[p.team];
+      ctx.fillRect(x + 2, y + 2, (bw - 4) * Math.max(w.hold.armed || bnc ? 0 : 1, Math.floor(c * 8) / 8), 8);
+      if (w.hold.dunkReady) { // dunk on: the attacked rim flashes and a block arrow points down at it
+        const hp = w.hoops.find(q => q.team === p.team), on = Math.floor(t * 10) % 2;
+        ctx.fillStyle = on ? '#ffd23f' : '#ffffff';
+        ctx.fillRect(hp.cx - 12, hp.rimY - 70, 24, 14); ctx.fillRect(hp.cx - 6, hp.rimY - 56, 12, 10);
+      }
     }
     for (const h of w.hoops) hoopFront(ctx, h, t);
     if (B.y + r < 0) { // ball above the screen: a marker at the top edge
@@ -207,10 +214,11 @@ const Render = (() => {
   function keycap(ctx, x, y, label, s = 1) {
     rr(ctx, x - 22 * s, y - 20 * s, 44 * s, 42 * s, 9 * s); ink(ctx, '#f7f3ea', 3.5 * s);
     rr(ctx, x - 22 * s, y + 14 * s, 44 * s, 8 * s, 4 * s); ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fill();
-    if (label === 'up') { // a drawn arrow, not a font symbol
+    if (label === 'up' || label === 'down') { // a drawn arrow, not a font symbol
+      ctx.save(); ctx.translate(x, y); if (label === 'down') ctx.rotate(Math.PI); ctx.translate(-x, -y);
       ctx.beginPath(); ctx.moveTo(x, y - 11 * s); ctx.lineTo(x + 10 * s, y + 1 * s); ctx.lineTo(x + 4 * s, y + 1 * s);
       ctx.lineTo(x + 4 * s, y + 11 * s); ctx.lineTo(x - 4 * s, y + 11 * s); ctx.lineTo(x - 4 * s, y + 1 * s); ctx.lineTo(x - 10 * s, y + 1 * s); ctx.closePath();
-      ctx.fillStyle = INK; ctx.fill();
+      ctx.fillStyle = INK; ctx.fill(); ctx.restore();
     } else text(ctx, label, x, y, 24 * s, INK, { weight: 900 });
   }
 
@@ -229,7 +237,7 @@ const Render = (() => {
       const s = team ? 1 : -1, bx = cx + s * 190;
       rr(ctx, bx - 100, y + 10, 200, h - 20, 14); ink(ctx, TEAM_COLORS[team], 4);
       text(ctx, TEAM_NAMES[team].toUpperCase(), bx - s * 28, y + 30, 17, '#ffffff', { stroke: 4 });
-      keycap(ctx, bx - s * 28 - 2, y + 62, team ? 'up' : 'W', 0.62);
+      keycap(ctx, bx - s * 28 - 18, y + 62, team ? 'up' : 'W', 0.55); keycap(ctx, bx - s * 28 + 14, y + 62, team ? 'down' : 'S', 0.55);
       const pop = st.pops[team];
       ctx.save(); ctx.translate(bx + s * 52, y + h / 2); ctx.scale(1 + pop * 0.6, 1 + pop * 0.6);
       text(ctx, String(st.score[team]), 0, 2, 52, '#ffffff', { weight: 900, stroke: 7 });
@@ -270,6 +278,6 @@ const Render = (() => {
     if (b.hint) text(ctx, b.hint, b.x + b.w / 2, b.y + b.h + 22, 16, '#ffffff', { weight: 700, stroke: 4 });
   }
 
-  return { RAINBOW, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
+  return { RAINBOW, CONTESTED, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();

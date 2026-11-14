@@ -35,7 +35,7 @@ const W = 1280, H = 720;        // logical size
 const PIXEL = false;
 const FONT = '"Courier New", ui-monospace, Menlo, Consolas, monospace'; // retro: a blocky monospace
 const TITLE = 'Flop Hoops';
-const CONTROLS = ['Player 1: W', 'Player 2: Up Arrow', 'Esc / P: pause', 'M: mute'];
+const CONTROLS = ['Player 1: W jump/shoot, S bounce', 'Player 2: Up jump/shoot, Down bounce', 'Esc / P: pause', 'M: mute'];
 const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
 const CHEAP = params.get('render') === 'cheap';
 let seed;
@@ -68,7 +68,8 @@ const text = (s, x, y, size, c, o) => Render.text(ctx, s, x, y, size, c, o);
 // ---- Input: keys by position (event.code), OS key repeat ignored ------------------------
 const down = new Set(), hit = new Set();
 const pressed = code => hit.has(code); // true for one step after the key goes down
-const KEYS = ['KeyW', 'ArrowUp'];       // team 0 jumps on W, team 1 on Up Arrow
+const KEYS = ['KeyW', 'ArrowUp'];       // team 0 jumps (and cocks a shot) on W, team 1 on Up Arrow
+const BOUNCE_KEYS = ['KeyS', 'ArrowDown']; // with the ball: hold to wind up, let go to bounce it (dribble or pass)
 addEventListener('keydown', e => {
   startAudio();
   if (!e.repeat) { down.add(e.code); hit.add(e.code); }
@@ -132,6 +133,7 @@ const sfx = {
   grab() { tone(392, 0.06, 'square', 0.08); tone(523, 0.08, 'square', 0.06, 0.05); },
   shoot(c) { tone(300 + c * 300, 0.16, 'triangle', 0.14, 0, 700 + c * 500); },
   dunk() { tone(110, 0.3, 'square', 0.22, 0, 55); noise(0.25, 0.35, 700); },
+  bounce(c) { tone(200 + c * 120, 0.09, 'triangle', 0.16, 0, 120); },
   perfect() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, 'square', 0.06, i * 0.05)); },
   block() { noise(0.12, 0.3, 1600); tone(180, 0.12, 'square', 0.12, 0, 90); },
 };
@@ -149,6 +151,7 @@ const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' 
 function callout(s, team) { state.toast = s; state.toastT = 1.1; state.toastTeam = team; }
 function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); return; }
+  if (ev.type === 'dribble') { sfx.bounce(0.2); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
   if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; events.push({ type: 'grab', team: ev.team }); return; }
   if (ev.type === 'shoot' || ev.type === 'fadeaway') {
     sfx.shoot(ev.charge); events.push({ type: ev.type, team: ev.team });
@@ -156,6 +159,8 @@ function onPhysEvent(ev) {
     else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
     return;
   }
+  if (ev.type === 'bounce') { sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
+  if (ev.type === 'dunkstart') { sfx.grab(); events.push({ type: 'dunkstart', team: ev.team }); return; }
   if (ev.type === 'dunk') { sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
@@ -182,19 +187,22 @@ function pauseGame() { pauseFrom = scene; scene = 'pause'; }
 function toMenu() { reset(); buildRound(1); scene = 'title'; }
 // Game speed: the physics advances tune.game_speed steps per game step (below 1 is slower).
 // A key held at any moment between physics steps still reaches the next one.
-let physAcc = 0, pending = [false, false];
-function physStep(held) {
+let physAcc = 0, pending = [false, false], pendingB = [false, false];
+function physStep(held, bheld = [false, false]) {
   const b = world.ball, prev = { x: b.position.x, y: b.position.y };
   pending = pending.map((p, i) => p || held[i]);
+  pendingB = pendingB.map((p, i) => p || bheld[i]);
   physAcc += tune.game_speed;
   while (physAcc >= 1) {
     const now = pending.map((p, i) => held[i] || (p && !physStepSaw[i]));
-    Physics.step(world, now, tune, STEP);
-    physStepSaw = now.slice(); pending = [false, false]; physAcc -= 1;
+    const nowB = pendingB.map((p, i) => bheld[i] || (p && !physStepSawB[i]));
+    Physics.step(world, now, tune, STEP, nowB);
+    physStepSaw = now.slice(); physStepSawB = nowB.slice(); pending = [false, false]; pendingB = [false, false]; physAcc -= 1;
   }
   return { prev, cur: { x: b.position.x, y: b.position.y } };
 }
-let physStepSaw = [false, false];
+let physStepSaw = [false, false], physStepSawB = [false, false];
+function bounceKeys() { return BOUNCE_KEYS.map(k => down.has(k)); }
 function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
 function heldKeys() { return KEYS.map(k => down.has(k)); }
 const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
@@ -248,6 +256,7 @@ function buildPalette(S) {
   for (const kit of S.kits) { cols.add(kit.jersey); cols.add(kit.shorts); }
   for (const team of S.looks) for (const l of team) { cols.add(l.skin); cols.add(l.shoe); }
   for (const c of Render.RAINBOW) cols.add(c);
+  cols.add(Render.CONTESTED);
   const out = [...cols].map(hexRGB);
   palette = out; paletteCache = new Map();
 }
@@ -346,16 +355,19 @@ const scenes = {
       text('FLOP', -14, 0, 120, '#ff9a3c', { weight: 900, stroke: 14, align: 'right' });
       text('HOOPS', 14, 10, 120, '#1fc2b1', { weight: 900, stroke: 14, align: 'left' });
       ctx.restore();
-      text('Two wobbly ballers a side. One key each. New rules every round.', W / 2, 250, 22, '#ffffff', { stroke: 5 });
+      text('Two wobbly ballers a side. Jump, shoot, bounce, dunk.', W / 2, 250, 22, '#ffffff', { stroke: 5 });
       for (const team of [0, 1]) {
         const x = W / 2 + (team ? 250 : -250);
         Render.rr(ctx, x - 160, 300, 320, 150, 18); Render.ink(ctx, 'rgba(29,26,43,0.85)', 5);
         text(team ? 'PLAYER 2' : 'PLAYER 1', x, 328, 20, Render.TEAM_COLORS[team]);
         text(Render.TEAM_NAMES[team].toUpperCase(), x, 356, 26, '#ffffff', { weight: 900 });
-        Render.keycap(ctx, x, 404, team ? 'up' : 'W', 1);
-        text(team ? 'Up Arrow' : 'W key', x + 82, 404, 16, '#c9c3e0', { weight: 700 });
+        Render.keycap(ctx, x - 80, 404, team ? 'up' : 'W', 1);
+        text('jump/shoot', x - 80, 434, 14, '#c9c3e0', { weight: 700 });
+        Render.keycap(ctx, x + 60, 404, team ? 'down' : 'S', 1);
+        text('bounce/pass', x + 60, 434, 14, '#c9c3e0', { weight: 700 });
       }
-      text('Hop as you swing to move. Catch with hand or belly; hold to cock back, let go to fire.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
+      text('Hop as you swing to move. Catch with hand or belly.', W / 2, 470, 18, '#ffffff', { weight: 700, stroke: 4 });
+      text('With the ball: hold jump and let go to shoot (near the rim: dunk); hold bounce and let go to dribble or pass.', W / 2, 496, 16, '#ffffff', { weight: 700, stroke: 4 });
       buttons = [];
       btn('PLAY', W / 2 - 130, 520, 260, 74, newMatch, 'Enter or Space', 40);
       btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);
@@ -374,7 +386,7 @@ const scenes = {
     update(dt) {
       if (pressed('KeyP') || pressed('Escape')) { pauseGame(); return; }
       state.t += dt; updateJuice(dt);
-      const { prev, cur } = physStep(heldKeys());
+      const { prev, cur } = physStep(heldKeys(), bounceKeys());
       const hoop = Scoring.basket(prev, cur, world.hoops);
       if (hoop) { score(hoop); return; }
       checkStall(dt);
@@ -384,7 +396,7 @@ const scenes = {
   scored: { // the basket: shake, confetti, score pop, a short slow-motion, then the next round
     update(dt) {
       state.scoredT += dt; state.t += dt; updateJuice(dt);
-      if (state.scoredT < 0.6 ? Math.round(state.scoredT * 60) % 2 === 0 : true) physStep(heldKeys());
+      if (state.scoredT < 0.6 ? Math.round(state.scoredT * 60) % 2 === 0 : true) physStep(heldKeys(), bounceKeys());
       if (state.scoredT >= tune.score_time) {
         if (state.winner >= 0) { scene = 'results'; state.resultsT = 0; state.gained = `${Render.TEAM_NAMES[state.winner]} win`; sfx.win(); events.push({ type: 'win', team: state.winner }); }
         else nextRound();

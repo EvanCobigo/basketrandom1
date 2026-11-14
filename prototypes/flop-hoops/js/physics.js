@@ -95,7 +95,7 @@ const Physics = (() => {
     engine.positionIterations = 10; engine.velocityIterations = 8; engine.constraintIterations = 4;
     const half = S.courtW / 2, L = CX - half, R = CX + half;
     const w = { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
-      time: 0, hold: null, ignoreUntil: 0, trail: null, hustle: [false, false] };
+      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, bheld: [false, false], hustle: [false, false] };
 
     const statics = [
       box(CX, FLOOR_Y + 200, 4000, 400, 'floor', { friction: 1 }),
@@ -157,7 +157,11 @@ const Physics = (() => {
         const rel = Math.hypot(ball.velocity.x - other.velocity.x, ball.velocity.y - other.velocity.y);
         if (other.plugin.player) w.kicks.push({ part: other, rel });
         else if (other.plugin.kind === 'floor') ball.shot = null; // a shot that lands is no longer a shot
-        else if (ball.shot && (other.plugin.kind === 'rim' || other.plugin.kind === 'board')) ball.shot.clean = false;
+        else if (ball.shot && (other.plugin.kind === 'rim' || other.plugin.kind === 'board') && ball.position.y < other.plugin.hoop.rimY) {
+          // touched before it was through the rim plane: no swish; an on-target shot turns its trail green
+          ball.shot.clean = false;
+          if (ball.shot.onTarget && w.trail && w.trail.shot === ball.shot) w.trail.mode = 'green';
+        }
         onEvent({ type: 'hit', on: other.plugin.player ? 'player' : other.plugin.kind, speed: rel,
           team: other.plugin.player ? other.plugin.player.team : -1, hoop: other.plugin.hoop || null });
       }
@@ -169,6 +173,8 @@ const Physics = (() => {
   /** Put the ball back above centre court with a small random drift. */
   function dropBall(w, T) {
     if (w.hold) release(w, T, 0);
+    if (w.dunk) { w.dunk.p.slam = false; w.dunk = null; }
+    w.ball.collisionFilter.mask = 0x1 | 0x2 | 0x4;
     Body.setPosition(w.ball, { x: w.cx, y: w.floorY - T.drop_height });
     Body.setVelocity(w.ball, { x: (w.rng() - 0.5) * 2.4, y: 0 });
     Body.setAngularVelocity(w.ball, (w.rng() - 0.5) * 0.2);
@@ -259,7 +265,8 @@ const Physics = (() => {
     // Arm: cocked back behind the head while charging a shot, raised while the key is held,
     // hanging otherwise. Letting go slaps it down through the front.
     const cocking = h && h.armed && held;
-    const target = cocking ? -p.dir * T.arm_cock_angle : held ? -p.dir * T.arm_up_angle : p.dir * 0.15;
+    const winding = h && h.barmed && h.bouncing;
+    const target = p.slam ? p.dir * 0.4 : cocking ? -p.dir * T.arm_cock_angle : winding ? -p.dir * 1.3 : held ? -p.dir * T.arm_up_angle : p.dir * 0.15;
     const rel = wrap(p.arm.angle - torso.angle);
     const err = wrap(target - rel);
     const want = tav + clamp(err * T.arm_gain, -T.arm_max_speed, T.arm_max_speed);
@@ -308,6 +315,7 @@ const Physics = (() => {
   /** The ball jumps into the player's hand. A catch made with the key down must be let go of
    *  before the shot can be cocked: `armed` turns true on the first release. */
   function grab(w, p, T, how, held) {
+    const bheldNow = !!(w.bheld && w.bheld[p.team]);
     const ball = w.ball, hand = handPos(p);
     if (w.hold) release(w, T, 0);
     Body.setPosition(ball, hand);
@@ -317,7 +325,8 @@ const Physics = (() => {
     const con = Constraint.create({ bodyA: p.arm, pointA: { x: 0, y: p.dims.armL / 2 }, bodyB: ball,
       pointB: { x: 0, y: 0 }, length: 0, stiffness: 0.6, damping: 0.1 });
     Composite.add(w.engine.world, con);
-    w.hold = { p, con, t: 0, charge: 0, armed: !held, cocking: false };
+    w.lastBouncer = null;
+    w.hold = { p, con, t: 0, charge: 0, armed: !held, cocking: false, bcharge: 0, barmed: !bheldNow, bouncing: false, dunkReady: false };
     ball.shot = null;
     w.onEvent({ type: how, team: p.team });
   }
@@ -351,49 +360,108 @@ const Physics = (() => {
     const tilt = a * T.shot_tilt, ct = Math.cos(tilt), st = Math.sin(tilt);
     const x0 = vx * p.dir, y0 = -vy;
     release(w, T, 0.2);
-    Body.setVelocity(ball, { x: x0 * ct - y0 * st + p.torso.velocity.x * 0.25, y: x0 * st + y0 * ct });
+    Body.setVelocity(ball, { x: x0 * ct - y0 * st, y: x0 * st + y0 * ct }); // the shooter's own movement adds nothing
     Body.setAngularVelocity(ball, -p.dir * 0.2);
-    const perfect = onPerfectLine(w, T, hoop);
-    ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect, clean: true };
-    w.trail = { pts: [], rainbow: perfect, t: 0 };
+    const line = predictLine(w, T, hoop);
+    ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect: line.perfect, onTarget: line.onTarget, clean: true };
+    // white by default; rainbow only for a clean perfect line; turns green only if an on-target shot touches rim or board
+    w.trail = { pts: [], mode: line.perfect ? 'rainbow' : 'white', t: 0, shot: ball.shot };
+    const perfect = line.perfect;
     w.onEvent({ type: fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge, perfect });
   }
 
   /**
-   * Whether the ball, flying free from here with drag and gravity, drops through the middle of
-   * the rim: within T.perfect_window of the rim's width from its centre.
+   * Fly the ball forward from here with drag and gravity, until it drops through rim height.
+   * onTarget: its centre crosses inside the rim opening. perfect: it crosses within
+   * T.perfect_window of the rim's width from the centre AND the whole ball clears both rim edges
+   * and never touches the front rim or the backboard on the way.
    */
-  function onPerfectLine(w, T, hoop) {
-    const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir;
-    let x = b.position.x, y = b.position.y, vx = b.velocity.x, vy = b.velocity.y;
+  function predictLine(w, T, hoop) {
+    const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir, r = b.r;
+    let x = b.position.x, y = b.position.y, vx = b.velocity.x, vy = b.velocity.y, touched = false, crossX = null;
     for (let i = 0; i < 400; i++) {
       vx *= keep; vy = vy * keep + g;
       const ny = y + vy, nx = x + vx;
-      if (vy > 0 && y < hoop.rimY && ny >= hoop.rimY) {
-        const cx = x + (nx - x) * (hoop.rimY - y) / (ny - y);
-        return Math.abs(cx - hoop.cx) < hoop.span * T.perfect_window;
-      }
+      if (Math.hypot(nx - hoop.frontX, ny - hoop.rimY) < r + 6) touched = true;                 // front rim
+      if (Math.abs(nx - hoop.boardX) < r + 5 && ny > hoop.boardTop - r && ny < hoop.boardBot + r) touched = true; // backboard
+      if (crossX === null && vy > 0 && y < hoop.rimY && ny >= hoop.rimY) crossX = x + (nx - x) * (hoop.rimY - y) / (ny - y);
       x = nx; y = ny;
-      if (y > w.floorY) return false;
+      // contact counts only until the ball is through the rim plane: once it is in, a graze of
+      // the backboard inside the net changes nothing (the same rule the live game uses)
+      if (crossX !== null) break;
+      if (y > w.floorY) break;
     }
-    return false;
+    if (crossX === null) return { onTarget: false, perfect: false };
+    const off = Math.abs(crossX - hoop.cx), clears = off <= hoop.span / 2 - r - 1; // the whole ball inside both rim edges
+    return { onTarget: off < hoop.span / 2, perfect: !touched && clears && off < hoop.span * T.perfect_window };
   }
 
-  /** Slam it: the ball is pushed down through the rim from above. */
-  function dunk(w, T, hoop) {
+  /**
+   * Bounce the held ball off the floor: forward toward the attacked hoop, farther the longer the
+   * bounce key was held. Short holds are dribbles the carrier can catch again; long ones are passes.
+   */
+  function bounce(w, T) {
+    const h = w.hold, p = h.p, ball = w.ball, c = h.bcharge;
+    release(w, T, T.bounce_ignore);   // the bouncer's own legs never kick their own dribble away
+    p.grabCD = T.bounce_regrab;
+    w.lastBouncer = p;
+    Body.setVelocity(ball, { x: lerp(T.bounce_vx_min, T.bounce_vx_max, c) * p.dir, y: lerp(T.bounce_vy_min, T.bounce_vy_max, c) });
+    Body.setAngularVelocity(ball, p.dir * 0.15);
+    w.onEvent({ type: 'bounce', team: p.team, charge: c });
+  }
+
+  /**
+   * Whether the carrier can dunk now: in the air, the ball within T.dunk_range of the spot just
+   * above the rim, the body within T.dunk_body_range of the rim, and on the court side of it.
+   */
+  function dunkReady(w, T, p, hoop) {
+    const b = w.ball, top = { x: hoop.cx, y: hoop.rimY - b.r };
+    return p.sinceGround > 0.1
+      && Math.hypot(b.position.x - top.x, b.position.y - top.y) < T.dunk_range
+      && Math.hypot(p.torso.position.x - hoop.cx, p.torso.position.y - hoop.rimY) < T.dunk_body_range
+      && (hoop.boardX - p.torso.position.x) * p.dir > 0;
+  }
+
+  /** Start a dunk: the ball leaves the hand on a short controlled arc that ends above the rim. */
+  function startDunk(w, T, hoop) {
     const p = w.hold.p, ball = w.ball;
-    release(w, T, 0.3);
-    Body.setPosition(ball, { x: hoop.cx, y: hoop.rimY - ball.r - 2 });
-    Body.setVelocity(ball, { x: 0, y: T.dunk_speed });
-    ball._px = undefined;
-    ball.shot = { team: p.team, t: w.time, kind: 'dunk', dir: p.dir };
-    hoop.wobble = 2;
-    for (const part of p.parts) Body.setVelocity(part, { x: part.velocity.x * 0.5, y: Math.max(part.velocity.y, 2) });
-    w.onEvent({ type: 'dunk', team: p.team });
+    release(w, T, T.dunk_time + 0.4);
+    ball.collisionFilter.mask = 0;          // carried through, nothing knocks it off its path
+    w.dunk = { p, hoop, t: 0, from: { x: ball.position.x, y: ball.position.y } };
+    p.slam = true;
+    w.onEvent({ type: 'dunkstart', team: p.team });
   }
 
-  function possession(w, held, T, dt) {
+  /** Move the dunk on one step: the ball arcs over and down through the rim, the body follows it in. */
+  function stepDunk(w, T, dt) {
+    const d = w.dunk, p = d.p, h = d.hoop, ball = w.ball, r = ball.r;
+    d.t += dt;
+    const k = Math.min(1, d.t / T.dunk_time), e = k * k * (3 - 2 * k);
+    const end = { x: h.cx, y: h.rimY - r - 4 };
+    const ctrl = { x: lerp(d.from.x, end.x, 0.5), y: Math.min(d.from.y, end.y) - T.dunk_lift };
+    const q = (a, b2, c2) => (1 - e) * (1 - e) * a + 2 * (1 - e) * e * b2 + e * e * c2;
+    const nx = q(d.from.x, ctrl.x, end.x), ny = q(d.from.y, ctrl.y, end.y);
+    Body.setVelocity(ball, { x: nx - ball.position.x, y: ny - ball.position.y });
+    Body.setPosition(ball, { x: nx, y: ny });
+    // the dunker is pulled up to the rim's front, arm slamming down over it
+    const hang = { x: h.cx - p.dir * (h.span / 2 + 18), y: h.rimY + 50 };
+    for (const part of p.parts) {
+      Body.setVelocity(part, { x: lerp(part.velocity.x, (hang.x - p.torso.position.x) * 0.15, 0.4), y: lerp(part.velocity.y, (hang.y - p.torso.position.y) * 0.15, 0.4) });
+    }
+    if (k >= 1) {   // the slam: straight down through the rim
+      ball.collisionFilter.mask = 0x1 | 0x2 | 0x4;
+      Body.setVelocity(ball, { x: 0, y: T.dunk_speed });
+      ball.shot = { team: p.team, t: w.time, kind: 'dunk', dir: p.dir, clean: true };
+      h.wobble = 2;
+      p.slam = false;
+      w.dunk = null;
+      w.onEvent({ type: 'dunk', team: p.team });
+    }
+  }
+
+  function possession(w, held, bheld, T, dt) {
     const ball = w.ball;
+    if (w.dunk) { stepDunk(w, T, dt); return; }
     if (w.ignoreUntil && w.time >= w.ignoreUntil && !w.hold) { ball.collisionFilter.group = 0; w.ignoreUntil = 0; }
     const canCatch = p => p.grabCD <= 0 && w.time >= w.ignoreUntil;
 
@@ -435,10 +503,14 @@ const Physics = (() => {
       // fire sequence: (let go once after a catch made with the key down) → hold to cock back → let go to fire
       if (!h.armed) { if (!k) h.armed = true; }
       else if (k) { h.cocking = true; h.charge = Math.min(1, h.charge + dt / T.shot_charge_time); }
-      const hoop = attackedHoop(w, p), r = ball.r;
-      const near = Math.abs(ball.position.x - hoop.cx) < hoop.span / 2 + r + T.dunk_reach
-        && ball.position.y < hoop.rimY + T.dunk_below && ball.position.y > hoop.rimY - T.dunk_height;
-      if (p.sinceGround > 0.1 && near) { dunk(w, T, hoop); return; }
+      // bounce key: (let go once after a catch made with it down) → hold to wind up → let go to bounce
+      const bk = bheld[p.team];
+      if (!h.barmed) { if (!bk) h.barmed = true; }
+      else if (bk) { h.bouncing = true; h.bcharge = Math.min(1, h.bcharge + dt / T.bounce_charge_time); }
+      if (h.bouncing && !bk) { bounce(w, T); return; }
+      const hoop = attackedHoop(w, p);
+      h.dunkReady = dunkReady(w, T, p, hoop);
+      if (h.cocking && !k && h.dunkReady) { startDunk(w, T, hoop); return; }   // near the rim, letting go dunks
       if ((h.cocking && !k) || h.t > T.hold_max) { shoot(w, T); return; }
       for (const q of w.players) { // a defender's hand box over the held ball: stolen
         if (q.team === p.team || h.t < T.steal_guard || !canCatch(q)) continue;
@@ -450,7 +522,9 @@ const Physics = (() => {
     // snaps it to that hand. Checked every step, so a ball resting against a player is caught too.
     for (const p of w.players) {
       if (!canCatch(p)) continue;
-      if (shareInHandBox(p, ball, T) > 0.5 || touchesAbdomen(p, ball, T)) { grab(w, p, T, 'grab', held[p.team]); break; }
+      // a dribbler gets their own bounce back on its way up, within reach of the hand
+      const own = p === w.lastBouncer && ball.velocity.y < 0 && (() => { const hp = handPos(p); return Math.hypot(hp.x - ball.position.x, hp.y - ball.position.y) < ball.r + T.dribble_reach; })();
+      if (own || shareInHandBox(p, ball, T) > 0.5 || touchesAbdomen(p, ball, T)) { grab(w, p, T, own ? 'dribble' : 'grab', held[p.team]); break; }
     }
   }
 
@@ -465,9 +539,11 @@ const Physics = (() => {
    * @param {boolean[]} held [team 0 key held, team 1 key held]
    * @param {object} T live tuning values
    * @param {number} dt step length in seconds of game time
+   * @param {boolean[]} bheld [team 0 bounce key held, team 1 bounce key held]
    */
-  function step(w, held, T, dt) {
+  function step(w, held, T, dt, bheld = [false, false]) {
     w.time += dt;
+    w.bheld = bheld;
     for (const b of w.dynamic) { b._px = b.position.x; b._py = b.position.y; b._pa = b.angle; }
     for (const p of w.players) drive(w, p, held[p.team], T, dt);
     spread(w, T);
@@ -478,11 +554,11 @@ const Physics = (() => {
       p.sinceFoot = p.foot ? 0 : p.sinceFoot + dt; p.foot = false;
     }
 
-    possession(w, held, T, dt);
+    possession(w, held, bheld, T, dt);
     const ball = w.ball;
     if (w.trail) {
       w.trail.t += dt;
-      if (ball.shot && !w.hold) { w.trail.pts.push({ x: ball.position.x, y: ball.position.y }); if (w.trail.pts.length > T.trail_length) w.trail.pts.shift(); }
+      if (ball.shot && ball.shot === w.trail.shot && !w.hold) { w.trail.pts.push({ x: ball.position.x, y: ball.position.y }); if (w.trail.pts.length > T.trail_length) w.trail.pts.shift(); }
       else if (w.trail.pts.length) w.trail.pts.shift();
       else w.trail = null;
     }
