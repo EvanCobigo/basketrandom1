@@ -39,11 +39,7 @@ window.CONFIG = {
   shot_vx_max: { value: 14, min: 4, max: 24, step: 0.5 },       // px/step forward speed fully cocked
   shot_vy_min: { value: 11, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
   shot_vy_max: { value: 13, min: 4, max: 22, step: 0.5 },       // px/step upward speed fully cocked (barely more)
-  fade_vy_bonus: { value: 2.5, min: 0, max: 8, step: 0.5 },     // px/step extra loft on a fadeaway
-  fade_vx_mul: { value: 0.9, min: 0.5, max: 1.3, step: 0.05 },  // fadeaway forward speed multiplier
-  shot_tilt: { value: 0.5, min: 0, max: 1.5, step: 0.05 },      // how much body lean bends the arc
-  shot_assist: { value: 0.25, min: 0, max: 1, step: 0.05 },     // pull toward a speed that reaches the rim
-  fade_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },      // a fadeaway's extra aim help
+  shot_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },     // pull toward the speed that drops the ball on the rim's centre (1 = always)
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
@@ -63,6 +59,15 @@ window.CONFIG = {
   bounce_ignore: { value: 0.35, min: 0, max: 1, step: 0.05 },    // s the bouncer's body ignores their own bounce
   dribble_reach: { value: 70, min: 0, max: 160, step: 5 },       // px from the hand a rising dribble is caught back
   bounce_regrab: { value: 0.3, min: 0, max: 1, step: 0.05 },    // s before the bouncer can catch it again
+  pass_guard: { value: 0.6, min: 0, max: 2, step: 0.05 },        // s after a bounce that opponents cannot catch it
+  dribble_threshold: { value: 0.25, min: 0, max: 1, step: 0.05 }, // bounce charge below which a release is a dribble
+  dribble_vx: { value: 1.6, min: 0, max: 6, step: 0.1 },         // px/step forward speed of a dribble
+  dribble_vy: { value: 6, min: 1, max: 14, step: 0.5 },          // px/step downward throw of a dribble
+  dribble_time: { value: 0.7, min: 0.1, max: 2, step: 0.05 },    // s the dribbler hops along after a dribble
+  dribble_hop: { value: 3.2, min: 0, max: 8, step: 0.1 },        // px/step upward speed of each small hop
+  dribble_step: { value: 1.8, min: 0, max: 6, step: 0.1 },       // px/step forward speed of each small hop
+  dribble_hop_gap: { value: 0.18, min: 0.05, max: 0.6, step: 0.01 }, // s between small hops
+  dribble_lean: { value: 0.3, min: 0, max: 0.8, step: 0.02 },    // rad forward lean while dribbling
   perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
   trail_length: { value: 18, min: 0, max: 60, step: 1 },        // steps of ball trail behind a fired shot
   hustle_gap: { value: 2, min: 1, max: 10, step: 1 },           // points behind before a team hustles

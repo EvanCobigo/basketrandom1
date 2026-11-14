@@ -67,7 +67,7 @@ const Physics = (() => {
     const p = { team, idx, dir, torso, head, legs, arm, dims: d, look, group,
       parts: [torso, head, legs[0], legs[1], arm],
       touch: false, foot: false, sinceGround: 0, sinceFoot: 0, sinceJump: 9, cd: 0, grabCD: 0, downT: 0,
-      prevHeld: false, boosting: false };
+      prevHeld: false, boosting: false, dribbleT: 0 };
     tag(torso, 'torso', p); tag(head, 'head', p); legs.forEach(l => tag(l, 'leg', p)); tag(arm, 'arm', p);
 
     const hx = d.torsoW * 0.22;
@@ -95,7 +95,7 @@ const Physics = (() => {
     engine.positionIterations = 10; engine.velocityIterations = 8; engine.constraintIterations = 4;
     const half = S.courtW / 2, L = CX - half, R = CX + half;
     const w = { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
-      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, bheld: [false, false], hustle: [false, false] };
+      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, passGuard: null, bheld: [false, false], hustle: [false, false] };
 
     const statics = [
       box(CX, FLOOR_Y + 200, 4000, 400, 'floor', { friction: 1 }),
@@ -228,7 +228,9 @@ const Physics = (() => {
     // Feet on the floor: the whole body swings about its feet, evenly forwards and backwards at
     // a steady beat that never fades. The swing is the steering: hop as it tips one way to go that way.
     const phase = w.time * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7;
-    const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < 1.1;
+    const dribbling = p.dribbleT > 0;
+    if (dribbling) p.dribbleT -= dt;
+    const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < 1.1 && !dribbling;
     if (swinging) {
       const next = Math.sin(phase + T.rock_rate * Math.PI * 2 * dt) * T.rock_angle;   // where the swing should be next step
       const om = lerp(torso.angularVelocity, wrap(next - a), T.rock_follow);             // rad/step
@@ -242,8 +244,9 @@ const Physics = (() => {
       }
     } else {
       const k = grounded ? T.upright : T.upright * T.upright_air;
+      const lean = dribbling ? p.dir * T.dribble_lean : 0;   // dribbling: leaning in over the ball
       let omega = torso.angularVelocity * 60;
-      omega += (-a * k - omega * T.upright_damp) * dt;
+      omega += (-wrap(a - lean) * k - omega * T.upright_damp) * dt;
       Body.setAngularVelocity(torso, omega / 60);
     }
     const tav = torso.angularVelocity;
@@ -274,6 +277,10 @@ const Physics = (() => {
 
     // Jump: a tap is a short hop; keeping the key down lifts it to full height. Holding keeps
     // hopping on landing, except for a ball carrier, who is busy with the ball.
+    if (dribbling && grounded && p.cd <= 0 && !held) {   // small hops forward with the dribble
+      for (const part of p.parts) Body.setVelocity(part, { x: part.velocity.x * 0.3 + p.dir * T.dribble_step, y: -T.dribble_hop });
+      p.cd = T.dribble_hop_gap; p.sinceGround = 99;
+    }
     const vFull = Math.sqrt(2 * g * T.jump_height * S.jump * (w.hustle && w.hustle[p.team] ? T.hustle_jump : 1));
     const fresh = held && !p.prevHeld;
     if (held && grounded && p.cd <= 0 && (!h || fresh)) {
@@ -325,7 +332,8 @@ const Physics = (() => {
     const con = Constraint.create({ bodyA: p.arm, pointA: { x: 0, y: p.dims.armL / 2 }, bodyB: ball,
       pointB: { x: 0, y: 0 }, length: 0, stiffness: 0.6, damping: 0.1 });
     Composite.add(w.engine.world, con);
-    w.lastBouncer = null;
+    w.lastBouncer = null; w.passGuard = null;
+    if (how !== 'dribble') for (const q of w.players) q.dribbleT = 0;
     w.hold = { p, con, t: 0, charge: 0, armed: !held, cocking: false, bcharge: 0, barmed: !bheldNow, bouncing: false, dunkReady: false };
     ball.shot = null;
     w.onEvent({ type: how, team: p.team });
@@ -350,17 +358,16 @@ const Physics = (() => {
     const h = w.hold, p = h.p, ball = w.ball, hoop = attackedHoop(w, p);
     const airborne = p.sinceGround > 0.1, a = wrap(p.torso.angle);
     const fade = airborne && (p.torso.velocity.x * p.dir < -T.fade_speed || a * p.dir < -T.fade_lean);
-    let vx = lerp(T.shot_vx_min, T.shot_vx_max, h.charge) * (fade ? T.fade_vx_mul : 1);
-    const vy = lerp(T.shot_vy_min, T.shot_vy_max, h.charge) + (fade ? T.fade_vy_bonus : 0);
-    // aim help: nudge the forward speed toward one that drops the ball on the rim
-    const g = gravityPx(w), X = (hoop.cx - ball.position.x) * p.dir, Y = ball.position.y - (hoop.rimY - 8);
+    // One arc for a given cock-back and spot: the body's lean, drift and momentum change nothing.
+    // A fadeaway is only a name for a shot taken drifting or leaning away.
+    let vx = lerp(T.shot_vx_min, T.shot_vx_max, h.charge);
+    const vy = lerp(T.shot_vy_min, T.shot_vy_max, h.charge);
+    // aim help: pull the forward speed toward the one that drops the ball on the rim's centre
+    const g = gravityPx(w), X = (hoop.cx - ball.position.x) * p.dir, Y = ball.position.y - hoop.rimY;
     const disc = vy * vy - 2 * g * Y;
-    if (X > 30 && disc > 0) vx = lerp(vx, X / ((vy + Math.sqrt(disc)) / g), fade ? T.fade_assist : T.shot_assist);
-    // the body's lean turns the throw with it: tipped forward flattens it, leaning back lofts it
-    const tilt = a * T.shot_tilt, ct = Math.cos(tilt), st = Math.sin(tilt);
-    const x0 = vx * p.dir, y0 = -vy;
+    if (X > 30 && disc > 0) vx = lerp(vx, X / ((vy + Math.sqrt(disc)) / g) / ((1 + Math.pow(1 - ball.frictionAir, 60)) / 2), T.shot_assist);
     release(w, T, 0.2);
-    Body.setVelocity(ball, { x: x0 * ct - y0 * st, y: x0 * st + y0 * ct }); // the shooter's own movement adds nothing
+    Body.setVelocity(ball, { x: vx * p.dir, y: -vy });
     Body.setAngularVelocity(ball, -p.dir * 0.2);
     const line = predictLine(w, T, hoop);
     ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect: line.perfect, onTarget: line.onTarget, clean: true };
@@ -405,9 +412,15 @@ const Physics = (() => {
     release(w, T, T.bounce_ignore);   // the bouncer's own legs never kick their own dribble away
     p.grabCD = T.bounce_regrab;
     w.lastBouncer = p;
-    Body.setVelocity(ball, { x: lerp(T.bounce_vx_min, T.bounce_vx_max, c) * p.dir, y: lerp(T.bounce_vy_min, T.bounce_vy_max, c) });
+    w.passGuard = { team: p.team, until: w.time + T.pass_guard };   // opponents can't catch it yet
+    const dribble = c < T.dribble_threshold;
+    if (dribble) { // a short bounce at the feet; the dribbler leans in and hops along with it
+      Body.setVelocity(ball, { x: T.dribble_vx * p.dir, y: T.dribble_vy });
+      p.dribbleT = T.dribble_time; p.cd = 0;
+      Body.setAngularVelocity(p.torso, (p.dir * T.dribble_lean - wrap(p.torso.angle)) * 0.12); // tip in over the ball
+    } else Body.setVelocity(ball, { x: lerp(T.bounce_vx_min, T.bounce_vx_max, c) * p.dir, y: lerp(T.bounce_vy_min, T.bounce_vy_max, c) });
     Body.setAngularVelocity(ball, p.dir * 0.15);
-    w.onEvent({ type: 'bounce', team: p.team, charge: c });
+    w.onEvent({ type: dribble ? 'dribbleout' : 'bounce', team: p.team, charge: c });
   }
 
   /**
@@ -463,7 +476,8 @@ const Physics = (() => {
     const ball = w.ball;
     if (w.dunk) { stepDunk(w, T, dt); return; }
     if (w.ignoreUntil && w.time >= w.ignoreUntil && !w.hold) { ball.collisionFilter.group = 0; w.ignoreUntil = 0; }
-    const canCatch = p => p.grabCD <= 0 && w.time >= w.ignoreUntil;
+    const guarded = p => w.passGuard && p.team !== w.passGuard.team && w.time < w.passGuard.until;
+    const canCatch = p => p.grabCD <= 0 && w.time >= w.ignoreUntil && !guarded(p);
 
     // body hits on the ball
     for (const kk of w.kicks) {

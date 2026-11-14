@@ -159,6 +159,7 @@ function onPhysEvent(ev) {
     else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
     return;
   }
+  if (ev.type === 'dribbleout') { sfx.bounce(0.1); events.push({ type: 'dribbleout', team: ev.team }); return; }
   if (ev.type === 'bounce') { sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); events.push({ type: 'dunkstart', team: ev.team }); return; }
   if (ev.type === 'dunk') { sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }

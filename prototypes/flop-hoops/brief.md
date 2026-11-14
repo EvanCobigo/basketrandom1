@@ -28,6 +28,8 @@ After play: make the ball smaller, the hoops a bit larger, and everything should
 
 After play: Preserve existing assets and visual effects. The basketball, basketball rims, and rainbow trail are currently perfect; treat them as locked. Green trail when a shot heading into the basket touches rim or backboard; debug the rainbow trail (it once activated when it should not have); keep the rainbow intact otherwise. Characters 6'4" instead of 6'6", same proportions and style; ball size unchanged. Decouple the horizontal launch from the character's horizontal momentum; keep the vertical launch. New second key to bounce the ball: hold for strength and distance, release to bounce; natural bouncing; dribble and pass to a teammate; must not interfere with shooting. Dunk: available when a carrier is close to the rim (position relative to the rim, not just horizontal distance), with a dunking motion, the ball going in through a controlled motion; no dunks from too far or without the ball. Test shooting, bouncing, passing, dunking, rim and backboard collisions and trail transitions independently.
 
+After play: make it so that when you bounce the ball, the enemies cannot grab it for a short period of time to encourage ball passing between teammates. When "dribbling" if the release period is short enough, the ball should just do a short bounce, and the player should move lean and do small jumps with the ball. make shooting a bit easier and simpler, the ball's trajectory should not be influenced by the momentum of the character: the ball should always follow the same parabolic trajectory to the hoop, even if character is leaning backwards etcetera.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -70,11 +72,12 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held
-- [x] Fadeaways when drifting or leaning away, blocks and steals by defenders
+- [x] Blocks and steals by defenders; a shot taken drifting or leaning away is called a fadeaway (same arc)
 - [x] Only opponents collide; teammates pass through each other
 - [x] Planted players pivot on their feet, swinging evenly forward and back at a beat that never fades; fallen players get back up
-- [x] Shots as in iteration 2 (forward 3.5-14, up 11-13, 1 s cock-back, body lean bends the throw); the shooter's own movement adds nothing to the launch
-- [x] Bounce key: hold to wind up, let go to bounce the ball forward; short dribbles come back to the dribbler, long bounces are passes
+- [x] Shots: one arc per cock-back and spot (forward 3.5-14, up 11-13, 1 s cock-back); lean, drift and momentum change nothing; strong aim help toward the rim's centre
+- [x] Bounce key: hold to wind up, let go to bounce the ball forward as a pass; opponents cannot catch a bounced ball for 0.6 s
+- [x] Dribble: a quick tap bounces the ball at the feet while the player leans in and hops forward with it, catching it back
 - [x] Dunk: near the rim in the air (ball and body measured to the rim), letting go of the cocked shot dunks: the ball arcs in over the rim and the dunker is carried to it
 - [x] Quicker pace than iteration 4 (game speed 0.9, shorter round card and celebration); players eased apart so they never pile into one blob
 - [x] Fired ball trail: white; rainbow with a PERFECT! callout on a clean line through the rim; green if an on-target shot touches rim or backboard before going through
