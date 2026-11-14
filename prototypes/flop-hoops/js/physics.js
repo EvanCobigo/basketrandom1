@@ -239,7 +239,7 @@ const Physics = (() => {
     if (dribbling) p.dribbleT -= dt;
     // the swing only takes over once the body is fairly upright: a player who lands tilted is
     // righted gently by the upright spring first, never snapped round in one step
-    const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < T.rock_engage && !dribbling;
+    const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < T.rock_engage;   // dribbling too: the swing steers it
     if (swinging) {
       const next = Math.sin(phase + T.rock_rate * Math.PI * 2 * dt) * T.rock_angle;   // where the swing should be next step
       const om = clamp(lerp(torso.angularVelocity, wrap(next - a), T.rock_follow), -T.rock_max_turn, T.rock_max_turn); // rad/step, never faster than the swing itself
@@ -247,14 +247,15 @@ const Physics = (() => {
         const c = Math.cos(l.angle), sn = Math.sin(l.angle), hl = p.dims.legL / 2;
         return { x: q.x + (l.position.x - sn * hl) / 2, y: q.y + (l.position.y + c * hl) / 2 };
       }, { x: 0, y: 0 });
+      const slide = dribbling ? (p.dribbleSteer || 0) * T.dribble_slide : 0;   // a dribble carries the whole swinging body along
       for (const part of [torso, p.head, ...p.legs]) {
-        Body.setVelocity(part, { x: clamp(-om * (part.position.y - piv.y), -T.rock_max_speed, T.rock_max_speed), y: clamp(om * (part.position.x - piv.x), -T.rock_max_speed, T.rock_max_speed) });
+        Body.setVelocity(part, { x: clamp(-om * (part.position.y - piv.y), -T.rock_max_speed, T.rock_max_speed) + slide, y: clamp(om * (part.position.x - piv.x), -T.rock_max_speed, T.rock_max_speed) });
         Body.setAngularVelocity(part, om);
       }
     } else {
       const k = grounded ? T.upright : T.upright * T.upright_air;
-      // dribbling: leaning in over the ball, swaying more the longer the dribble chain
-      const lean = dribbling ? p.dir * T.dribble_lean + Math.sin(w.time * 9 + p.idx) * T.dribble_sway * Math.min(p.dribbleChain || 1, 8) * 0.05 : 0;
+      // dribbling off the ground: sloppy taps make the body sway
+      const lean = dribbling ? Math.sin(w.time * 9 + p.idx) * T.dribble_sway * Math.min(p.sloppy || 0, 8) * 0.05 : 0;
       let omega = torso.angularVelocity * 60;
       omega += (-wrap(a - lean) * k - omega * T.upright_damp) * dt;
       Body.setAngularVelocity(torso, omega / 60);
@@ -287,8 +288,8 @@ const Physics = (() => {
 
     // Jump: a tap is a short hop; keeping the key down lifts it to full height. Holding keeps
     // hopping on landing, except for a ball carrier, who is busy with the ball.
-    if (dribbling && grounded && !held) {   // sliding forward along the floor with the dribble
-      for (const part of p.parts) Body.setVelocity(part, { x: lerp(part.velocity.x, p.dir * T.dribble_slide, 0.25), y: part.velocity.y });
+    if (dribbling && grounded && !held) {   // sliding along the floor with the dribble, the way the body leans
+      for (const part of p.parts) Body.setVelocity(part, { x: lerp(part.velocity.x, (p.dribbleSteer || 0) * T.dribble_slide, 0.25), y: part.velocity.y });
     }
     const vFull = Math.sqrt(2 * g * T.jump_height * S.jump * (w.hustle && w.hustle[p.team] ? T.hustle_jump : 1));
     const fresh = held && !p.prevHeld;
@@ -431,14 +432,24 @@ const Physics = (() => {
     w.lastBouncer = p;
     w.passGuard = { team: p.team, until: w.time + T.pass_guard };   // opponents can't catch it yet
     const dribble = c < T.dribble_threshold;
-    if (dribble) { // a short bounce at the feet; the dribbler slides along, a little wilder each time
-      p.dribbleChain = w.time - (p.lastDribble ?? -9) < T.dribble_chain_time ? (p.dribbleChain || 0) + 1 : 1;
+    if (dribble) {
+      // A dribble goes the way the body leans in its swing. Its rhythm decides how wild it gets:
+      // a tap made while the ball was rising back to the hand is clean (sloppiness eases off);
+      // a tap made while it was still falling is sloppy (sloppiness builds). Long chains add a
+      // little too, so a dribble can't run for ever.
+      const quality = p.tapQuality || 'hand'; p.tapQuality = null;
+      const chained = w.time - (p.lastDribble ?? -9) < T.dribble_chain_time;
+      p.dribbleChain = chained ? (p.dribbleChain || 0) + 1 : 1;
+      if (!chained) p.sloppy = 0;
+      p.sloppy = Math.max(0, (p.sloppy || 0) + (quality === 'sloppy' ? 2 : quality === 'clean' ? -1 : 0));
       p.lastDribble = w.time;
-      const wild = (p.dribbleChain - 1) * T.dribble_error;          // grows with every dribble in a row
-      Body.setVelocity(ball, { x: (T.dribble_vx + (w.rng() * 2 - 1) * wild) * p.dir, y: T.dribble_vy + (w.rng() * 2 - 1) * wild * 0.5 });
-      Body.setAngularVelocity(p.torso, p.torso.angularVelocity + (w.rng() * 2 - 1) * T.dribble_sway * p.dribbleChain * 0.02);
+      const wild = (p.sloppy + Math.max(0, p.dribbleChain - T.dribble_safe_chain) * 0.5) * T.dribble_error;
+      const steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);
+      p.dribbleSteer = steer;   // the lean at the tap: the ball and the slide both go that way until it comes back
+      Body.setVelocity(ball, { x: T.dribble_vx * (steer + 0.25 * p.dir) + (w.rng() * 2 - 1) * wild, y: T.dribble_vy + (w.rng() * 2 - 1) * wild * 0.5 });
+      Body.setAngularVelocity(p.torso, p.torso.angularVelocity + (w.rng() * 2 - 1) * T.dribble_sway * p.sloppy * 0.01);
       p.dribbleT = T.dribble_time; p.cd = 0;
-      Body.setAngularVelocity(p.torso, (p.dir * T.dribble_lean - wrap(p.torso.angle)) * 0.12); // tip in over the ball
+      p.lastQuality = quality;
     } else {
       Body.setVelocity(ball, { x: lerp(T.bounce_vx_min, T.bounce_vx_max, c) * p.dir, y: lerp(T.bounce_vy_min, T.bounce_vy_max, c) });
       ball.collisionFilter.mask = 0x1 | TEAM_CAT[p.team];   // a pass slips through opponents for a moment
@@ -446,7 +457,7 @@ const Physics = (() => {
     }
     Body.setAngularVelocity(ball, p.dir * 0.15);
     if (!dribble) w.pass = { team: p.team, from: p, until: w.time + T.pass_catch_window };
-    w.onEvent({ type: dribble ? 'dribbleout' : 'bounce', team: p.team, charge: c, chain: p.dribbleChain || 0 });
+    w.onEvent({ type: dribble ? 'dribbleout' : 'bounce', team: p.team, charge: c, chain: p.dribbleChain || 0, quality: p.lastQuality, sloppy: p.sloppy || 0 });
   }
 
   /**
@@ -506,7 +517,11 @@ const Physics = (() => {
     if (w.ignoreUntil && w.time >= w.ignoreUntil && !w.hold) { ball.collisionFilter.group = 0; w.ignoreUntil = 0; }
     for (const team of [0, 1]) {   // a bounce tap while your own dribble is in the air is queued
       const fresh = bheld[team] && !w.prevB[team];
-      if (fresh && !w.hold && w.lastBouncer && w.lastBouncer.team === team && w.lastBouncer.dribbleT > 0) w.lastBouncer.queued = true;
+      if (fresh && !w.hold && w.lastBouncer && w.lastBouncer.team === team && w.lastBouncer.dribbleT > 0) {
+        w.lastBouncer.queued = true;
+        // in rhythm: on the way back up; one tap on the way down makes this dribble sloppy, whatever follows
+        if (w.lastBouncer.tapQuality !== 'sloppy') w.lastBouncer.tapQuality = w.ball.velocity.y < 0 ? 'clean' : 'sloppy';
+      }
     }
     w.prevB = bheld.slice();
     const guarded = p => w.passGuard && p.team !== w.passGuard.team && w.time < w.passGuard.until;
@@ -575,7 +590,7 @@ const Physics = (() => {
       // a dribbler gets their own bounce back on its way up, within reach of the hand
       const own = p === w.lastBouncer && ball.velocity.y < 0 && (() => { const hp = handPos(p); return Math.hypot(hp.x - ball.position.x, hp.y - ball.position.y) < ball.r + T.dribble_reach; })();
       if (own || shareInHandBox(p, ball, T) > 0.5 || touchesAbdomen(p, ball, T)) {
-        const again = own && p.queued; p.queued = false;
+        const again = p === w.lastBouncer && p.queued; p.queued = false;   // a queued dribble tap fires however the dribbler catches it
         grab(w, p, T, own ? 'dribble' : 'grab', held[p.team]);
         if (again) { w.hold.bcharge = 0; bounce(w, T); }   // the queued tap: back down at once
         break;

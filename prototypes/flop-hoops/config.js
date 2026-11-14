@@ -71,10 +71,10 @@ window.CONFIG = {
   dribble_vx: { value: 1.6, min: 0, max: 6, step: 0.1 },         // px/step forward speed of a dribble
   dribble_vy: { value: 6, min: 1, max: 14, step: 0.5 },          // px/step downward throw of a dribble
   dribble_time: { value: 0.7, min: 0.1, max: 2, step: 0.05 },    // s the dribbler hops along after a dribble
-  dribble_lean: { value: 0.3, min: 0, max: 0.8, step: 0.02 },    // rad forward lean while dribbling
   dribble_slide: { value: 2.4, min: 0, max: 8, step: 0.1 },       // px/step forward slide while dribbling
   dribble_chain_time: { value: 1.2, min: 0.3, max: 3, step: 0.05 }, // s between dribbles that still counts as one chain
-  dribble_error: { value: 0.9, min: 0, max: 3, step: 0.05 },      // px/step of random bounce error added per dribble in a chain
+  dribble_error: { value: 0.9, min: 0, max: 3, step: 0.05 },      // px/step of random bounce error per unit of sloppiness
+  dribble_safe_chain: { value: 6, min: 1, max: 20, step: 1 },     // dribbles in a row before the chain itself adds wobble
   dribble_sway: { value: 1.6, min: 0, max: 5, step: 0.1 },        // how much each dribble in a chain adds to the sway
   perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
   perfect_graze: { value: 8, min: 0, max: 15, step: 1 },         // px a perfect shot may overlap the rim or board and still count
@@ -138,9 +138,12 @@ window.CONFIG = {
 
 
   // ---- Look and juice ----
+  crowd_rows: { value: 3, min: 0, max: 5, step: 1 },              // rows of fans in the stands
+  crowd_gaps: { value: 0.12, min: 0, max: 0.9, step: 0.01 },     // share of empty seats
+  crowd_hype_time: { value: 2.2, min: 0.3, max: 6, step: 0.1 },  // s the crowd stays on its feet after sparks fly
   fire_time: { value: 1.1, min: 0, max: 3, step: 0.1 },          // s the rim burns after a dunk
   spark_time: { value: 1.2, min: 0, max: 3, step: 0.1 },         // s the cold-spark machines fire on a dunk or a made fadeaway
-  pixel_size: { value: 5, min: 1, max: 6, step: 1 },           // screen px per art pixel on the court
+  pixel_size: { value: 3, min: 1, max: 6, step: 1 },           // screen px per art pixel on the court
   palette_snap: { value: 1, min: 0, max: 1, step: 1 },          // 1: snap every court pixel to the round's retro palette
   scanlines: { value: 0.12, min: 0, max: 0.5, step: 0.01 },     // darkness of the CRT scanlines
   shake: { value: 16, min: 0, max: 40, step: 1 },              // px screen shake on a basket

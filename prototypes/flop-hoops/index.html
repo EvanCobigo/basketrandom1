@@ -16,6 +16,7 @@
 <body>
 <canvas id="game"></canvas>
 <script src="config.js"></script>
+<script src="js/settings.js"></script>
 <script src="vendor/matter.min.js"></script>
 <script src="js/rounds.js"></script>
 <script src="js/scoring.js"></script>
@@ -49,6 +50,7 @@ function rng() { // mulberry32; every gameplay random call reads this, never Mat
 }
 const events = []; // window.game.events: anything the game wants a run to see
 Render.setFont(FONT);
+Settings.load();   // this browser's saved settings, if any
 
 // ---- Screen ---------------------------------------------------------------------------
 const canvas = document.getElementById('game');
@@ -88,7 +90,12 @@ canvas.addEventListener('pointerdown', e => {
   const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
   const b = buttons.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
   if (b) activate(b);
+  else if (scene === 'settings') settingsClick(x, y);
 });
+// Settings list: the wheel scrolls it; clicking or dragging on a slider sets that value.
+let dragKey = null;
+canvas.addEventListener('wheel', e => { if (scene === 'settings') { e.preventDefault(); settingsMove(Math.sign(e.deltaY) * 3); } }, { passive: false });
+canvas.addEventListener('pointerup', () => { dragKey = null; });
 // Menus: the pointer lights the button under it; arrows or W/S move the focus; Enter presses it.
 let mouse = { x: -1, y: -1 }, menuFocus = 0, menuScene = '', menuPress = null;
 canvas.addEventListener('pointermove', e => {
@@ -96,6 +103,7 @@ canvas.addEventListener('pointermove', e => {
   mouse = { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
   const i = buttons.findIndex(b => mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h);
   if (i >= 0) menuFocus = i;
+  if (dragKey && e.buttons) settingsSlide(dragKey, mouse.x);
 });
 /** Press a button: it squashes for a moment, then its action runs (on the game step, not a timer). */
 function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14, action: b.action, label: b.label }; }
@@ -192,7 +200,7 @@ function onPhysEvent(ev) {
     else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
     return;
   }
-  if (ev.type === 'dribbleout') { sfx.bounce(0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2 }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
+  if (ev.type === 'dribbleout') { sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
   if (ev.type === 'bounce') { sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); events.push({ type: 'dunkstart', team: ev.team }); return; }
   if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 10, { speed: 320, life: 0.45, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
@@ -275,6 +283,7 @@ function score(hoop) {
       a: rng() * 6, va: (rng() - 0.5) * 20, life: 1.2 + rng() * 0.8, c: c[i % 4] });
   }
   sfx.swish();
+  world.hype = Math.max(world.hype || 0, 0.45);   // every basket lifts the crowd a little
   if (own && shot.kind === 'fade') sparkShow();
   sfx.cheer(own && (shot.kind === 'dunk' || shot.perfect) ? 1 : 0.6);
   puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 6, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
@@ -295,8 +304,9 @@ function puff(x, y, n, o) {
   }
 }
 /** The cold-spark machines at both court edges fountain for a moment. */
-function sparkShow() { if (world) world.sparkT = tune.spark_time; sfx.sparks(); }
+function sparkShow() { if (world) { world.sparkT = tune.spark_time; world.hype = Math.max(world.hype || 0, 1); } sfx.sparks(); }
 function updateJuice(dt) {
+  if (world && world.hype > 0) world.hype = Math.max(0, world.hype - dt / tune.crowd_hype_time);
   if (world && world.sparkT > 0) {   // icy sparks fountaining up from both machines
     world.sparkT -= dt;
     for (const x of [world.L - 40, world.R + 40]) puff(x, Physics.FLOOR_Y - 44, 2, { speed: 520, angle: -Math.PI / 2, cone: 0.35, life: 0.8, colors: Render.ICE, size: 6, g: 900, drag: 0.99 });
@@ -321,6 +331,31 @@ function checkStall(dt) {
   const corner = (b.position.x < world.L + r + 40 || b.position.x > world.R - r - 40) && b.position.y > world.floorY - r * 2.5;
   state.stall = !world.hold && (Math.hypot(v.x, v.y) < 0.4 || corner) ? state.stall + dt : 0;
   if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; state.toast = 'Re-drop!'; state.toastT = 1.1; state.toastTeam = -1; sfx.whistle(); }
+}
+
+// ---- Settings menu: every coefficient in config.js, by section ----------------------------
+const SET = { x: 120, y: 150, w: 1040, rowH: 28, show: 15, sliderX: 760, sliderW: 340 };
+let settingsRows = Settings.rows(), settingsSel = 1, settingsTop = 0, settingsFrom = 'title', repeatT = 0;
+function openSettings() { settingsFrom = scene; settingsRows = Settings.rows(); scene = 'settings'; }
+function settingsMove(n) {
+  let i = settingsSel;
+  for (let k = 0; k < Math.abs(n); k++) {
+    do { i = Math.max(0, Math.min(settingsRows.length - 1, i + Math.sign(n))); } while (settingsRows[i].header && i > 0 && i < settingsRows.length - 1);
+  }
+  if (settingsRows[i].header) i = Math.min(settingsRows.length - 1, i + 1);
+  settingsSel = i;
+  if (settingsSel < settingsTop + 1) settingsTop = Math.max(0, settingsSel - 1);
+  if (settingsSel >= settingsTop + SET.show) settingsTop = settingsSel - SET.show + 1;
+}
+function settingsSlide(k, x) {
+  const c = CONFIG[k], t = Math.max(0, Math.min(1, (x - SET.sliderX) / SET.sliderW));
+  Settings.set(k, c.min + t * (c.max - c.min));
+}
+function settingsClick(x, y) {
+  const i = settingsTop + Math.floor((y - SET.y) / SET.rowH);
+  if (y < SET.y || i < settingsTop || i >= Math.min(settingsRows.length, settingsTop + SET.show) || settingsRows[i].header) return;
+  settingsSel = i;
+  if (x >= SET.sliderX - 10 && x <= SET.sliderX + SET.sliderW + 10) { dragKey = settingsRows[i].key; settingsSlide(dragKey, x); }
 }
 
 // ---- Scenes ---------------------------------------------------------------------------
@@ -391,8 +426,8 @@ function drawGame(opts = {}) {
     }
   }
   if (state.dribble && state.dribble.n > 1 && scene === 'play') { // the dribble chain: the more in a row, the shakier
-    const d = state.dribble, shaky = d.n >= 5;
-    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : ''}`, W / 2, 154, 18, shaky ? '#ff5b5b' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
+    const d = state.dribble, shaky = d.sloppy >= 4;
+    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, 154, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
   }
   if (world && world.hold && world.hold.dunkReady && (scene === 'play')) {
     const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;
@@ -472,12 +507,61 @@ const scenes = {
       ctx.fillStyle = 'rgba(10,6,24,0.78)'; ctx.fillRect(W / 2 - 440, 420, 880, 66);   // a dark band so the help reads over the grid
       ptext('HOP AS YOU SWING TO MOVE. CATCH WITH HAND OR BELLY.', W / 2, 432, 2, '#ffffff');
       ptext('WITH THE BALL: HOLD JUMP, LET GO TO SHOOT (NEAR THE RIM: TAP TO DUNK).', W / 2, 452, 2, '#ffffff');
-      ptext('HOLD BOUNCE, LET GO TO DRIBBLE OR PASS.', W / 2, 472, 2, '#ffffff');
+      ptext('TAP BOUNCE TO DRIBBLE (TAP AGAIN AS IT RISES), HOLD IT TO PASS.', W / 2, 472, 2, '#ffffff');
       buttons = [];
       btn('VS CPU', W / 2 - 300, 506, 270, 74, () => newMatch('cpu'), 'PLAYER 1 VS COMPUTER', 4);
       btn('2 PLAYERS', W / 2 + 30, 506, 270, 74, () => newMatch('2p'), 'ONE KEYBOARD', 4);
+      btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3);
       btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
       ptext(`FIRST TO ${tune.win_score} BASKETS WINS  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 22, 2, '#c9c3e0');
+    },
+  },
+  settings: {
+    update(dt) {
+      state.t += dt;
+      if (menuPress) return;
+      if (pressed('Escape') || pressed('Enter') || pressed('Backspace')) { scene = settingsFrom; return; }
+      if (pressed('ArrowDown') || pressed('KeyS')) settingsMove(1);
+      if (pressed('ArrowUp') || pressed('KeyW')) settingsMove(-1);
+      if (pressed('PageDown')) settingsMove(SET.show);
+      if (pressed('PageUp')) settingsMove(-SET.show);
+      const row = settingsRows[settingsSel], l = down.has('ArrowLeft') || down.has('KeyA'), r = down.has('ArrowRight') || down.has('KeyD');
+      if (row && row.key) {
+        if (pressed('ArrowLeft') || pressed('KeyA')) { Settings.nudge(row.key, -1); repeatT = 0.35; }
+        else if (pressed('ArrowRight') || pressed('KeyD')) { Settings.nudge(row.key, 1); repeatT = 0.35; }
+        else if (l || r) { repeatT -= dt; if (repeatT <= 0) { Settings.nudge(row.key, r ? 1 : -1); repeatT = 0.04; } }   // held: keeps stepping
+      }
+    },
+    draw() {
+      if (settingsFrom === 'title') drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
+      else { drawGame(); }
+      overlay(0.55);
+      ptext('SETTINGS', W / 2, 62, 8, '#ffd23f', { outline: true, shadow: 6 });
+      ptext('UP/DOWN PICK  ·  LEFT/RIGHT CHANGE (HOLD TO RUN)  ·  CLICK OR DRAG A SLIDER  ·  WHEEL SCROLLS', W / 2, 112, 2, '#e6ddff');
+      ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + 8, SET.y - 8, SET.w, SET.rowH * SET.show + 16);
+      ctx.fillStyle = Render.INK; ctx.fillRect(SET.x - 4, SET.y - 16, SET.w + 8, SET.rowH * SET.show + 24);
+      ctx.fillStyle = '#21183f'; ctx.fillRect(SET.x, SET.y - 12, SET.w, SET.rowH * SET.show + 16);
+      for (let n = 0; n < SET.show; n++) {
+        const i = settingsTop + n, row = settingsRows[i]; if (!row) break;
+        const y = SET.y + n * SET.rowH + SET.rowH / 2;
+        if (row.header) { ptext(row.header, SET.x + 24, y, 3, '#ffd23f', { align: 'left' }); continue; }
+        const k = row.key, sel = i === settingsSel;
+        if (sel) { ctx.fillStyle = '#3a2d6a'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, SET.w - 12, SET.rowH - 4); }
+        ptext(Settings.label(k), SET.x + 44, y, 2, Settings.changed(k) ? '#ff9a3c' : '#ffffff', { align: 'left', shadow: 2 });
+        ptext(Settings.show(k), SET.sliderX - 24, y, 2, '#fff1a8', { align: 'right', shadow: 2 });
+        ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX, y - 4, SET.sliderW, 8);
+        ctx.fillStyle = sel ? '#1fc2b1' : '#5d6480'; ctx.fillRect(SET.sliderX, y - 4, SET.sliderW * Settings.share(k), 8);
+        ctx.fillStyle = sel ? '#ffffff' : '#c9c3e0'; ctx.fillRect(SET.sliderX + SET.sliderW * Settings.share(k) - 5, y - 9, 10, 18);
+        if (sel && Math.floor(state.t * 4) % 2) { ctx.fillStyle = '#ffffff'; for (let q = 0; q < 3; q++) ctx.fillRect(SET.x + 18 + q * 3, y - (3 - q) * 3, 3, (3 - q) * 6); }
+      }
+      // scroll bar
+      const total = settingsRows.length, barH = SET.rowH * SET.show;
+      ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8, 8, barH);
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8 + barH * settingsTop / total, 8, Math.max(16, barH * SET.show / total));
+      ptext('ORANGE NAMES ARE CHANGED FROM THE DEFAULT. SIZES OF BODIES AND COURT APPLY FROM THE NEXT ROUND.', W / 2, 600, 2, '#c9c3e0');
+      buttons = [];
+      btn('BACK', W / 2 - 290, 628, 260, 58, () => { scene = settingsFrom; }, '', 4);
+      btn('RESET ALL', W / 2 + 30, 628, 260, 58, () => Settings.reset(), '', 4);
     },
   },
   card: { // the round card: physics frozen while it flips in
@@ -534,6 +618,7 @@ const scenes = {
       btn('RESUME', W / 2 - 150, 320, 300, 60, () => { scene = pauseFrom; }, 'P OR ESC', 5);
       btn('RESTART', W / 2 - 150, 430, 300, 60, newMatch, 'R', 5);
       btn('MAIN MENU', W / 2 - 150, 540, 300, 60, toMenu, 'Q', 4);
+      btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3);
       btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
     },
   },
@@ -563,7 +648,7 @@ const scenes = {
 // ---- Loop: fixed step, frame time clamped ---------------------------------------------
 function step() {
   if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
-  if (scene !== menuScene) { menuScene = scene; menuFocus = 0; }
+  if (scene !== menuScene) { menuScene = scene; menuFocus = scene === 'settings' ? -1 : 0; }   // in settings the list has the keys; buttons light on hover
   if (menuPress) { menuPress.t -= STEP; if (menuPress.t <= 0) { const a = menuPress.action; menuPress = null; a(); } }
   scenes[scene].update(STEP); hit.clear();
 }

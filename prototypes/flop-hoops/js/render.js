@@ -42,10 +42,36 @@ const Render = (() => {
     street: { sky: '#151c38', band: '#253058', floor: '#3a3e4c', line: '#f5d34f', side: '#171c2e' },
   };
 
+  /**
+   * The crowd in the stands behind the court: rows of heads on shoulders, each bobbing on its own
+   * beat. w.hype (0..1, set by the spark machines and baskets) makes them bob higher and faster
+   * and throw their arms up.
+   */
+  function crowd(ctx, w, W, f, v) {
+    const hype = w.hype || 0, t = w.time || 0, looks = w.S.looks.flat(), kits = w.S.kits;
+    const rows = Math.round(CONFIG.crowd_rows.value), gap = 26, top = f - 140;
+    for (let r = 0; r < rows; r++) {
+      const y0 = top + r * gap, step = 24, off = r % 2 ? step / 2 : 0;
+      for (let x = off - step; x < W + step; x += step) {
+        const i = Math.round(x / step) * 7 + r * 31, seed = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
+        if (seed < CONFIG.crowd_gaps.value) continue;                                         // an empty seat
+        const rate = 1.4 + seed * 1.2 + hype * 6, amp = 2 + hype * 12;
+        const bob = Math.round(Math.abs(Math.sin(t * rate + seed * 9)) * amp);
+        const m = n => ((i % n) + n) % n;   // seats left of the screen edge have negative numbers
+        const skin = looks[m(looks.length)].skin, shirt = m(3) === 2 ? v.side : kits[m(2)].jersey;
+        const y = y0 - bob;
+        ctx.fillStyle = shirt; ctx.fillRect(x - 9, y + 8, 18, 16);                          // shoulders
+        if (hype > 0.3 && seed > 0.45) { ctx.fillStyle = skin; ctx.fillRect(x - 11, y - 10, 4, 14); ctx.fillRect(x + 7, y - 10, 4, 14); } // arms up
+        ctx.fillStyle = skin; ctx.fillRect(x - 6, y - 4, 12, 12);                             // head
+      }
+    }
+  }
+
   function venue(ctx, w, W, H) {
     const v = VENUES[w.S.venue], f = F();
     ctx.fillStyle = v.sky; ctx.fillRect(0, 0, W, f);
     ctx.fillStyle = v.band; ctx.fillRect(0, f - 150, W, 150);
+    crowd(ctx, w, W, f, v);
     ctx.fillStyle = v.floor; ctx.fillRect(0, f, W, H - f);
     ctx.fillStyle = v.line; ctx.fillRect(w.cx - 3, f, 6, H - f); ctx.fillRect(0, f, W, 4);
     ctx.fillStyle = v.side; ctx.fillRect(0, 0, w.L, H); ctx.fillRect(w.R, 0, W - w.R, H);

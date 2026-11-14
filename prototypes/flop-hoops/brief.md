@@ -42,6 +42,9 @@ After play: make the menu more retro with a retro font. add a background for the
 
 After play: create an AI to play against. Debug the movement to remove erratic launching into the air and into the basket.
 
+After play: create a settings menu, and make it so that all of these coefficients can be changed. lower pixelation effect. add a live audience in the back that is heads that bob up and down and accentuate with the sparks
+After play: improve dribbling mechanic
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -55,7 +58,7 @@ After play: create an AI to play against. Debug the movement to remove erratic l
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court (860 px); everything chunkier (5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court (860 px); everything chunky (3 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -78,6 +81,8 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Ball physics with ground, player, rim and backboard collisions
 - [x] Basket detection, scoreboard, score animation, screen shake, round reset
 - [x] Rounds: same rules every round (no modifiers); venue colours and player looks change
+- [x] Settings menu (title and pause): every coefficient in config.js by section, with sliders, keys and mouse; saved in this browser; RESET ALL
+- [x] A live crowd in the stands: heads bobbing on their own beats, on their feet with arms up when the sparks fly and on every basket
 - [x] Menu, pause, victory screen, restart: in the game's own 5x7 pixel font with drop shadows, over a retro sunset-and-grid backdrop on the title; buttons bob, lift with a blinking pointer on hover or focus, and squash when pressed; arrows or W/S and Enter pick
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
@@ -92,7 +97,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] No erratic launches: the planted swing takes over only near upright and turns no faster than itself; a tumbling body's hop is steered no harder than a full swing; body parts capped at 22 px/step outside dunks; hops carry by the lean (hop_reach)
 - [x] Shots: one arc per cock-back and spot (forward 3.5-14, up 11-13, 1 s cock-back); lean, drift and momentum change nothing; strong aim help toward the rim's centre
 - [x] Bounce key: hold to wind up, let go to bounce the ball forward as a pass; a pass slips through opponents for 0.3 s and they cannot catch it for 0.6 s
-- [x] Dribble: tapping the bounce key bounces the ball at the feet while the player slides forward; each tap in a row adds sway and bounce error until the ball gets away (about 14 taps)
+- [x] Dribble: tap the bounce key to bounce it at the feet; it carries you the way you lean in your swing. Tapping again as the ball rises is clean; tapping while it falls or mashing is sloppy and builds wobble until you lose it (about 3 s of mashing, about 20 s of clean rhythm)
 - [x] Dunk: with the ball near your hoop, standing or flying, TAP TO DUNK shows; a tap of the jump key dunks: the ball arcs in over the rim and the dunker is carried up to it
 - [x] Quicker pace than iteration 4 (game speed 0.9, shorter round card and celebration); players eased apart so they never pile into one blob
 - [x] Fired ball trail (thicker): white; rainbow on a perfect line or when it scores with at most a soft touch; green when it scores after a real touch; blue for a fadeaway heading in
