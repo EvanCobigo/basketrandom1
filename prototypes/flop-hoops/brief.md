@@ -34,6 +34,8 @@ After play: make the perfect effect easier to proc, as in if the ball hits the r
 
 After play: make the dunk animation smoother and add a crowd cheer. thicken the ball trail. Make the ball trail green if it is going to score a point, but not cleanly. make the rainbow effect easier to attain by allowing for small imperfections in the ball scoring to still allow for rainbow. make the dribbling more intuitive, do with that as you will. make the ball bouncing mechanism work for dribbling, so basically when you semi-spam press the down direction key, the ball bounces down and the player slides forward adding more and more swaying as they go so that the ball eventually is too hard to control (dribbling shouldn't be preferred, but it should be available), and make it so that if the ball is passed to the other character on the same team, and it hits their legs or chest, it automatically gets picked up. make fadeaway jumpers that are going in a blue trail, make a fire effect around the rim when there's a dunk. Make cold spark machines on the sides that flare up when something happens that is cool (like a fadeaway jumper or a dunk for now)
 
+After play: make the sparks be reddish and orangish. the ball should bounce more on the ground, but bounce the same amount on the brim.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -88,8 +90,9 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] The ball is held in the palm, just past the hand, whatever the arm's angle at the catch
 - [x] Particles, few and short: landing and bounce dust, rim sparks, net flecks, a dunk burst, tidier score confetti
 - [x] Dunk: eased, smoother motion with a short hang on the rim; the rim burns for a moment after
-- [x] Cold-spark machines at both court edges fountain on a dunk or a made fadeaway; a crowd cheers every basket, louder for dunks and perfect shots
+- [x] Spark machines at both court edges fountain warm red and orange sparks on a dunk or a made fadeaway; a crowd cheers every basket, louder for dunks and perfect shots
 - [x] A pass that hits the teammate's legs or chest is picked straight up
+- [x] The ball bounces livelier off the floor (floor_bounce 0.92) while rim and backboard bounces stay as they were
 - [x] SWISH and PERFECT SWISH baskets; HUSTLE higher jumps for a team 2+ points behind; pickup flash
 - [x] Catches checked every step: larger hand box, abdomen overlap
 

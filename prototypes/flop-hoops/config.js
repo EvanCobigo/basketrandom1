@@ -109,6 +109,7 @@ window.CONFIG = {
   ball_radius: { value: 21, min: 16, max: 60, step: 1 },       // px
   ball_shape: { value: 2.6, min: 2, max: 5, step: 0.1 },        // ball outline exponent: 2 round, 4 squircle
   ball_bounce: { value: 0.8, min: 0.3, max: 0.98, step: 0.01 },// restitution
+  floor_bounce: { value: 0.92, min: 0, max: 0.98, step: 0.01 },  // floor restitution: above ball_bounce makes the ball livelier off the ground only
   ball_mass: { value: 1.3, min: 0.3, max: 5, step: 0.1 },      // Matter mass units
   ball_kick: { value: 2.6, min: 0, max: 8, step: 0.1 },        // px/step extra pop off any body hit
   ball_lift: { value: 0.9, min: 0, max: 3, step: 0.05 },      // share of each hit's pop sent upward

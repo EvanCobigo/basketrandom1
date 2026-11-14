@@ -103,6 +103,10 @@ const Physics = (() => {
       box(R + 100, 0, 200, 3000, 'wall'),
       box(CX, -950, 4000, 200, 'wall'),
     ];
+    // The floor's own bounce. Matter zeroes a static body's restitution when it is made, so it is
+    // set here, after. A pair bounces by the livelier of its two, so this lifts only floor
+    // bounces; the rim and backboard (left at zero) still bounce the ball by its own value.
+    statics[0].restitution = T.floor_bounce;
     const span = Math.max(T.rim_span_min, S.ballR * 2 * T.rim_ball_ratio);
     const rimY = FLOOR_Y - T.rim_height * S.hoop;
     for (const side of [-1, 1]) {

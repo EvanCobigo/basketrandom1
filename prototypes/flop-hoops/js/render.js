@@ -161,7 +161,7 @@ const Render = (() => {
   const RAINBOW = ['#ff3b3b', '#ff9a1f', '#ffe23b', '#3bd66b', '#3ba7ff', '#9b5bff'];
   const CONTESTED = '#7ee08a'; // the trail of a shot that scored after a real touch of rim or backboard
   const FADE_BLUE = '#5aa8ff'; // the trail of a fadeaway that is going in
-  const ICE = ['#ffffff', '#cfefff', '#8fd6ff'];
+  const ICE = ['#ffd2a0', '#ff8a3a', '#ff4a2a']; // the spark machines' sparks: warm reds and oranges
   /** The fired ball's trail: blocks that shrink toward the tail; white, rainbow on a perfect line, green when contested. */
   function trail(ctx, tr, r, t) {
     const n = tr.pts.length;
@@ -178,7 +178,7 @@ const Render = (() => {
   function sparkMachine(ctx, x, f, on, t) {
     ctx.beginPath(); ctx.rect(x - 22, f - 30, 44, 30); ink(ctx, '#3a3f55', 5);
     ctx.beginPath(); ctx.rect(x - 9, f - 42, 18, 12); ink(ctx, '#5d6480', 4);
-    ctx.fillStyle = on > 0 ? (Math.floor(t * 16) % 2 ? '#cfefff' : '#8fd6ff') : '#24283a';
+    ctx.fillStyle = on > 0 ? (Math.floor(t * 16) % 2 ? '#ffd2a0' : '#ff6a2a') : '#24283a';
     ctx.fillRect(x - 14, f - 22, 28, 8);
   }
 
