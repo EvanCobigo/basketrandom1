@@ -1,0 +1,391 @@
+<!doctype html>
+<!-- PROTOTYPE - NOT FOR PRODUCTION -->
+<!-- Question: Does one key plus floppy physics give a match that is chaotic, funny and still winnable on skill? -->
+<!-- Date: 2026-11-14 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flop Hoops</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14111f; overflow: hidden; }
+  body { font-variant-numeric: tabular-nums; }
+  canvas { display: block; margin: 0 auto; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script src="config.js"></script>
+<script src="vendor/matter.min.js"></script>
+<script src="js/rounds.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/render.js"></script>
+<script>
+'use strict';
+// Flop Hoops: the game shell. Input, sound, and the state machine (title, round card, play,
+// basket celebration, pause, results). Physics, rendering, scoring rules and round rolls live
+// in js/. Keep the fixed step, the clock hook, window.game and the play and figures scenes.
+
+// ---- Built to be checked ----------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.speed is CONFIG.speed.value
+const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
+const W = 1280, H = 720;        // logical size
+const PIXEL = false;
+const FONT = '"Trebuchet MS", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif';
+const TITLE = 'Flop Hoops';
+const CONTROLS = ['Player 1: W', 'Player 2: Up Arrow', 'Esc / P: pause', 'M: mute'];
+const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
+const CHEAP = params.get('render') === 'cheap';
+let seed;
+function rng() { // mulberry32; every gameplay random call reads this, never Math.random
+  seed = (seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const events = []; // window.game.events: anything the game wants a run to see
+Render.setFont(FONT);
+
+// ---- Screen ---------------------------------------------------------------------------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let viewScale = 1;
+function fit() { // fills the window at any size and pixel ratio
+  const k = Math.min(innerWidth / W, innerHeight / H);
+  const s = PIXEL ? Math.max(1, Math.floor(k)) : k;
+  const r = PIXEL ? 1 : s * (devicePixelRatio || 1);
+  viewScale = s;
+  canvas.width = Math.round(W * r); canvas.height = Math.round(H * r);
+  canvas.style.width = Math.round(W * s) + 'px'; canvas.style.height = Math.round(H * s) + 'px';
+  canvas.style.marginTop = Math.max(0, Math.floor((innerHeight - H * s) / 2)) + 'px';
+  ctx.setTransform(r, 0, 0, r, 0, 0); ctx.imageSmoothingEnabled = !PIXEL;
+}
+addEventListener('resize', fit); fit();
+const text = (s, x, y, size, c, o) => Render.text(ctx, s, x, y, size, c, o);
+
+// ---- Input: keys by position (event.code), OS key repeat ignored ------------------------
+const down = new Set(), hit = new Set();
+const pressed = code => hit.has(code); // true for one step after the key goes down
+const KEYS = ['KeyW', 'ArrowUp'];       // team 0 jumps on W, team 1 on Up Arrow
+addEventListener('keydown', e => {
+  startAudio();
+  if (!e.repeat) { down.add(e.code); hit.add(e.code); }
+  if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => down.delete(e.code));
+addEventListener('blur', () => down.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) { down.clear(); if (scene === 'play' || scene === 'card') pauseGame(); } });
+// Buttons on screen are clickable too; each one does what its key does.
+let buttons = [];
+canvas.addEventListener('pointerdown', e => {
+  startAudio();
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+  const b = buttons.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+  if (b) { sfx.click(); b.action(); }
+});
+
+// ---- Audio: started on first input, mute on M --------------------------------------------
+let audio = null, muted = false;
+function startAudio() {
+  if (!audio) {
+    const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)(); // a check may inject one
+    const out = ac.createGain(); out.gain.value = muted ? 0 : tune.volume;
+    out.connect(ac.destination); audio = { ac, out };
+    // one second of noise for the swish, from a fixed LCG (sound only, not gameplay)
+    const len = ac.sampleRate, buf = ac.createBuffer(1, len, ac.sampleRate), data = buf.getChannelData(0);
+    let x = 12345; for (let i = 0; i < len; i++) { x = (x * 1103515245 + 12345) & 0x7fffffff; data[i] = x / 0x3fffffff - 1; }
+    audio.noise = buf;
+  }
+  if (audio.ac.state === 'suspended') audio.ac.resume();
+}
+function setMuted(m) { muted = m; if (audio) audio.out.gain.value = m ? 0 : tune.volume; }
+addEventListener('tune', () => setMuted(muted));
+function tone(freq, dur, type = 'square', vol = 0.3, delay = 0, freq2 = freq) {
+  if (!audio || muted) return;
+  const t = audio.ac.currentTime + delay, o = audio.ac.createOscillator(), g = audio.ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq2, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(audio.out); o.start(t); o.stop(t + dur);
+}
+function noise(dur, vol, freq, delay = 0) {
+  if (!audio || muted) return;
+  const t = audio.ac.currentTime + delay, src = audio.ac.createBufferSource(), f = audio.ac.createBiquadFilter(), g = audio.ac.createGain();
+  src.buffer = audio.noise; f.type = 'bandpass'; f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(freq * 0.4, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(f).connect(g).connect(audio.out); src.start(t); src.stop(t + dur);
+}
+const lastSound = {};
+function limited(key, gap) { const t = state ? state.t : 0; if (lastSound[key] !== undefined && t - lastSound[key] < gap && t >= lastSound[key]) return true; lastSound[key] = t; return false; }
+const sfx = {
+  jump(team) { if (!limited('jump' + team, 0.05)) tone(team ? 330 : 280, 0.12, 'square', 0.07, 0, team ? 620 : 540); },
+  floor(v) { if (!limited('floor', 0.05)) tone(150, 0.14, 'triangle', Math.min(0.45, v * 0.04), 0, 60); },
+  board(v) { if (!limited('board', 0.05)) { tone(210, 0.1, 'square', Math.min(0.18, v * 0.02), 0, 120); noise(0.06, Math.min(0.2, v * 0.02), 900); } },
+  rim(v) { if (!limited('rim', 0.06)) { tone(880, 0.25, 'triangle', Math.min(0.22, v * 0.03)); tone(1310, 0.16, 'square', Math.min(0.06, v * 0.01)); } },
+  bop(v) { if (!limited('bop', 0.04)) tone(260, 0.08, 'sine', Math.min(0.3, 0.05 + v * 0.025), 0, 170); },
+  swish() { noise(0.35, 0.3, 3200); [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.18, 'square', 0.08, 0.12 + i * 0.08)); },
+  whistle() { tone(2100, 0.12, 'sine', 0.12, 0, 2300); tone(2100, 0.28, 'sine', 0.12, 0.15, 2250); },
+  win() { [392, 523, 659, 784, 659, 784, 1046].forEach((f, i) => tone(f, 0.22, 'square', 0.09, i * 0.12)); },
+  click() { tone(660, 0.05, 'square', 0.06); },
+};
+
+// ---- Game state -----------------------------------------------------------------------
+// world: the Matter.js world of the current round. Kept out of `state` so state stays plain data.
+let scene, state, world = null, pauseFrom = 'play', prevTwists = [], prevVenue = '';
+function reset() {
+  seed = Number(params.get('seed')) || CONFIG.seed;
+  state = { t: 0, score: [0, 0], round: 0, twist: '', venue: '', settings: null, cardT: 0, scoredT: 0,
+    scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, particles: [], resultsT: 0, attract: [0, 0], gained: '' };
+  prevTwists = []; prevVenue = '';
+}
+function onPhysEvent(ev) {
+  if (ev.type === 'jump') { sfx.jump(ev.team); return; }
+  if (ev.type !== 'hit' || ev.speed < 1.2) return;
+  if (ev.on === 'player') { sfx.bop(ev.speed); events.push({ type: 'touch', team: ev.team }); }
+  else if (ev.on === 'floor') sfx.floor(ev.speed);
+  else if (ev.on === 'board') { sfx.board(ev.speed); if (ev.hoop) ev.hoop.wobble = 1; }
+  else if (ev.on === 'rim') { sfx.rim(ev.speed); if (ev.hoop) ev.hoop.wobble = 1.4; }
+}
+/** Roll a round and build its world. */
+function buildRound(round) {
+  const S = Rounds.roll(rng, round, prevTwists, prevVenue, tune);
+  prevTwists = S.twists; prevVenue = S.venue;
+  state.settings = S; state.round = round; state.twist = S.title; state.venue = S.venueName;
+  world = Physics.createWorld(S, tune, rng, onPhysEvent);
+  state.stall = 0;
+}
+function newMatch() { reset(); nextRound(); events.push({ type: 'match' }); }
+function nextRound() { buildRound(state.round + 1); state.cardT = 0; scene = 'card'; sfx.whistle(); }
+function pauseGame() { pauseFrom = scene; scene = 'pause'; }
+function toMenu() { reset(); buildRound(1); scene = 'title'; }
+function physStep(held) {
+  const b = world.ball, prev = { x: b.position.x, y: b.position.y };
+  Physics.step(world, held, tune, STEP);
+  return { prev, cur: { x: b.position.x, y: b.position.y } };
+}
+function heldKeys() { return KEYS.map(k => down.has(k)); }
+function score(hoop) {
+  const team = hoop.team;
+  state.score[team]++; state.pops[team] = 1; state.shake = tune.shake; state.scorer = team; state.scoredT = 0;
+  hoop.sway = 1.5;
+  const c = [Render.TEAM_COLORS[team], '#ffd23f', '#ffffff', Render.TEAM_DARK[team]];
+  for (let i = 0; i < 70; i++) {
+    state.particles.push({ x: (hoop.x1 + hoop.x2) / 2, y: hoop.rimY + 20, vx: (rng() - 0.5) * 900, vy: -200 - rng() * 700,
+      a: rng() * 6, va: (rng() - 0.5) * 20, life: 1.2 + rng() * 0.8, c: c[i % 4] });
+  }
+  sfx.swish();
+  events.push({ type: 'score', team, score: state.score.slice() });
+  state.winner = Scoring.winner(state.score, tune.win_score);
+  scene = 'scored';
+}
+function updateJuice(dt) {
+  state.pops = state.pops.map(p => Math.max(0, p - dt * 2.5));
+  state.shake = Math.max(0, state.shake - dt * tune.shake * 2.2);
+  state.toastT = Math.max(0, state.toastT - dt);
+  for (const p of state.particles) { p.vy += 1400 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.99; p.a += p.va * dt; p.life -= dt; }
+  state.particles = state.particles.filter(p => p.life > 0 && p.y < H + 20);
+}
+/** A ball that stops moving (on a backboard top, wedged in a corner) is dropped again. */
+function checkStall(dt) {
+  const v = world.ball.velocity;
+  state.stall = Math.hypot(v.x, v.y) < 0.4 ? state.stall + dt : 0;
+  if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; state.toast = 'Re-drop!'; state.toastT = 1.2; sfx.whistle(); }
+}
+
+// ---- Scenes ---------------------------------------------------------------------------
+function drawGame(opts = {}) {
+  ctx.save();
+  if (state.shake > 0) ctx.translate(Math.sin(state.t * 91) * state.shake, Math.cos(state.t * 77) * state.shake * 0.6);
+  ctx.fillStyle = '#14111f'; ctx.fillRect(-50, -50, W + 100, H + 100);
+  Render.world(ctx, world, ALPHA, state.t, W, H, opts.hud === false ? null : () => Render.scoreboard(ctx, W, {
+    score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) }));
+  for (const p of state.particles) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.fillRect(-6, -3, 12, 6); ctx.restore();
+  }
+  ctx.restore();
+  if (opts.hud !== false && (scene === 'play' || scene === 'scored')) { // twist reminder under the scoreboard
+    text(state.twist.toUpperCase(), W / 2, 128, 16, '#ffffff', { stroke: 4 });
+  }
+  if (state.toastT > 0) text(state.toast, W / 2, 200, 40, '#ffd23f', { weight: 900, stroke: 8 });
+}
+function overlay(a = 0.55) { ctx.fillStyle = `rgba(20,16,36,${a})`; ctx.fillRect(0, 0, W, H); }
+function btn(label, x, y, w, h, action, hint, size) { const b = { label, x, y, w, h, action, hint, size }; buttons.push(b); Render.button(ctx, b); }
+
+const scenes = {
+  figures: { // every unit side by side, each named, for the outline check (?scene=figures)
+    update(dt) { state.t += dt; },
+    draw() {
+      if (!world) buildRound(1);
+      ctx.fillStyle = '#2a2440'; ctx.fillRect(0, 0, W, H);
+      const names = ['Tangerine: spikes', 'Tangerine: cap', 'Tangerine: mohawk', 'Tealback: puff', 'Tealback: bun', 'Tealback: band'];
+      const styles = ['spikes', 'cap', 'mohawk', 'puff', 'bun', 'band'];
+      const p0 = world.players[0];
+      styles.forEach((st, i) => {
+        const team = i < 3 ? 0 : 1, src = world.players[team * 2];
+        const fake = Object.assign({}, src, { look: Object.assign({}, src.look, { style: st }) });
+        const dx = 120 + i * 140 - src.torso.position.x, dy = -180;
+        ctx.save(); ctx.translate(dx, dy);
+        Render.player(ctx, fake, 1, world.S.kits[team], { x: src.torso.position.x + 300, y: 300 });
+        ctx.restore();
+        text(names[i], 120 + i * 140, 560, 16, '#ffffff', { stroke: 4 });
+      });
+      Render.ball(ctx, 1000, 380, 34, 0.4, false); text('Ball', 1000, 450, 16, '#ffffff', { stroke: 4 });
+      ctx.save(); ctx.translate(1150 - world.hoops[1].boardX, 420 - world.hoops[1].rimY);
+      const h = world.hoops[1]; Render.hoopBack(ctx, h); Render.hoopFront(ctx, h, 0); ctx.restore();
+      text('Hoop', 1130, 560, 16, '#ffffff', { stroke: 4 });
+      text('FLOP HOOPS: the cast', W / 2, 60, 34, '#ffd23f', { stroke: 6 });
+      void p0;
+    },
+  },
+  title: {
+    update(dt) {
+      state.t += dt;
+      // the court plays itself behind the menu: each side hops in short random bursts
+      state.attract = state.attract.map(a => a > 0 ? a - dt : (rng() < 0.02 ? 0.2 + rng() * 0.6 : a - dt));
+      physStep(state.attract.map(a => a > 0));
+      if (state.stall > 3) Physics.dropBall(world, tune);
+      checkStall(dt); state.toastT = 0;
+      if (pressed('Enter') || pressed('Space')) newMatch();
+    },
+    draw() {
+      drawGame({ hud: false }); overlay(0.45);
+      ctx.save(); ctx.translate(W / 2, 150); ctx.rotate(-0.05);
+      text('FLOP', -150, 0, 120, '#ff9a3c', { weight: 900, stroke: 14 });
+      text('HOOPS', 175, 10, 120, '#1fc2b1', { weight: 900, stroke: 14 });
+      ctx.restore();
+      text('Two wobbly ballers a side. One key each. New rules every round.', W / 2, 250, 22, '#ffffff', { stroke: 5 });
+      for (const team of [0, 1]) {
+        const x = W / 2 + (team ? 250 : -250);
+        Render.rr(ctx, x - 160, 300, 320, 150, 18); Render.ink(ctx, 'rgba(29,26,43,0.85)', 5);
+        text(team ? 'PLAYER 2' : 'PLAYER 1', x, 328, 20, Render.TEAM_COLORS[team]);
+        text(Render.TEAM_NAMES[team].toUpperCase(), x, 356, 26, '#ffffff', { weight: 900 });
+        Render.keycap(ctx, x, 404, team ? 'up' : 'W', 1);
+        text(team ? 'Up Arrow' : 'W key', x + 82, 404, 16, '#c9c3e0', { weight: 700 });
+      }
+      text('Hold to hop again and raise your arm. Let go to slap it down.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
+      buttons = [];
+      btn('PLAY', W / 2 - 130, 520, 260, 74, newMatch, 'Enter or Space', 40);
+      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 74, 190, 52, () => setMuted(!muted), 'M', 22);
+      text(`First to ${tune.win_score} baskets wins  ·  Esc / P pauses`, W / 2, H - 30, 17, '#c9c3e0', { weight: 700, stroke: 4 });
+    },
+  },
+  card: { // the round card: physics frozen while it flips in
+    update(dt) {
+      if (pressed('KeyP') || pressed('Escape')) { pauseGame(); return; }
+      state.cardT += dt; state.t += dt; updateJuice(dt);
+      if (state.cardT >= tune.card_time) { scene = 'play'; events.push({ type: 'round', round: state.round, twist: state.twist }); }
+    },
+    draw() { drawGame(); Render.roundCard(ctx, W, H, state.cardT, tune.card_time, state.settings); buttons = []; },
+  },
+  play: {
+    update(dt) {
+      if (pressed('KeyP') || pressed('Escape')) { pauseGame(); return; }
+      state.t += dt; updateJuice(dt);
+      const { prev, cur } = physStep(heldKeys());
+      const hoop = Scoring.basket(prev, cur, world.hoops);
+      if (hoop) { score(hoop); return; }
+      checkStall(dt);
+    },
+    draw() { drawGame(); buttons = []; },
+  },
+  scored: { // the basket: shake, confetti, score pop, a short slow-motion, then the next round
+    update(dt) {
+      state.scoredT += dt; state.t += dt; updateJuice(dt);
+      if (state.scoredT < 0.6 ? Math.round(state.scoredT * 60) % 2 === 0 : true) physStep(heldKeys());
+      if (state.scoredT >= tune.score_time) {
+        if (state.winner >= 0) { scene = 'results'; state.resultsT = 0; state.gained = `${Render.TEAM_NAMES[state.winner]} win`; sfx.win(); events.push({ type: 'win', team: state.winner }); }
+        else nextRound();
+      }
+    },
+    draw() {
+      drawGame();
+      const k = Math.min(1, state.scoredT / 0.25), team = state.scorer;
+      ctx.save(); ctx.translate(W / 2, 250); ctx.scale(k, k); ctx.rotate(-0.04);
+      text(`${Render.TEAM_NAMES[team].toUpperCase()} SCORE!`, 0, 0, 64, Render.TEAM_COLORS[team], { weight: 900, stroke: 11 });
+      text(`${state.score[0]} - ${state.score[1]}`, 0, 64, 36, '#ffffff', { weight: 900, stroke: 7 });
+      ctx.restore();
+      buttons = [];
+    },
+  },
+  pause: {
+    update() {
+      if (pressed('KeyP') || pressed('Escape')) scene = pauseFrom;
+      else if (pressed('KeyR')) newMatch();
+      else if (pressed('KeyQ')) toMenu();
+    },
+    draw() {
+      drawGame(); overlay(0.6);
+      text('PAUSED', W / 2, 200, 80, '#ffd23f', { weight: 900, stroke: 12 });
+      text(`${Render.TEAM_NAMES[0]} ${state.score[0]}  -  ${state.score[1]} ${Render.TEAM_NAMES[1]}`, W / 2, 280, 28, '#ffffff', { stroke: 5 });
+      buttons = [];
+      btn('RESUME', W / 2 - 140, 330, 280, 66, () => { scene = pauseFrom; }, 'P or Esc', 32);
+      btn('RESTART MATCH', W / 2 - 140, 430, 280, 66, newMatch, 'R', 26);
+      btn('MAIN MENU', W / 2 - 140, 530, 280, 66, toMenu, 'Q', 30);
+      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 74, 190, 52, () => setMuted(!muted), 'M', 22);
+    },
+  },
+  results: { // the winners keep bouncing; the losers stand there
+    update(dt) {
+      state.resultsT += dt; state.t += dt; updateJuice(dt);
+      physStep([state.winner === 0, state.winner === 1]);
+      if (state.resultsT > 0.6) {
+        if (pressed('Enter') || pressed('Space')) newMatch();
+        else if (pressed('KeyQ') || pressed('Escape')) toMenu();
+      }
+    },
+    draw() {
+      drawGame(); overlay(0.45);
+      const team = state.winner;
+      Render.crown(ctx, W / 2, 150, 2.4);
+      text(`${Render.TEAM_NAMES[team].toUpperCase()} WIN!`, W / 2, 240, 84, Render.TEAM_COLORS[team], { weight: 900, stroke: 13 });
+      text(`${state.score[0]}  -  ${state.score[1]}`, W / 2, 320, 54, '#ffffff', { weight: 900, stroke: 9 });
+      text(`after ${state.round} rounds`, W / 2, 370, 20, '#c9c3e0', { weight: 700, stroke: 4 });
+      buttons = [];
+      btn('REMATCH', W / 2 - 300, 430, 270, 74, newMatch, 'Enter or Space', 34);
+      btn('MAIN MENU', W / 2 + 30, 430, 270, 74, toMenu, 'Q or Esc', 32);
+    },
+  },
+};
+
+// ---- Loop: fixed step, frame time clamped ---------------------------------------------
+function step() {
+  if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
+  scenes[scene].update(STEP); hit.clear();
+}
+let last, acc = 0, ALPHA = 1; // ALPHA: how far the frame is between the last two steps
+function tick() {
+  const now = clock.now();
+  acc += Math.min(now - last, 0.25); last = now; // a stall never fast-forwards the game
+  while (acc >= STEP) { step(); acc -= STEP; }
+  ALPHA = acc / STEP; // draw between steps, so the view never judders
+  drawFrame();
+}
+function drawFrame() { scenes[scene].draw(); }
+function frame() { tick(); requestAnimationFrame(frame); }
+function timer() { if (document.visibilityState === 'visible' && clock.now() - last > 0.1) tick(); }
+
+// ---- What a check can read and drive (?manual=1 stops the loop; players never see it) ----
+window.game = {
+  get scene() { return scene; },
+  get state() { return state; },
+  press(code) { hit.add(code); },
+  hold(code, on) { on ? down.add(code) : down.delete(code); },
+  get events() { return events; },
+  step(n = 1, draw = true, alpha = 1) {
+    for (let i = 0; i < n; i++) step();
+    if (draw) { ALPHA = alpha; drawFrame(); }
+  },
+};
+
+reset();
+buildRound(1);
+scene = params.get('scene') || 'title';
+if (scene === 'play') { state.round = 1; }
+last = clock.now();
+if (params.get('manual') === '1') drawFrame();
+else { requestAnimationFrame(frame); setInterval(timer, 50); }
+</script>
+</body>
+</html>
