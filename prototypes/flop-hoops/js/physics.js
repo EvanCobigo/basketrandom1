@@ -48,6 +48,8 @@ const Physics = (() => {
       legL: T.leg_length * S.leg, legW: T.limb_width, armL: T.arm_length * S.arm, armW: T.arm_width,
     };
     d.headS = d.headR * 1.8;   // squircle head, side length
+    d.headW = d.headS + T.pixel_size * T.head_extra_px;   // a little wider than tall, in whole art pixels
+    d.hipX = d.torsoW * 0.22 - T.pixel_size * T.leg_closer_px / 2;   // legs pulled together by whole art pixels
     const hipY = FLOOR_Y - d.legL + 3;
     const torsoY = hipY - d.torsoH / 2 + 6;
     const torsoTop = torsoY - d.torsoH / 2;
@@ -57,9 +59,9 @@ const Physics = (() => {
     const filt = { group, category: TEAM_CAT[team], mask: CAT.STATIC | CAT.BALL | TEAM_CAT[1 - team] };
     const torso = Bodies.rectangle(x, torsoY, d.torsoW, d.torsoH, { chamfer: { radius: d.torsoW * 0.3 },
       density: 0.0036, friction: 0.5, frictionAir: 0.012, restitution: 0.1, collisionFilter: filt });
-    const head = Bodies.rectangle(x, headY, d.headS, d.headS, { chamfer: { radius: d.headS * 0.12 },
+    const head = Bodies.rectangle(x, headY, d.headW, d.headS, { chamfer: { radius: d.headS * 0.12 },
       density: 0.0011, friction: 0.3, frictionAir: 0.01, restitution: 0.3, collisionFilter: filt });
-    const legs = [-1, 1].map(s => Bodies.rectangle(x + s * d.torsoW * 0.22, hipY + d.legL / 2 - 4, d.legW, d.legL, {
+    const legs = [-1, 1].map(s => Bodies.rectangle(x + s * d.hipX, hipY + d.legL / 2 - 4, d.legW, d.legL, {
       chamfer: { radius: 3 }, density: 0.003, friction: 1.4, frictionStatic: 2, frictionAir: 0.012, restitution: 0, collisionFilter: filt }));
     const arm = Bodies.rectangle(x, shoulderY + d.armL / 2 - 5, d.armW, d.armL, { chamfer: { radius: 3 },
       density: 0.0024, friction: 0.4, frictionAir: 0.01, restitution: 0.2, collisionFilter: filt });
@@ -70,7 +72,7 @@ const Physics = (() => {
       prevHeld: false, boosting: false, dribbleT: 0 };
     tag(torso, 'torso', p); tag(head, 'head', p); legs.forEach(l => tag(l, 'leg', p)); tag(arm, 'arm', p);
 
-    const hx = d.torsoW * 0.22;
+    const hx = d.hipX;
     p.joints = [
       Constraint.create({ bodyA: torso, pointA: { x: 0, y: -d.torsoH / 2 - d.headS * 0.42 }, bodyB: head,
         pointB: { x: 0, y: 0 }, length: 0, stiffness: 0.7, damping: 0.05 }),
@@ -595,7 +597,9 @@ const Physics = (() => {
     w.bheld = bheld;
     if (w.ghostUntil && w.time >= w.ghostUntil) { w.ghostUntil = 0; if (!w.dunk) w.ball.collisionFilter.mask = 0x1 | 0x2 | 0x4; }
     for (const b of w.dynamic) { b._px = b.position.x; b._py = b.position.y; b._pa = b.angle; }
-    for (const p of w.players) drive(w, p, held[p.team], T, dt);
+    // while a team has the ball, its key belongs to the carrier: the teammate stays planted
+    const busy = q => (w.hold && w.hold.p.team === q.team && w.hold.p !== q) || (w.dunk && w.dunk.p.team === q.team && w.dunk.p !== q);
+    for (const p of w.players) drive(w, p, busy(p) ? false : held[p.team], T, dt);
     spread(w, T);
     w.kicks.length = 0;
     Engine.update(w.engine, DELTA);

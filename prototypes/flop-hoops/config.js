@@ -26,8 +26,8 @@ window.CONFIG = {
   jump_jitter: { value: 0.08, min: 0, max: 0.3, step: 0.01 },  // +- fraction of random jump strength
   jump_cooldown: { value: 0.32, min: 0.1, max: 1, step: 0.02 },// s between jumps while the key is held
   coyote_time: { value: 0.09, min: 0, max: 0.3, step: 0.01 },  // s after leaving ground a jump still counts
-  spread_distance: { value: 60, min: 0, max: 160, step: 2 },   // px apart below which players are eased apart
-  spread_push: { value: 0.35, min: 0, max: 2, step: 0.05 },    // px/step of that easing at zero distance
+  spread_distance: { value: 100, min: 0, max: 160, step: 2 },   // px apart below which players are eased apart
+  spread_push: { value: 0.5, min: 0, max: 2, step: 0.05 },    // px/step of that easing at zero distance
 
   // ---- Ball handling: grab, shoot, fadeaway, dunk, block ----
   regrab_delay: { value: 0.4, min: 0, max: 1.5, step: 0.05 },   // s before a player who let go can grab again
@@ -84,7 +84,7 @@ window.CONFIG = {
   gravity: { value: 1.0, min: 0.3, max: 2, step: 0.05 },       // Matter gravity.y
   upright: { value: 26, min: 0, max: 80, step: 1 },            // rad/s^2 per rad pulling the torso upright
   upright_air: { value: 0.35, min: 0, max: 1, step: 0.05 },    // share of the upright pull in the air
-  rock_angle: { value: 0.38, min: 0, max: 0.9, step: 0.01 },    // rad of the forward-and-back rock while planted
+  rock_angle: { value: 0.55, min: 0, max: 0.9, step: 0.01 },    // rad of the forward-and-back rock while planted
   rock_rate: { value: 0.75, min: 0.2, max: 3, step: 0.05 },      // rocks a second
   rock_follow: { value: 0.6, min: 0.05, max: 1, step: 0.05 },   // how tightly a planted body tracks its swing
   getup_time: { value: 0.7, min: 0.1, max: 3, step: 0.05 },     // s lying down before springing back up
@@ -94,6 +94,8 @@ window.CONFIG = {
   arm_width: { value: 15, min: 6, max: 30, step: 1 },           // px arm thickness
   head_size: { value: 10.7, min: 8, max: 30, step: 0.1 },           // px head half-size
   head_shape: { value: 8, min: 2, max: 12, step: 0.5 },         // head outline exponent: 2 round, 4 squircle, 8+ nearly square
+  head_extra_px: { value: 1, min: 0, max: 4, step: 1 },          // art pixels the head is wider than tall
+  leg_closer_px: { value: 1, min: 0, max: 3, step: 1 },          // art pixels the legs are pulled together
   arm_length: { value: 62, min: 40, max: 140, step: 2 },        // px shoulder to fingertip: an 82" wingspan less the shoulders, halved
   torso_length: { value: 53, min: 30, max: 90, step: 1 },       // px hip to shoulder (a 6 ft 4 in player at about 2 px per inch)
   leg_length: { value: 86, min: 40, max: 120, step: 1 },        // px floor to hip
@@ -119,7 +121,7 @@ window.CONFIG = {
   drop_height: { value: 430, min: 200, max: 520, step: 10 },   // px above the floor the ball drops from
 
   // ---- Court ----
-  court_width: { value: 980, min: 900, max: 1240, step: 10 }, // px
+  court_width: { value: 860, min: 700, max: 1240, step: 10 }, // px
   rim_height: { value: 235, min: 200, max: 420, step: 5 },     // px from floor to rim
   rim_span_min: { value: 40, min: 30, max: 160, step: 2 },     // px rim opening (grows with the ball)
   rim_ball_ratio: { value: 1.4, min: 1.05, max: 2, step: 0.05 }, // rim opening as a multiple of the ball's width: 1.4 balls fit

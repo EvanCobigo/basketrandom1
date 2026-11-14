@@ -131,6 +131,7 @@ const Render = (() => {
     ctx.restore();
 
     ctx.save(); ctx.translate(Hd.x, Hd.y); ctx.rotate(T.a * 0.7);
+    ctx.scale(d.headW / d.headS, 1);   // the head's extra width
     squirclePath(ctx, d.headS / 2, CONFIG.head_shape.value); ink(ctx, look.skin, 5);
     ctx.restore();
 

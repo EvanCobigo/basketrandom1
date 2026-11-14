@@ -36,6 +36,8 @@ After play: make the dunk animation smoother and add a crowd cheer. thicken the 
 
 After play: make the sparks be reddish and orangish. the ball should bounce more on the ground, but bounce the same amount on the brim.
 
+After play: make the court less wide, and the character heads one pixel wider, make the legs one pixel closer to one another, largen the wobbling, to allow for horizontal movement for the player. when the jump key is being held to make the character shoot, the teammate shouldn't be jumping, they should be staying in place.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -49,7 +51,7 @@ After play: make the sparks be reddish and orangish. the ball should bounce more
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court; everything chunkier (5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court (860 px); everything chunkier (5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -80,7 +82,8 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Jump height follows how long the key is held
 - [x] Blocks and steals by defenders; a shot taken drifting or leaning away is called a fadeaway (same arc)
 - [x] Only opponents collide; teammates pass through each other
-- [x] Planted players pivot on their feet, swinging evenly forward and back at a beat that never fades; fallen players get back up
+- [x] Planted players pivot on their feet, swinging evenly forward and back (±0.55 rad) at a beat that never fades, so a well-timed hop carries them far; fallen players get back up
+- [x] While a team has the ball, its key moves only the carrier: the teammate stays planted
 - [x] Shots: one arc per cock-back and spot (forward 3.5-14, up 11-13, 1 s cock-back); lean, drift and momentum change nothing; strong aim help toward the rim's centre
 - [x] Bounce key: hold to wind up, let go to bounce the ball forward as a pass; a pass slips through opponents for 0.3 s and they cannot catch it for 0.6 s
 - [x] Dribble: tapping the bounce key bounces the ball at the feet while the player slides forward; each tap in a row adds sway and bounce error until the ball gets away (about 14 taps)
