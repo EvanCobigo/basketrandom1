@@ -41,8 +41,8 @@ const Physics = (() => {
   function makePlayer(x, team, idx, S, look, T) {
     const dir = team === 0 ? 1 : -1;
     const d = {
-      torsoW: T.body_width, torsoH: 62 * S.torso, headR: 21 * S.head,
-      legL: 52 * S.leg, legW: T.limb_width, armL: T.arm_length * S.arm, armW: T.limb_width * 0.8,
+      torsoW: T.body_width, torsoH: 62 * S.torso, headR: T.head_size * S.head,
+      legL: 52 * S.leg, legW: T.limb_width, armL: T.arm_length * S.arm, armW: T.arm_width,
     };
     d.headS = d.headR * 1.8;   // squircle head, side length
     const hipY = FLOOR_Y - d.legL + 3;
@@ -92,7 +92,7 @@ const Physics = (() => {
     engine.positionIterations = 10; engine.velocityIterations = 8; engine.constraintIterations = 4;
     const half = S.courtW / 2, L = CX - half, R = CX + half;
     const w = { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
-      time: 0, hold: null, ignoreUntil: 0 };
+      time: 0, hold: null, ignoreUntil: 0, trail: null, hustle: [false, false] };
 
     const statics = [
       box(CX, FLOOR_Y + 200, 4000, 400, 'floor', { friction: 1 }),
@@ -154,6 +154,7 @@ const Physics = (() => {
         const rel = Math.hypot(ball.velocity.x - other.velocity.x, ball.velocity.y - other.velocity.y);
         if (other.plugin.player) w.kicks.push({ part: other, rel });
         else if (other.plugin.kind === 'floor') ball.shot = null; // a shot that lands is no longer a shot
+        else if (ball.shot && (other.plugin.kind === 'rim' || other.plugin.kind === 'board')) ball.shot.clean = false;
         onEvent({ type: 'hit', on: other.plugin.player ? 'player' : other.plugin.kind, speed: rel,
           team: other.plugin.player ? other.plugin.player.team : -1, hoop: other.plugin.hoop || null });
       }
@@ -196,6 +197,14 @@ const Physics = (() => {
     }
     return inside / total;
   }
+  /** Whether the ball overlaps a player's torso box, grown by T.belly_margin. */
+  function touchesAbdomen(p, ball, T) {
+    const t = p.torso, a = -t.angle, dx = ball.position.x - t.position.x, dy = ball.position.y - t.position.y;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    const hw = p.dims.torsoW / 2 + T.belly_margin, hh = p.dims.torsoH / 2 + T.belly_margin;
+    const qx = Math.max(-hw, Math.min(hw, lx)), qy = Math.max(-hh, Math.min(hh, ly));
+    return (lx - qx) ** 2 + (ly - qy) ** 2 <= ball.r * ball.r;
+  }
   function attackedHoop(w, p) { return w.hoops.find(h => h.team === p.team); }
   const carrier = w => (w.hold ? w.hold.p : null);
 
@@ -207,13 +216,27 @@ const Physics = (() => {
     p.cd -= dt; p.grabCD -= dt; p.sinceJump += dt;
     const torso = p.torso, a = wrap(torso.angle);
 
-    // Feet on the floor: a strong upright spring around a target that rocks forwards and
-    // backwards. The rock is the steering: jump as it tips forward to go forward.
-    const rock = planted ? Math.sin(w.time * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7) * T.rock_angle : 0;
-    const k = planted ? T.upright_planted : grounded ? T.upright : T.upright * T.upright_air;
-    let omega = torso.angularVelocity * 60;
-    omega += (-wrap(a - rock) * k - omega * T.upright_damp) * dt;
-    Body.setAngularVelocity(torso, omega / 60);
+    // Feet on the floor: the whole body swings about its feet, evenly forwards and backwards at
+    // a steady beat that never fades. The swing is the steering: hop as it tips one way to go that way.
+    const phase = w.time * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7;
+    const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < 1.1;
+    if (swinging) {
+      const next = Math.sin(phase + T.rock_rate * Math.PI * 2 * dt) * T.rock_angle;   // where the swing should be next step
+      const om = lerp(torso.angularVelocity, wrap(next - a), T.rock_follow);             // rad/step
+      const piv = p.legs.reduce((q, l) => {
+        const c = Math.cos(l.angle), sn = Math.sin(l.angle), hl = p.dims.legL / 2;
+        return { x: q.x + (l.position.x - sn * hl) / 2, y: q.y + (l.position.y + c * hl) / 2 };
+      }, { x: 0, y: 0 });
+      for (const part of [torso, p.head, ...p.legs]) {
+        Body.setVelocity(part, { x: -om * (part.position.y - piv.y), y: om * (part.position.x - piv.x) });
+        Body.setAngularVelocity(part, om);
+      }
+    } else {
+      const k = grounded ? T.upright : T.upright * T.upright_air;
+      let omega = torso.angularVelocity * 60;
+      omega += (-a * k - omega * T.upright_damp) * dt;
+      Body.setAngularVelocity(torso, omega / 60);
+    }
     const tav = torso.angularVelocity;
 
     // Down on the floor for a while: spring back up.
@@ -224,11 +247,10 @@ const Physics = (() => {
       p.downT = 0;
     }
 
-    p.legs.forEach((leg, i) => {
+    if (!swinging) p.legs.forEach((leg, i) => {
       const rest = (i ? 1 : -1) * 0.1;
       const rel = wrap(leg.angle - torso.angle - rest);
       Body.setAngularVelocity(leg, lerp(leg.angularVelocity, tav - rel * T.leg_stiffness, T.leg_follow));
-      if (planted && p.sinceJump > 0.15) Body.setVelocity(leg, { x: leg.velocity.x * (1 - T.foot_grip), y: leg.velocity.y });
     });
 
     // Arm: cocked back behind the head while charging a shot, raised while the key is held,
@@ -242,7 +264,7 @@ const Physics = (() => {
 
     // Jump: a tap is a short hop; keeping the key down lifts it to full height. Holding keeps
     // hopping on landing, except for a ball carrier, who is busy with the ball.
-    const vFull = Math.sqrt(2 * g * T.jump_height * S.jump);
+    const vFull = Math.sqrt(2 * g * T.jump_height * S.jump * (w.hustle && w.hustle[p.team] ? T.hustle_jump : 1));
     const fresh = held && !p.prevHeld;
     if (held && grounded && p.cd <= 0 && (!h || fresh)) {
       const v = vFull * T.jump_tap_frac * (1 + (w.rng() * 2 - 1) * T.jump_jitter);
@@ -323,13 +345,35 @@ const Physics = (() => {
     const disc = vy * vy - 2 * g * Y;
     if (X > 30 && disc > 0) vx = lerp(vx, X / ((vy + Math.sqrt(disc)) / g), fade ? T.fade_assist : T.shot_assist);
     // the body's lean turns the throw with it: tipped forward flattens it, leaning back lofts it
-    const tilt = a * T.shot_tilt, ct = Math.cos(tilt), st = Math.sin(tilt);
+    const tilt = clamp(a * T.shot_tilt, -0.25, 0.25), ct = Math.cos(tilt), st = Math.sin(tilt);
     const x0 = vx * p.dir, y0 = -vy;
     release(w, T, 0.2);
     Body.setVelocity(ball, { x: x0 * ct - y0 * st + p.torso.velocity.x * 0.25, y: x0 * st + y0 * ct });
     Body.setAngularVelocity(ball, -p.dir * 0.2);
-    ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir };
-    w.onEvent({ type: fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge });
+    const perfect = onPerfectLine(w, T, hoop);
+    ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect, clean: true };
+    w.trail = { pts: [], rainbow: perfect, t: 0 };
+    w.onEvent({ type: fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge, perfect });
+  }
+
+  /**
+   * Whether the ball, flying free from here with drag and gravity, drops through the middle of
+   * the rim: within T.perfect_window of the rim's width from its centre.
+   */
+  function onPerfectLine(w, T, hoop) {
+    const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir;
+    let x = b.position.x, y = b.position.y, vx = b.velocity.x, vy = b.velocity.y;
+    for (let i = 0; i < 400; i++) {
+      vx *= keep; vy = vy * keep + g;
+      const ny = y + vy, nx = x + vx;
+      if (vy > 0 && y < hoop.rimY && ny >= hoop.rimY) {
+        const cx = x + (nx - x) * (hoop.rimY - y) / (ny - y);
+        return Math.abs(cx - hoop.cx) < hoop.span * T.perfect_window;
+      }
+      x = nx; y = ny;
+      if (y > w.floorY) return false;
+    }
+    return false;
   }
 
   /** Slam it: the ball is pushed down through the rim from above. */
@@ -399,9 +443,11 @@ const Physics = (() => {
       }
       return;
     }
-    // a free ball: more than half of it inside someone's hand box snaps it to that hand
+    // a free ball: more than half of it inside someone's hand box, or touching an abdomen,
+    // snaps it to that hand. Checked every step, so a ball resting against a player is caught too.
     for (const p of w.players) {
-      if (canCatch(p) && shareInHandBox(p, ball, T) > 0.5) { grab(w, p, T, 'grab', held[p.team]); break; }
+      if (!canCatch(p)) continue;
+      if (shareInHandBox(p, ball, T) > 0.5 || touchesAbdomen(p, ball, T)) { grab(w, p, T, 'grab', held[p.team]); break; }
     }
   }
 
@@ -431,6 +477,12 @@ const Physics = (() => {
 
     possession(w, held, T, dt);
     const ball = w.ball;
+    if (w.trail) {
+      w.trail.t += dt;
+      if (ball.shot && !w.hold) { w.trail.pts.push({ x: ball.position.x, y: ball.position.y }); if (w.trail.pts.length > T.trail_length) w.trail.pts.shift(); }
+      else if (w.trail.pts.length) w.trail.pts.shift();
+      else w.trail = null;
+    }
     capSpeed(ball, T.ball_max_speed);
     for (const p of w.players) for (const part of p.parts) capSpeed(part, 30);
 

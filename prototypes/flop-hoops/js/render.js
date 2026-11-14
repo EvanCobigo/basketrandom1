@@ -33,177 +33,23 @@ const Render = (() => {
     ctx.fillStyle = fill; ctx.fillText(s, x, y);
   }
 
-  // ---- Venues: background darker and calmer than play --------------------------------------
+  // ---- Venues: flat and plain like the jerseys, darker and calmer than play ---------------
+  // Each venue is four flat colours: sky, a horizon band, the floor, and its one line colour.
   const VENUES = {
-    gym: { top: '#4b2734', bottom: '#6e3a48', floor: '#c58b51', edge: '#8e5a2f', line: '#f3e3c3', key: 'rgba(120,40,60,0.35)', side: '#3a2230', accent: '#ffd36b' },
-    rooftop: { top: '#2f2a5a', bottom: '#d77a6b', floor: '#7f7889', edge: '#57506a', line: '#f1efe6', key: 'rgba(60,40,110,0.3)', side: '#2a2442', accent: '#ffb38a' },
-    beach: { top: '#7ccbe0', bottom: '#cfeee8', floor: '#e3c78c', edge: '#b9975a', line: '#fffaf0', key: 'rgba(30,120,150,0.22)', side: '#3d8d9a', accent: '#ffe27a' },
-    street: { top: '#111a33', bottom: '#2a3563', floor: '#3a3e4c', edge: '#262935', line: '#f5d34f', key: 'rgba(245,211,79,0.12)', side: '#171c2e', accent: '#9fd8ff' },
+    gym: { sky: '#4b2734', band: '#6e3a48', floor: '#b07a46', line: '#f3e3c3', side: '#3a2230' },
+    rooftop: { sky: '#2f2a5a', band: '#7a4a6e', floor: '#6f6878', line: '#f1efe6', side: '#2a2442' },
+    beach: { sky: '#6fb8cc', band: '#3a8fa3', floor: '#d8bd84', line: '#fffaf0', side: '#3d8d9a' },
+    street: { sky: '#151c38', band: '#253058', floor: '#3a3e4c', line: '#f5d34f', side: '#171c2e' },
   };
 
-  function venue(ctx, w, W, H, t) {
-    const S = w.S, v = VENUES[S.venue], d = S.deco, f = F();
-    const g = ctx.createLinearGradient(0, 0, 0, f);
-    g.addColorStop(0, v.top); g.addColorStop(1, v.bottom);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, f);
-    DECOR[S.venue](ctx, w, v, d, W, t);
-
+  function venue(ctx, w, W, H) {
+    const v = VENUES[w.S.venue], f = F();
+    ctx.fillStyle = v.sky; ctx.fillRect(0, 0, W, f);
+    ctx.fillStyle = v.band; ctx.fillRect(0, f - 150, W, 150);
     ctx.fillStyle = v.floor; ctx.fillRect(0, f, W, H - f);
-    FLOOR[S.venue](ctx, w, v, d, W, H);
-    ctx.fillStyle = v.edge; ctx.fillRect(0, f, W, 7);
-    // court paint: keys under the hoops and the centre circle, flattened for the side view
-    ctx.fillStyle = v.key;
-    ctx.fillRect(w.L, f + 7, 200, H - f); ctx.fillRect(w.R - 200, f + 7, 200, H - f);
-    ctx.strokeStyle = v.line; ctx.lineWidth = 4; ctx.globalAlpha = 0.8;
-    ctx.beginPath(); ctx.moveTo(w.cx, f + 8); ctx.lineTo(w.cx, H); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(w.cx, f + 42, 96, 22, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(w.L + 200, f + 8); ctx.lineTo(w.L + 200, H); ctx.moveTo(w.R - 200, f + 8); ctx.lineTo(w.R - 200, H); ctx.stroke();
-    ctx.globalAlpha = 1;
-    // padded side walls beyond the court
-    for (const [x0, x1] of [[0, w.L], [w.R, W]]) {
-      if (x1 - x0 < 1) continue;
-      ctx.fillStyle = v.side; ctx.fillRect(x0, 0, x1 - x0, H);
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      for (let y = 30; y < H; y += 90) ctx.fillRect(x0, y, x1 - x0, 40);
-    }
+    ctx.fillStyle = v.line; ctx.fillRect(w.cx - 3, f, 6, H - f); ctx.fillRect(0, f, W, 4);
+    ctx.fillStyle = v.side; ctx.fillRect(0, 0, w.L, H); ctx.fillRect(w.R, 0, W - w.R, H);
     ctx.fillStyle = INK; ctx.fillRect(w.L - 3, 0, 4, H); ctx.fillRect(w.R - 1, 0, 4, H);
-  }
-
-  const DECOR = {
-    gym(ctx, w, v, d) {
-      // high windows
-      ctx.fillStyle = 'rgba(255,230,190,0.13)';
-      for (let i = 0; i < 6; i++) { rr(ctx, 150 + i * 180, 150, 110, 70, 10); ctx.fill(); }
-      // pennant string
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(w.L, 262); ctx.quadraticCurveTo(w.cx, 312, w.R, 262); ctx.stroke();
-      const cols = ['#c9584e', '#d9a441', '#4f8d84', '#7a6cb8'];
-      for (let i = 0; i < 18; i++) {
-        const x = lerp(w.L + 20, w.R - 20, i / 17), sag = 50 * (1 - Math.pow((x - w.cx) / (w.R - w.cx), 2));
-        const y = 262 + sag;
-        ctx.beginPath(); ctx.moveTo(x - 14, y); ctx.lineTo(x + 14, y); ctx.lineTo(x, y + 30); ctx.closePath();
-        ctx.fillStyle = cols[i % 4]; ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1;
-      }
-      // bleachers with a bumpy crowd silhouette
-      for (let r = 0; r < 4; r++) {
-        const y = 440 + r * 50;
-        ctx.fillStyle = r % 2 ? '#5a2f3c' : '#643543'; ctx.fillRect(0, y, 1280, 50);
-        ctx.fillStyle = r % 2 ? '#4a2632' : '#532b38';
-        ctx.beginPath(); ctx.moveTo(0, y);
-        for (let x = 0; x <= 1280; x += 26) {
-          const hgt = 14 + d[(x / 26 + r * 5) % 24 | 0] * 12;
-          ctx.quadraticCurveTo(x + 13, y - hgt, x + 26, y);
-        }
-        ctx.fill();
-      }
-    },
-    rooftop(ctx, w, v, d) {
-      ctx.fillStyle = 'rgba(255,214,150,0.85)';
-      ctx.beginPath(); ctx.arc(300 + d[0] * 680, 470, 70, Math.PI, 0); ctx.fill();
-      let x = 0, i = 0;
-      while (x < 1280) {
-        const bw = 60 + d[i % 24] * 90, bh = 120 + d[(i + 7) % 24] * 220;
-        ctx.fillStyle = i % 2 ? '#2b2346' : '#352b55';
-        ctx.fillRect(x, 600 - bh, bw - 6, bh);
-        ctx.fillStyle = 'rgba(255,214,120,0.35)';
-        for (let wy = 600 - bh + 16; wy < 580; wy += 26) for (let wx = x + 10; wx < x + bw - 20; wx += 20) {
-          if (d[(wx + wy) % 24 | 0] > 0.45) ctx.fillRect(wx, wy, 8, 12);
-        }
-        if (i === 3) { // a water tower
-          ctx.fillStyle = '#251e3c'; ctx.fillRect(x + 10, 600 - bh - 60, bw - 26, 40);
-          ctx.fillRect(x + 16, 600 - bh - 20, 4, 20); ctx.fillRect(x + bw - 26, 600 - bh - 20, 4, 20);
-          ctx.beginPath(); ctx.moveTo(x + 6, 600 - bh - 60); ctx.lineTo(x + bw / 2 - 8, 600 - bh - 80); ctx.lineTo(x + bw - 12, 600 - bh - 60); ctx.fill();
-        }
-        x += bw; i++;
-      }
-      // railing
-      ctx.strokeStyle = '#4a4262'; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(0, 590); ctx.lineTo(1280, 590); ctx.stroke();
-      ctx.lineWidth = 3; for (let rx = 10; rx < 1280; rx += 40) { ctx.beginPath(); ctx.moveTo(rx, 590); ctx.lineTo(rx, 640); ctx.stroke(); }
-    },
-    beach(ctx, w, v, d, W, t) {
-      ctx.fillStyle = 'rgba(255,240,170,0.5)'; ctx.beginPath(); ctx.arc(980, 200, 90, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffe9a0'; ctx.beginPath(); ctx.arc(980, 200, 56, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#5fae9b'; // far islands
-      ctx.beginPath(); ctx.ellipse(250, 440, 160, 30, 0, Math.PI, 0); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(1100, 440, 120, 22, 0, Math.PI, 0); ctx.fill();
-      ctx.fillStyle = '#3a9fb3'; ctx.fillRect(0, 440, 1280, 200);
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 3;
-      for (let r = 0; r < 5; r++) {
-        const y = 470 + r * 34;
-        ctx.beginPath();
-        for (let x = 0; x <= 1280; x += 40) {
-          const yy = y + Math.sin(x / 60 + r + t * 0.8) * 4;
-          x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy);
-        }
-        ctx.stroke();
-      }
-      palm(ctx, w.L + 120 + d[2] * 60, 1); palm(ctx, w.R - 120 - d[3] * 60, -1);
-    },
-    street(ctx, w, v, d) {
-      let x = -20, i = 0;
-      while (x < 1300) {
-        const bw = 120 + d[i % 24] * 120, bh = 260 + d[(i + 4) % 24] * 200;
-        ctx.fillStyle = i % 2 ? '#18203d' : '#1d2648'; ctx.fillRect(x, 640 - bh, bw - 4, bh);
-        ctx.fillStyle = 'rgba(159,216,255,0.18)';
-        for (let wy = 640 - bh + 20; wy < 360; wy += 34) for (let wx = x + 14; wx < x + bw - 30; wx += 30) {
-          if (d[(wx * 3 + wy) % 24 | 0] > 0.5) ctx.fillRect(wx, wy, 14, 18);
-        }
-        x += bw; i++;
-      }
-      // chain-link fence
-      ctx.strokeStyle = 'rgba(190,200,230,0.22)'; ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let fx = -400; fx < 1700; fx += 26) { ctx.moveTo(fx, 360); ctx.lineTo(fx + 280, 640); ctx.moveTo(fx + 280, 360); ctx.lineTo(fx, 640); }
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(190,200,230,0.4)'; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(0, 360); ctx.lineTo(1280, 360); ctx.stroke();
-      for (let px = 40; px < 1280; px += 240) { ctx.beginPath(); ctx.moveTo(px, 360); ctx.lineTo(px, 640); ctx.stroke(); }
-      // street lamp and its glow
-      const lx = w.cx + (d[5] > 0.5 ? 1 : -1) * 260;
-      const glow = ctx.createRadialGradient(lx, 170, 10, lx, 170, 260);
-      glow.addColorStop(0, 'rgba(255,220,140,0.35)'); glow.addColorStop(1, 'rgba(255,220,140,0)');
-      ctx.fillStyle = glow; ctx.fillRect(lx - 260, 0, 520, 640);
-      ctx.fillStyle = '#0d1226'; ctx.fillRect(lx - 4, 170, 8, 470);
-      rr(ctx, lx - 26, 156, 52, 16, 6); ctx.fill();
-      ctx.fillStyle = '#ffe6a6'; rr(ctx, lx - 18, 170, 36, 6, 3); ctx.fill();
-    },
-  };
-
-  const FLOOR = {
-    gym(ctx, w, v, d, W, H) {
-      ctx.strokeStyle = 'rgba(110,60,25,0.35)'; ctx.lineWidth = 2;
-      for (let y = F() + 20; y < H; y += 20) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-        for (let x = ((y / 20) % 2) * 60; x < W; x += 120) { ctx.beginPath(); ctx.moveTo(x, y - 20); ctx.lineTo(x, y); ctx.stroke(); }
-      }
-    },
-    rooftop(ctx, w, v, d, W, H) {
-      ctx.strokeStyle = 'rgba(40,30,60,0.3)'; ctx.lineWidth = 2;
-      for (let x = 0; x < W; x += 160) { ctx.beginPath(); ctx.moveTo(x, F()); ctx.lineTo(x - 40, H); ctx.stroke(); }
-    },
-    beach(ctx, w, v, d, W, H) {
-      ctx.fillStyle = 'rgba(160,120,60,0.35)';
-      for (let i = 0; i < 60; i++) ctx.fillRect((i * 97 + d[i % 24] * 80) % W, F() + 12 + (i * 37) % (H - F() - 16), 4, 3);
-    },
-    street(ctx, w, v, d, W, H) {
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(200, F() + 30); ctx.lineTo(260, F() + 50); ctx.lineTo(250, F() + 75);
-      ctx.moveTo(900, F() + 20); ctx.lineTo(950, F() + 44); ctx.lineTo(1010, F() + 50); ctx.stroke();
-    },
-  };
-
-  function palm(ctx, x, s) {
-    const f = F();
-    ctx.beginPath(); ctx.moveTo(x - 8, f); ctx.quadraticCurveTo(x + s * 10, f - 140, x + s * 50, f - 260);
-    ctx.lineTo(x + s * 62, f - 256); ctx.quadraticCurveTo(x + s * 24, f - 140, x + 10, f); ctx.closePath();
-    ctx.fillStyle = 'rgba(120,80,50,0.75)'; ctx.fill();
-    ctx.fillStyle = 'rgba(40,120,80,0.8)';
-    for (let i = 0; i < 6; i++) {
-      const a = -Math.PI / 2 + (i - 2.5) * 0.55;
-      ctx.save(); ctx.translate(x + s * 56, f - 262); ctx.rotate(a);
-      ctx.beginPath(); ctx.ellipse(48, 0, 52, 11, 0.25, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    }
   }
 
   // ---- Hoops ----------------------------------------------------------------------------
@@ -311,13 +157,38 @@ const Render = (() => {
     ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(x - r * 0.6, y - r * 0.65, r * 0.4, r * 0.18);
   }
 
+  const RAINBOW = ['#ff3b3b', '#ff9a1f', '#ffe23b', '#3bd66b', '#3ba7ff', '#9b5bff'];
+  /** The fired ball's trail: blocks that shrink toward the tail, white, or rainbow on a perfect line. */
+  function trail(ctx, tr, r, t) {
+    const n = tr.pts.length;
+    for (let i = 0; i < n; i++) {
+      const q = tr.pts[i], k = (i + 1) / n, sz = Math.max(4, r * 1.1 * k);
+      ctx.fillStyle = tr.rainbow ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : '#ffffff';
+      ctx.globalAlpha = 0.35 + 0.6 * k;
+      ctx.fillRect(q.x - sz / 2, q.y - sz / 2, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   /** The whole court: venue, hoops, players, ball, nets. */
   function world(ctx, w, al, t, W, H) {
-    venue(ctx, w, W, H, t);
+    venue(ctx, w, W, H);
     for (const h of w.hoops) hoopBack(ctx, h);
     const B = pose(w.ball, al), r = w.ball.r;
-    for (const p of w.players) player(ctx, p, al, w.S.kits[p.team]);
+    for (const p of w.players) {
+      if (w.hustle[p.team]) { // a trailing team's hustle: a flickering block glow at the feet
+        const T = pose(p.torso, al), on = Math.floor(t * 8) % 2;
+        ctx.fillStyle = on ? '#ffd23f' : '#ff9a3c'; ctx.fillRect(T.x - 18, F() - 6, 36, 6);
+      }
+      player(ctx, p, al, w.S.kits[p.team]);
+    }
+    if (w.trail) trail(ctx, w.trail, r, t);
     ball(ctx, B.x, B.y, r, B.a);
+    if (w.flash && w.flash.t > 0) { // pickup flash: four blocks spinning out from the ball
+      const k = 1 - w.flash.t / 0.25, d = r + 6 + k * 18;
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 4; i++) { const q = i * Math.PI / 2 + k * 2; ctx.fillRect(B.x + Math.cos(q) * d - 4, B.y + Math.sin(q) * d - 4, 8, 8); }
+    }
     if (w.hold) { // the carrier's cock-back charge, a block meter over the head
       const p = w.hold.p, Hd = pose(p.head, al), bw = 52, x = Hd.x - bw / 2, y = Hd.y - p.dims.headS - 22;
       ctx.beginPath(); ctx.rect(x, y, bw, 12); ink(ctx, '#1d1a2b', 4);
@@ -349,7 +220,7 @@ const Render = (() => {
     ink(ctx, '#ffd23f', 3.5 * s);
   }
 
-  /** Scoreboard at the top: names, keys, big scores that pop, the round and its twist. */
+  /** Scoreboard at the top: names, keys, big scores that pop and the round. */
   function scoreboard(ctx, W, st) {
     const cx = W / 2, y = 12, w = 600, h = 96;
     rr(ctx, cx - w / 2, y, w, h, 20); ink(ctx, '#262238', 5);
@@ -370,7 +241,7 @@ const Render = (() => {
       st.leader < 0 ? '#c9c3e0' : TEAM_COLORS[st.leader]);
   }
 
-  /** The round card: flips in, names the twist, ends on GO. */
+  /** The round card: flips in with the round number, ends on GO. */
   function roundCard(ctx, W, H, t, dur, S) {
     const flipIn = Math.min(1, t / 0.3), out = Math.max(0, (t - (dur - 0.25)) / 0.25);
     const sx = Math.sin(flipIn * Math.PI / 2) * (1 - out), cx = W / 2, cy = H / 2 - 10;
@@ -385,13 +256,8 @@ const Render = (() => {
     ctx.save(); ctx.translate(cx, cy); ctx.scale(Math.max(0.01, sx), 1);
     ctx.beginPath(); ctx.arc(0, 0, 175, 0, Math.PI * 2); ink(ctx, '#fff3d6', 7);
     ctx.setLineDash([10, 9]); ctx.beginPath(); ctx.arc(0, 0, 155, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = '#e8591a'; ctx.stroke(); ctx.setLineDash([]);
-    text(ctx, `ROUND ${S.round}`, 0, -98, 22, '#e8591a');
-    const title = S.title.toUpperCase(), size = title.length > 14 ? 30 : 44;
-    if (title.includes(' + ')) {
-      const [a, b] = title.split(' + ');
-      text(ctx, a, 0, -40, 34, INK, { weight: 900 }); text(ctx, '+', 0, -6, 28, '#e8591a'); text(ctx, b, 0, 28, 34, INK, { weight: 900 });
-    } else text(ctx, title, 0, -20, size, INK, { weight: 900 });
-    text(ctx, S.sub, 0, title.includes(' + ') ? 70 : 30, 18, '#4b4566', { weight: 700 });
+    text(ctx, 'ROUND', 0, -60, 30, '#e8591a', { weight: 900 });
+    text(ctx, String(S.round), 0, 10, 96, INK, { weight: 900 });
     text(ctx, S.venueName, 0, 104, 16, '#8a83a8', { weight: 700 });
     ctx.restore();
   }
@@ -403,6 +269,6 @@ const Render = (() => {
     if (b.hint) text(ctx, b.hint, b.x + b.w / 2, b.y + b.h + 22, 16, '#ffffff', { weight: 700, stroke: 4 });
   }
 
-  return { setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
+  return { RAINBOW, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();

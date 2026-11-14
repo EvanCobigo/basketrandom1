@@ -19,20 +19,22 @@ After play: Allow for the character to grab the ball. Only allow collisions betw
 
 After play: create a hitbox that surrounds the hand of the character, if more than half of the basketball is inside the box, the ball is teleported to the player's hand. Same process if the ball touches the abdomen, but not the foot. make the game speed slower, The player should be rocking forwards and backwards when feet are touching the floor. The vertical coefficient shouldn't be affected as much by the amount of cockback as opposed to the horizontal coefficient. Make the characters much slimmer and the hoops much smaller. Make it really look retro. The characters are currently just accumulating in a little blob at a certain point. If the foot hitbox is touching the floor, keep it grounded instead of slipping and allowing character to fall over eternally and never get back to bobbling back and forth to allow for character movement. Make it so that whenever the player holds on the key and the ball is in hand, the ball is in its cockback firing phase. When the ball is picked up out of air, the movement key needs to be let go, then the ball can be fired. Make the characters not have faces at all, just make them have a squircle shaped heads. The ball should be squircle shaped as well. Arms should be much longer, and shirts shouldn't have detail. we'll add that later.
 
-**Pitch:** Two wobbly ragdoll ballers a side, one jump key each, and a court whose rules change every round.
+After play: shorten the height of the rims, and remove all modifiers. make the heads smaller. make it much more retro without as much detail, specifically the background, keep it simplistic like the jerseys. have the ball have a white trail on firing. The trail should be a rainbow if it is perfectly alligned with the goal. Make the firing a bit slower, and the arms beefier now. allow for backwards swinging, the characters should be pivoting off their foot, but swinging both left to right, not only middle to right and slowly slowing down, it should never be slowing down. add some more features you deem fit. the characters are not picking up the balls consistently currently.
+
+**Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
 
-**Controls:** Player 1 W, Player 2 Up Arrow; each key drives both of that team's players. Players rock forward and back while planted: time the hop with the rock to move. Tap to hop, hold to jump higher. The ball snaps to a hand when over half of it is in the hand box, or when it hits the abdomen (never the feet). With the ball, hold to cock back and let go to fire; after a catch made with the key down, let go once first. Esc or P pauses.
+**Controls:** Player 1 W, Player 2 Up Arrow; each key drives both of that team's players. Planted players swing evenly forward and back about their feet: hop on the swing to move that way. Tap to hop, hold to jump higher. The ball snaps to a hand when over half of it is in the hand box, or when it hits the abdomen (never the feet). With the ball, hold to cock back and let go to fire; after a catch made with the key down, let go once first. Esc or P pauses.
 
 **Question:** Does one key plus floppy physics give a match that is chaotic, funny and still winnable on skill?
 
-**Hooks:** Players pitch forward and flail when they jump; a random round card changes the court before every point.
+**Hooks:** Players swing back and forth on their feet: the hop's timing is the steering; a perfectly lined-up shot leaves a rainbow trail.
 
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; slim faceless characters with squircle heads, long arms and plain shirts; a squircle ball; small hoops; thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: a big round card flips in naming the round's twist. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters with small squircle heads, long beefy arms and plain shirts; a squircle ball with a white trail when fired (rainbow on a perfect line); small, low hoops; thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -40,7 +42,7 @@ After play: create a hitbox that surrounds the hand of the character, if more th
 The menu reads "W vs ↑"; Start. A round card flips: "Normal ball". Each player taps; both their ballers hop and tip forward, arms swinging. The ball drops at centre; someone headbutts it, it clangs off a rim, a scramble, and a flailing arm knocks it in: the screen shakes, the score pops, and a new card flips in, "Giant ball!".
 
 ## Challenge
-Every touch is contested from second one: the skill is timing your hop against theirs. A conceded basket costs a point and resets the court. Twists add variety, not difficulty: every random range is clamped and applies to both teams equally.
+Every touch is contested from second one: the skill is timing your hop against theirs. A conceded basket costs a point and resets the court. Every round plays to the same rules; a team two points behind hustles with higher jumps.
 
 ## Core loop
 - Time hops to tip and shove the ball toward the opponent's hoop
@@ -54,7 +56,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Multi-body ragdoll players (head, torso, arms, legs) on one key per team
 - [x] Ball physics with ground, player, rim and backboard collisions
 - [x] Basket detection, scoreboard, score animation, screen shake, round reset
-- [x] Randomised rounds: proportions, ball size, court width, gravity/jump, bounce, venue, outfits
+- [x] Rounds: same rules every round (no modifiers); venue colours and player looks change
 - [x] Menu, pause, victory screen, restart
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
@@ -63,12 +65,15 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Jump height follows how long the key is held
 - [x] Dunks near the rim, fadeaways when drifting or leaning away, blocks and steals by defenders
 - [x] Only opponents collide; teammates pass through each other
-- [x] Planted players rock forward and back (timing the hop with the rock moves them); planted feet grip; fallen players get back up
+- [x] Planted players pivot on their feet, swinging evenly forward and back at a beat that never fades; fallen players get back up
 - [x] Slower game speed; players eased apart so they never pile into one blob
+- [x] Fired ball trail: white, rainbow with a PERFECT! callout when lined up with the rim
+- [x] SWISH and PERFECT SWISH baskets; HUSTLE higher jumps for a team 2+ points behind; pickup flash
+- [x] Catches checked every step: larger hand box, abdomen overlap
 
 ## Your systems
 - ragdoll physics · in the slice
-- randomised rounds · in the slice
+- round venues and looks · in the slice
 - local 2-player · in the slice
 - menus and game states · in the slice
 - ball handling (grab, shoot, dunk, fadeaway, block) · in the slice
@@ -78,7 +83,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 
 ## Avoid
 - Basket Random's name, art, characters and UI
-- Unfair randomness: every twist clamped and the same for both teams
+- Round modifiers (removed after play)
 
 ## Out of scope
 - An AI opponent: change it after play

@@ -31,42 +31,48 @@ window.CONFIG = {
 
   // ---- Ball handling: grab, shoot, fadeaway, dunk, block ----
   regrab_delay: { value: 0.4, min: 0, max: 1.5, step: 0.05 },   // s before a player who let go can grab again
-  hand_box: { value: 54, min: 20, max: 120, step: 2 },          // px side of the square catch box around each hand
-  shot_charge_time: { value: 1.0, min: 0.2, max: 2.5, step: 0.05 }, // s of holding to reach full shot power
+  belly_margin: { value: 6, min: 0, max: 30, step: 1 },          // px the abdomen catch reaches past the torso
+  hand_box: { value: 78, min: 20, max: 120, step: 2 },          // px side of the square catch box around each hand
+  shot_charge_time: { value: 1, min: 0.2, max: 2.5, step: 0.05 }, // s of holding to reach full shot power
   hold_max: { value: 4, min: 1, max: 6, step: 0.1 },          // s a ball can be held before it fires itself
-  shot_vx_min: { value: 3.5, min: 0, max: 15, step: 0.5 },      // px/step forward speed on a quick release
-  shot_vx_max: { value: 14, min: 4, max: 24, step: 0.5 },       // px/step forward speed fully cocked
-  shot_vy_min: { value: 11, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
-  shot_vy_max: { value: 13, min: 4, max: 22, step: 0.5 },       // px/step upward speed fully cocked (barely more)
-  fade_vy_bonus: { value: 2.5, min: 0, max: 8, step: 0.5 },     // px/step extra loft on a fadeaway
+  shot_vx_min: { value: 3, min: 0, max: 15, step: 0.5 },      // px/step forward speed on a quick release
+  shot_vx_max: { value: 13, min: 4, max: 24, step: 0.5 },       // px/step forward speed fully cocked
+  shot_vy_min: { value: 9.5, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
+  shot_vy_max: { value: 11, min: 4, max: 22, step: 0.5 },       // px/step upward speed fully cocked (barely more)
+  fade_vy_bonus: { value: 2, min: 0, max: 8, step: 0.5 },     // px/step extra loft on a fadeaway
   fade_vx_mul: { value: 0.9, min: 0.5, max: 1.3, step: 0.05 },  // fadeaway forward speed multiplier
-  shot_tilt: { value: 0.5, min: 0, max: 1.5, step: 0.05 },      // how much body lean bends the arc
+  shot_tilt: { value: 0.15, min: 0, max: 1.5, step: 0.05 },      // how much body lean bends the arc
   shot_assist: { value: 0.25, min: 0, max: 1, step: 0.05 },     // pull toward a speed that reaches the rim
   fade_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },      // a fadeaway's extra aim help
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
   dunk_reach: { value: 10, min: 0, max: 60, step: 1 },          // px beyond the rim's edge a dunk still catches
   dunk_height: { value: 120, min: 40, max: 220, step: 5 },      // px above the rim the ball may be to dunk
-  dunk_below: { value: 70, min: 0, max: 120, step: 5 },        // px below the rim the ball may still be to dunk
+  dunk_below: { value: 25, min: 0, max: 120, step: 5 },        // px below the rim the ball may still be to dunk
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
   block_window: { value: 0.9, min: 0.2, max: 2, step: 0.05 },   // s after a shot a defender's touch is a block
   block_pop: { value: 8, min: 2, max: 16, step: 0.5 },          // px/step a blocked ball flies back
   strip_speed: { value: 9, min: 3, max: 20, step: 0.5 },        // px/step hit that knocks a held ball loose
   steal_guard: { value: 0.35, min: 0, max: 1.5, step: 0.05 },   // s after a grab nobody can steal it
+  perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
+  trail_length: { value: 18, min: 0, max: 60, step: 1 },        // steps of ball trail behind a fired shot
+  hustle_gap: { value: 2, min: 1, max: 10, step: 1 },           // points behind before a team hustles
+  hustle_jump: { value: 1.15, min: 1, max: 1.6, step: 0.01 },   // jump height multiplier while hustling
 
   // ---- Ragdoll ----
-  gravity: { value: 1.0, min: 0.3, max: 2, step: 0.05 },       // Matter gravity.y before the round twist
+  gravity: { value: 1.0, min: 0.3, max: 2, step: 0.05 },       // Matter gravity.y
   upright: { value: 26, min: 0, max: 80, step: 1 },            // rad/s^2 per rad pulling the torso upright
   upright_air: { value: 0.35, min: 0, max: 1, step: 0.05 },    // share of the upright pull in the air
-  upright_planted: { value: 55, min: 0, max: 150, step: 1 },   // rad/s^2 per rad with feet on the floor
-  rock_angle: { value: 0.42, min: 0, max: 0.9, step: 0.01 },    // rad of the forward-and-back rock while planted
-  rock_rate: { value: 0.9, min: 0.2, max: 3, step: 0.05 },      // rocks a second
-  foot_grip: { value: 0.35, min: 0, max: 1, step: 0.05 },       // share of planted foot slide removed each step
+  rock_angle: { value: 0.38, min: 0, max: 0.9, step: 0.01 },    // rad of the forward-and-back rock while planted
+  rock_rate: { value: 0.75, min: 0.2, max: 3, step: 0.05 },      // rocks a second
+  rock_follow: { value: 0.6, min: 0.05, max: 1, step: 0.05 },   // how tightly a planted body tracks its swing
   getup_time: { value: 0.7, min: 0.1, max: 3, step: 0.05 },     // s lying down before springing back up
   getup_pop: { value: 7, min: 0, max: 15, step: 0.5 },          // px/step upward pop when getting up
   body_width: { value: 24, min: 12, max: 50, step: 1 },         // px torso width
   limb_width: { value: 11, min: 5, max: 20, step: 1 },          // px leg width (arms are 0.8 of it)
-  arm_length: { value: 92, min: 40, max: 140, step: 2 },        // px arm length before the round twist
+  arm_width: { value: 16, min: 6, max: 30, step: 1 },           // px arm thickness
+  head_size: { value: 14, min: 8, max: 30, step: 1 },           // px head half-size
+  arm_length: { value: 92, min: 40, max: 140, step: 2 },        // px arm length
   upright_damp: { value: 3.5, min: 0, max: 15, step: 0.5 },    // 1/s damping on torso spin
   leg_stiffness: { value: 0.22, min: 0, max: 1, step: 0.01 },  // how hard legs swing back under the hips
   leg_follow: { value: 0.3, min: 0, max: 1, step: 0.05 },      // 0 floppy legs, 1 rigid legs
@@ -76,8 +82,8 @@ window.CONFIG = {
   arm_max_speed: { value: 0.32, min: 0.05, max: 0.8, step: 0.01 }, // rad/step arm swing limit
 
   // ---- Ball ----
-  ball_radius: { value: 25, min: 16, max: 60, step: 1 },       // px before the round twist
-  ball_bounce: { value: 0.8, min: 0.3, max: 0.98, step: 0.01 },// restitution before the round twist
+  ball_radius: { value: 25, min: 16, max: 60, step: 1 },       // px
+  ball_bounce: { value: 0.8, min: 0.3, max: 0.98, step: 0.01 },// restitution
   ball_mass: { value: 1.3, min: 0.3, max: 5, step: 0.1 },      // Matter mass units
   ball_kick: { value: 2.6, min: 0, max: 8, step: 0.1 },        // px/step extra pop off any body hit
   ball_lift: { value: 0.9, min: 0, max: 3, step: 0.05 },      // share of each hit's pop sent upward
@@ -87,17 +93,13 @@ window.CONFIG = {
   drop_height: { value: 430, min: 200, max: 520, step: 10 },   // px above the floor the ball drops from
 
   // ---- Court ----
-  court_width: { value: 1160, min: 900, max: 1240, step: 10 }, // px before the round twist
-  rim_height: { value: 300, min: 200, max: 420, step: 5 },     // px from floor to rim
+  court_width: { value: 1160, min: 900, max: 1240, step: 10 }, // px
+  rim_height: { value: 235, min: 200, max: 420, step: 5 },     // px from floor to rim
   rim_span_min: { value: 58, min: 60, max: 160, step: 2 },     // px rim opening (grows with the ball)
   rim_ball_ratio: { value: 1.3, min: 1.05, max: 2, step: 0.05 }, // rim opening as a multiple of the ball's width
   board_height: { value: 110, min: 60, max: 200, step: 5 },    // px backboard height
   board_inset: { value: 40, min: 20, max: 120, step: 2 },      // px from side wall to backboard
 
-  // ---- Random rounds ----
-  twist_strength: { value: 1, min: 0, max: 1.5, step: 0.05 },  // 0 = twists off, 1 = as listed in rounds.js
-  jitter: { value: 0.07, min: 0, max: 0.2, step: 0.01 },       // +- fraction every round value wanders
-  double_twist_chance: { value: 0.35, min: 0, max: 1, step: 0.05 }, // from round 3, chance of two twists
 
   // ---- Look and juice ----
   pixel_size: { value: 3, min: 1, max: 6, step: 1 },           // screen px per art pixel on the court

@@ -132,29 +132,32 @@ const sfx = {
   grab() { tone(392, 0.06, 'square', 0.08); tone(523, 0.08, 'square', 0.06, 0.05); },
   shoot(c) { tone(300 + c * 300, 0.16, 'triangle', 0.14, 0, 700 + c * 500); },
   dunk() { tone(110, 0.3, 'square', 0.22, 0, 55); noise(0.25, 0.35, 700); },
+  perfect() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, 'square', 0.06, i * 0.05)); },
   block() { noise(0.12, 0.3, 1600); tone(180, 0.12, 'square', 0.12, 0, 90); },
 };
 
 // ---- Game state -----------------------------------------------------------------------
 // world: the Matter.js world of the current round. Kept out of `state` so state stays plain data.
-let scene, state, world = null, pauseFrom = 'play', prevTwists = [], prevVenue = '';
+let scene, state, world = null, pauseFrom = 'play', prevVenue = '';
 function reset() {
   seed = Number(params.get('seed')) || CONFIG.seed;
-  state = { t: 0, score: [0, 0], round: 0, twist: '', venue: '', settings: null, cardT: 0, scoredT: 0,
+  state = { t: 0, score: [0, 0], round: 0, venue: '', settings: null, cardT: 0, scoredT: 0,
     scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
-  prevTwists = []; prevVenue = '';
+  prevVenue = '';
 }
 const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
 function callout(s, team) { state.toast = s; state.toastT = 1.1; state.toastTeam = team; }
 function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); return; }
-  if (ev.type === 'grab') { sfx.grab(); events.push({ type: 'grab', team: ev.team }); return; }
+  if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; events.push({ type: 'grab', team: ev.team }); return; }
   if (ev.type === 'shoot' || ev.type === 'fadeaway') {
     sfx.shoot(ev.charge); events.push({ type: ev.type, team: ev.team });
-    if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
+    if (ev.perfect) { callout('PERFECT!', ev.team); sfx.perfect(); }
+    else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
     return;
   }
   if (ev.type === 'dunk') { sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
+  if (ev.type === 'steal') world.flash.t = 0.25;
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
   if (ev.type !== 'hit' || ev.speed < 1.2) return;
   if (ev.on === 'player') { sfx.bop(ev.speed); events.push({ type: 'touch', team: ev.team }); }
@@ -164,10 +167,12 @@ function onPhysEvent(ev) {
 }
 /** Roll a round and build its world. */
 function buildRound(round) {
-  const S = Rounds.roll(rng, round, prevTwists, prevVenue, tune);
-  prevTwists = S.twists; prevVenue = S.venue;
-  state.settings = S; state.round = round; state.twist = S.title; state.venue = S.venueName;
+  const S = Rounds.roll(rng, round, prevVenue, tune);
+  prevVenue = S.venue;
+  state.settings = S; state.round = round; state.venue = S.venueName;
   world = Physics.createWorld(S, tune, rng, onPhysEvent);
+  world.hustle = [0, 1].map(t => state.score[1 - t] - state.score[t] >= tune.hustle_gap); // the trailing team hustles
+  world.flash = { t: 0 };
   buildPalette(S);
   state.stall = 0;
 }
@@ -194,8 +199,9 @@ function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
 function heldKeys() { return KEYS.map(k => down.has(k)); }
 const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
 function score(hoop) {
-  const team = hoop.team, shot = world.ball.shot;
-  state.scoreKind = shot && shot.team === team ? SCORE_KINDS[shot.kind] : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
+  const team = hoop.team, shot = world.ball.shot, own = shot && shot.team === team;
+  state.scoreKind = own ? (shot.perfect && shot.clean ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
+    : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
   state.toastT = 0; // the score banner names the shot; no callout on top of it
   state.score[team]++; state.pops[team] = 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
   hoop.sway = 1.5;
@@ -213,6 +219,7 @@ function updateJuice(dt) {
   state.pops = state.pops.map(p => Math.max(0, p - dt * 2.5));
   state.shake = Math.max(0, state.shake - dt * tune.shake * 2.2);
   state.toastT = Math.max(0, state.toastT - dt);
+  if (world && world.flash) world.flash.t = Math.max(0, world.flash.t - dt);
   for (const p of state.particles) { p.vy += 1400 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.99; p.a += p.va * dt; p.life -= dt; }
   state.particles = state.particles.filter(p => p.life > 0 && p.y < H + 20);
 }
@@ -237,12 +244,11 @@ function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, 
 function buildPalette(S) {
   const v = Render.VENUES[S.venue], cols = new Set(['#1d1a2b', '#ffffff', '#14111f', '#2a2440', '#e8591a', '#8d93a8', '#3d4a7a',
     '#e04a3a', '#ef4b35', '#c23c2c', '#f4f6fb', '#ffd23f', '#000000', '#4a4560', '#8a8296']);
-  for (const k of ['floor', 'edge', 'line', 'side', 'accent']) if (v[k].startsWith('#')) cols.add(v[k]);
+  for (const k of ['sky', 'band', 'floor', 'line', 'side']) cols.add(v[k]);
   for (const kit of S.kits) { cols.add(kit.jersey); cols.add(kit.shorts); }
   for (const team of S.looks) for (const l of team) { cols.add(l.skin); cols.add(l.shoe); }
+  for (const c of Render.RAINBOW) cols.add(c);
   const out = [...cols].map(hexRGB);
-  const a = hexRGB(v.top), b = hexRGB(v.bottom);
-  for (let i = 0; i <= 5; i++) { const t = i / 5; out.push(a.map((x, j) => Math.round(x + (b[j] - x) * t))); out.push(a.map((x, j) => Math.round((x + (b[j] - x) * t) * 0.6))); }
   palette = out; paletteCache = new Map();
 }
 function snapToPalette(c, w, h) {
@@ -284,7 +290,10 @@ function drawGame(opts = {}) {
   });
   if (opts.hud !== false) {
     Render.scoreboard(ctx, W, { score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
-    if (scene === 'play' || scene === 'scored') text(state.twist.toUpperCase(), W / 2, 128, 16, '#ffffff', { stroke: 4 });
+    if ((scene === 'play' || scene === 'scored') && world.hustle.some(Boolean)) {
+      const t = world.hustle[0] ? 0 : 1;
+      text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128, 16, Render.TEAM_COLORS[t], { stroke: 4 });
+    }
   }
   if (state.toastT > 0) {
     const k = Math.min(1, (1.1 - state.toastT) / 0.12);
@@ -346,7 +355,7 @@ const scenes = {
         Render.keycap(ctx, x, 404, team ? 'up' : 'W', 1);
         text(team ? 'Up Arrow' : 'W key', x + 82, 404, 16, '#c9c3e0', { weight: 700 });
       }
-      text('Time hops with the rock. Catch with hand or belly; hold to cock back, let go to fire.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
+      text('Hop as you swing to move. Catch with hand or belly; hold to cock back, let go to fire.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
       buttons = [];
       btn('PLAY', W / 2 - 130, 520, 260, 74, newMatch, 'Enter or Space', 40);
       btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);
@@ -357,7 +366,7 @@ const scenes = {
     update(dt) {
       if (pressed('KeyP') || pressed('Escape')) { pauseGame(); return; }
       state.cardT += dt; state.t += dt; updateJuice(dt);
-      if (state.cardT >= tune.card_time) { scene = 'play'; events.push({ type: 'round', round: state.round, twist: state.twist }); }
+      if (state.cardT >= tune.card_time) { scene = 'play'; events.push({ type: 'round', round: state.round, venue: state.venue }); }
     },
     draw() { drawGame(); Render.roundCard(ctx, W, H, state.cardT, tune.card_time, state.settings); buttons = []; },
   },
