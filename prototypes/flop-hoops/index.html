@@ -232,11 +232,13 @@ function buildRound(round) {
   state.stall = 0;
 }
 // mode: 'cpu' (Player 1 against the computer, which plays the Tealbacks) or '2p' (two people)
-let mode = 'cpu', cpu = null;
+let mode = 'cpu', cpu = null, matchNo = 0;
 function newMatch(m) {
   if (m === 'cpu' || m === '2p') mode = m;
   reset(); state.mode = mode;
-  cpu = mode === 'cpu' ? AI.create(1, rng) : null;
+  seed += matchNo * 7919;   // each match of a session plays out differently; the first of a page load is the same every time
+  cpu = mode === 'cpu' ? AI.create(1, rng, tune, matchNo) : null;
+  matchNo++;
   nextRound(); events.push({ type: 'match', mode });
 }
 function nextRound() { buildRound(state.round + 1); state.cardT = 0; scene = 'card'; sfx.whistle(); }
@@ -263,7 +265,7 @@ function bounceKeys() { return BOUNCE_KEYS.map(k => down.has(k)); }
 /** Both teams' keys this step: [jump keys, bounce keys]. Against the CPU, it presses the Tealbacks' keys. */
 function teamKeys() {
   const j = heldKeys(), b = bounceKeys();
-  if (cpu && scene === 'play') { AI.update(cpu, world, tune, STEP * tune.game_speed); j[1] = cpu.jump; b[1] = cpu.bounce; }
+  if (cpu && scene === 'play') { AI.update(cpu, world, tune, STEP * tune.game_speed, { score: state.score }); j[1] = cpu.jump; b[1] = cpu.bounce; }
   else if (cpu) { j[1] = false; b[1] = false; }   // the CPU stands down during a basket's celebration
   return [j, b];
 }
@@ -466,7 +468,7 @@ function drawGame(opts = {}) {
     ctx.globalAlpha = 1;
   }
   if (opts.hud !== false) {
-    Render.scoreboard(ctx, W, { cpu: !!cpu, score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
+    Render.scoreboard(ctx, W, { cpu: !!cpu, cpuStyle: cpu ? cpu.style.name : '', score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
     if ((scene === 'play' || scene === 'scored') && world.hustle.some(Boolean)) {
       const t = world.hustle[0] ? 0 : 1;
       text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128, 16, Render.TEAM_COLORS[t], { stroke: 4 });

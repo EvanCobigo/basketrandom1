@@ -297,7 +297,7 @@ const Render = (() => {
       const s = team ? 1 : -1, bx = cx + s * 190;
       rr(ctx, bx - 100, y + 10, 200, h - 20, 14); ink(ctx, TEAM_COLORS[team], 4);
       text(ctx, TEAM_NAMES[team].toUpperCase(), bx - s * 28, y + 30, 17, '#ffffff', { stroke: 4 });
-      if (team === 1 && st.cpu) text(ctx, 'CPU', bx - s * 28, y + 62, 18, '#ffffff', { stroke: 4 });   // the computer plays this side
+      if (team === 1 && st.cpu) { text(ctx, 'CPU', bx - s * 28, y + (st.cpuStyle ? 58 : 62), 18, '#ffffff', { stroke: 4 }); if (st.cpuStyle) text(ctx, st.cpuStyle, bx - s * 28, y + 76, 12, '#ffffff', { stroke: 3 }); }   // the computer plays this side
       else { keycap(ctx, bx - s * 28 - 18, y + 62, team ? 'up' : 'W', 0.55); keycap(ctx, bx - s * 28 + 14, y + 62, team ? 'down' : 'S', 0.55); }
       const pop = st.pops[team];
       ctx.save(); ctx.translate(bx + s * 52, y + h / 2); ctx.scale(1 + pop * 0.6, 1 + pop * 0.6);

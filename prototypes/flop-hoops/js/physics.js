@@ -383,60 +383,117 @@ const Physics = (() => {
   }
 
   /**
-   * Fire the held ball. Cock-back time grows the forward speed a lot and the upward speed only a
-   * little. A fadeaway (drifting or leaning away from the hoop in the air) lofts it higher with
-   * more aim help.
+   * The ball's flight from (x, y) with velocity (vx, vy), stepped exactly as the engine steps it
+   * (air drag on the velocity, then gravity, then the move) until it drops through rim height.
+   * Returns the x where it crosses (or null if it never does), and whether on the way it came
+   * within the ball's radius of the front rim or the backboard, beyond a slight graze.
+   */
+  function flightTo(w, T, hoop, x, y, vx, vy) {
+    const g = gravityPx(w), keep = 1 - w.ball.frictionAir, r = w.ball.r;
+    let touched = false;
+    for (let i = 0; i < 400; i++) {
+      vx *= keep; vy = vy * keep + g;
+      const ny = y + vy, nx = x + vx;
+      if (Math.hypot(nx - hoop.frontX, ny - hoop.rimY) < r * 1.09 + 6 - T.perfect_graze) touched = true;   // front rim (a squircle's corner reaches 9% further)
+      if (Math.abs(nx - hoop.boardX) < r + 5 - T.perfect_graze && ny > hoop.boardTop - r && ny < hoop.boardBot + r) touched = true;   // backboard
+      if (nx > w.R - r || nx < w.L + r || ny < -400) touched = true;   // a side wall or the ceiling: the flight past it is not real
+      if (vy > 0 && y < hoop.rimY && ny >= hoop.rimY) return { crossX: x + (nx - x) * (hoop.rimY - y) / (ny - y), touched };
+      x = nx; y = ny;
+      if (y > w.floorY) break;
+    }
+    return { crossX: null, touched };
+  }
+
+  /**
+   * The forward speed that makes a shot with upward speed `vy` from (x, y) cross the rim plane at
+   * `target`: found by bisection on the exact flight, so drag and the shot's real height are
+   * accounted for. `dir` is +1 for a hoop on the right. Returns null if no speed can do it.
+   */
+  function solveVx(w, T, hoop, x, y, vy, dir, target) {
+    const at = vx => { const f = flightTo(w, T, hoop, x, y, vx * dir, -vy); return f.crossX === null ? null : (f.crossX - target) * dir; };
+    let lo = 0, hi = 40, flo = at(lo), fhi = at(hi);
+    if (fhi === null || fhi < 0) return null;                  // even the hardest throw falls short
+    if (flo !== null && flo >= 0) return 0;                     // even a drop already carries past it
+    for (let i = 0; i < 28; i++) {
+      const mid = (lo + hi) / 2, f = at(mid);
+      if (f === null || f > 0) hi = mid; else lo = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  /**
+   * The launch velocity a shot at `charge` (0..1) would get from `from` by player `p`: the throw
+   * for that cock-back, with the aim help pulling the forward speed toward the exact solution.
+   * Lean, drift and momentum change nothing: one arc for a given cock-back and spot.
+   */
+  function shotVelocity(w, T, p, charge, from) {
+    const hoop = attackedHoop(w, p);
+    let vx = lerp(T.shot_vx_min, T.shot_vx_max, charge);
+    const vy = lerp(T.shot_vy_min, T.shot_vy_max, charge);
+    if (T.shot_assist > 0 && (hoop.cx - from.x) * p.dir > 30) {
+      const sol = solveVx(w, T, hoop, from.x, from.y, vy, p.dir, hoop.cx);
+      if (sol !== null) vx = lerp(vx, sol, T.shot_assist);
+    }
+    return { vx, vy };
+  }
+
+  /**
+   * Fire the held ball. A fadeaway (drifting or leaning away from the hoop in the air) is only
+   * a name for a shot taken that way: the arc is the same.
    */
   function shoot(w, T) {
     const h = w.hold, p = h.p, ball = w.ball, hoop = attackedHoop(w, p);
     const airborne = p.sinceGround > 0.1, a = wrap(p.torso.angle);
     const fade = airborne && (p.torso.velocity.x * p.dir < -T.fade_speed || a * p.dir < -T.fade_lean);
-    // One arc for a given cock-back and spot: the body's lean, drift and momentum change nothing.
-    // A fadeaway is only a name for a shot taken drifting or leaning away.
-    let vx = lerp(T.shot_vx_min, T.shot_vx_max, h.charge);
-    const vy = lerp(T.shot_vy_min, T.shot_vy_max, h.charge);
-    // aim help: pull the forward speed toward the one that drops the ball on the rim's centre
-    const g = gravityPx(w), X = (hoop.cx - ball.position.x) * p.dir, Y = ball.position.y - hoop.rimY;
-    const disc = vy * vy - 2 * g * Y;
-    if (X > 30 && disc > 0) vx = lerp(vx, X / ((vy + Math.sqrt(disc)) / g) / ((1 + Math.pow(1 - ball.frictionAir, 60)) / 2), T.shot_assist);
+    const { vx, vy } = shotVelocity(w, T, p, h.charge, ball.position);
     release(w, T, 0.2);
     p.followT = T.follow_time;   // classic form: shooting arm trails forward, wrist bent, palm down
     Body.setVelocity(ball, { x: vx * p.dir, y: -vy });
     Body.setAngularVelocity(ball, -p.dir * 0.2);
     const line = predictLine(w, T, hoop);
     ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect: line.perfect, onTarget: line.onTarget, clean: true,
-      fromX: ball.position.x };   // where it was released: past the centre line, it is worth two
-    // white by default; rainbow only for a clean perfect line; turns green only if an on-target shot touches rim or board
-    // rainbow on a perfect line; blue for a fadeaway heading in; white otherwise (settled again if it scores)
+      crossX: line.crossX, freeFlight: !line.touched, fromX: ball.position.x };   // where it was released: past the centre line, it is worth two
+    // white by default; rainbow on a clean perfect line; blue for a fadeaway heading in; settled again at the basket
     w.trail = { pts: [], mode: line.perfect ? 'rainbow' : fade && line.onTarget ? 'blue' : 'white', t: 0, shot: ball.shot };
-    const perfect = line.perfect;
-    w.onEvent({ type: fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge, perfect });
+    w.onEvent({ type: fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge, perfect: line.perfect });
   }
 
   /**
-   * Fly the ball forward from here with drag and gravity, until it drops through rim height.
-   * onTarget: its centre crosses inside the rim opening. perfect: it crosses within
+   * Whether the ball, flying free from here with drag and gravity, drops through the middle of
+   * the rim. onTarget: its centre crosses inside the rim opening. perfect: it crosses within
    * T.perfect_window of the rim's width from the centre AND the whole ball clears both rim edges
-   * and never touches the front rim or the backboard on the way.
+   * and never touches the front rim or the backboard on the way. crossX is where it crosses.
    */
-  function predictLine(w, T, hoop) {
-    const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir, r = b.r;
-    let x = b.position.x, y = b.position.y, vx = b.velocity.x, vy = b.velocity.y, touched = false, crossX = null;
-    for (let i = 0; i < 400; i++) {
-      vx *= keep; vy = vy * keep + g;
-      const ny = y + vy, nx = x + vx;
-      if (Math.hypot(nx - hoop.frontX, ny - hoop.rimY) < r + 6 - T.perfect_graze) touched = true; // front rim, beyond a slight graze
-      if (Math.abs(nx - hoop.boardX) < r + 5 - T.perfect_graze && ny > hoop.boardTop - r && ny < hoop.boardBot + r) touched = true; // backboard, beyond a slight graze
-      if (crossX === null && vy > 0 && y < hoop.rimY && ny >= hoop.rimY) crossX = x + (nx - x) * (hoop.rimY - y) / (ny - y);
-      x = nx; y = ny;
-      // contact counts only until the ball is through the rim plane: once it is in, a graze of
-      // the backboard inside the net changes nothing (the same rule the live game uses)
-      if (crossX !== null) break;
-      if (y > w.floorY) break;
+  function predictFlight(w, T, hoop, x, y, vx, vy) {
+    const r = w.ball.r, f = flightTo(w, T, hoop, x, y, vx, vy);
+    if (f.crossX === null) return { onTarget: false, perfect: false, crossX: null, touched: f.touched };
+    const off = Math.abs(f.crossX - hoop.cx), clears = off <= hoop.span / 2 - r + T.perfect_graze;   // inside both rim edges, give or take a slight graze
+    return { onTarget: off < hoop.span / 2, perfect: !f.touched && clears && off < hoop.span * T.perfect_window, crossX: f.crossX, touched: f.touched };
+  }
+  function predictLine(w, T, hoop) { const b = w.ball; return predictFlight(w, T, hoop, b.position.x, b.position.y, b.velocity.x, b.velocity.y); }
+
+  /**
+   * A shot that has not been taken yet: what would happen if player `p`, holding the ball with
+   * a cock-back of `charge`, let go right now. Returns where it crosses the rim plane and how far
+   * from the rim's centre that is (err, positive meaning past the centre, away from the shooter).
+   */
+  function previewShot(w, T, p, charge) {
+    const hoop = attackedHoop(w, p), b = w.ball, v = shotVelocity(w, T, p, charge, b.position);
+    const f = predictFlight(w, T, hoop, b.position.x, b.position.y, v.vx * p.dir, -v.vy);
+    return Object.assign(f, { err: f.crossX === null ? null : (f.crossX - hoop.cx) * p.dir, vx: v.vx, vy: v.vy });
+  }
+
+  /** Where a free ball, flying as it is now, comes down to the floor (null if it is already there). */
+  function landingX(w) {
+    const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir, floor = w.floorY - b.r;
+    let x = b.position.x, y = b.position.y, vx = b.velocity.x, vy = b.velocity.y;
+    if (y >= floor - 2 && Math.abs(vy) < 1) return null;
+    for (let i = 0; i < 300; i++) {
+      vx *= keep; vy = vy * keep + g; x += vx; y += vy;
+      if (x < w.L + b.r) { x = w.L + b.r; vx = -vx * 0.6; } else if (x > w.R - b.r) { x = w.R - b.r; vx = -vx * 0.6; }   // the side walls
+      if (vy > 0 && y >= floor) return x;
     }
-    if (crossX === null) return { onTarget: false, perfect: false };
-    const off = Math.abs(crossX - hoop.cx), clears = off <= hoop.span / 2 - r + T.perfect_graze; // inside both rim edges, give or take a slight graze
-    return { onTarget: off < hoop.span / 2, perfect: !touched && clears && off < hoop.span * T.perfect_window };
+    return x;
   }
 
   /**
@@ -750,5 +807,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady };
+  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady, previewShot, landingX, shotVelocity };
 })();
