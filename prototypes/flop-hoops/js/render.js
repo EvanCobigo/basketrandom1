@@ -283,13 +283,64 @@ const Render = (() => {
     ctx.restore();
   }
 
+  /**
+   * A retro menu button in the pixel font: a square block with a hard drop shadow. b.t drives an
+   * idle bob, b.hot lifts it with a blinking pointer, b.pressT squashes it for a moment.
+   */
   function button(ctx, b, accent) {
-    rr(ctx, b.x, b.y + 6, b.w, b.h, 16); ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
-    rr(ctx, b.x, b.y, b.w, b.h, 16); ink(ctx, accent || '#ffd23f', 5);
-    text(ctx, b.label, b.x + b.w / 2, b.y + b.h / 2 + 1, b.size || 28, INK, { weight: 900 });
-    if (b.hint) text(ctx, b.hint, b.x + b.w / 2, b.y + b.h + 22, 16, '#ffffff', { weight: 700, stroke: 4 });
+    const t = b.t || 0, hot = !!b.hot, press = Math.max(0, b.pressT || 0) / 0.14;
+    const bob = Math.round(Math.sin(t * 3 + (b.i || 0) * 1.3) * 2), lift = hot ? -4 : 0, squash = press > 0 ? 4 : 0;
+    const x = b.x, y = b.y + bob + lift + squash, w = b.w, h = b.h - squash;
+    ctx.fillStyle = '#0a0618'; ctx.fillRect(x + 7, b.y + bob + 7, w, b.h);        // hard drop shadow
+    ctx.fillStyle = INK; ctx.fillRect(x - 4, y - 4, w + 8, h + 8);                   // pixel border
+    ctx.fillStyle = hot ? '#fff1a8' : (accent || '#ffd23f'); ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(x, y, w, 5);               // top light
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x, y + h - 6, w, 6);             // bottom shade
+    const sc = b.scale || 4;
+    PixelFont.draw(ctx, b.label, x + w / 2, y + h / 2, { scale: sc, color: INK, shadow: Math.max(1, sc / 2), shadowColor: 'rgba(0,0,0,0.25)' });
+    if (hot && Math.floor(t * 4) % 2) { // the blinking pointer
+      const px = x - 26, py = y + h / 2, s = 4;
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 4; i++) ctx.fillRect(px + i * s, py - (3 - i) * s, s, (3 - i) * 2 * s);
+    }
+    if (b.hint) PixelFont.draw(ctx, b.hint, x + w / 2, b.y + b.h + 22, { scale: 2, color: '#e6ddff' });
   }
 
-  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
+  /** The menu backdrop: banded dusk sky with stars, a striped setting sun, a scrolling neon grid
+   *  floor, and a little pixel basketball bouncing along it. Drawn small and scaled up. */
+  function menuBackdrop(ctx, W, H, t) {
+    const horizon = 440, bands = ['#140c2e', '#1d1240', '#2a1650', '#3d1a5c', '#5a1f66', '#7a2a6a', '#a3366a', '#d0506a', '#f27a5e'];
+    const bh = horizon / bands.length;
+    bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, Math.floor(i * bh), W, Math.ceil(bh) + 1); });
+    for (let i = 0; i < 70; i++) { // stars: fixed spots, twinkling
+      const sx = (i * 197) % W, sy = (i * 113) % 260;
+      if (Math.sin(t * 2 + i * 1.7) > -0.3) { ctx.fillStyle = i % 5 ? '#e6ddff' : '#ffd23f'; ctx.fillRect(sx, sy, 5, 5); }
+    }
+    // the sun: stripes cut through its lower half
+    const sx = W / 2, sy = horizon - 40, sr = 150, cols = ['#ffe23b', '#ffc23b', '#ff9a1f', '#ff7a2a', '#ff5a3a'];
+    for (let y = -sr; y < sr; y += 5) {
+      const half = Math.sqrt(Math.max(0, sr * sr - y * y)), band = Math.floor((y + sr) / (2 * sr) * cols.length);
+      const gap = y > 0 && Math.floor(y / 5) % Math.max(2, 6 - Math.floor(y / 30)) === 0;
+      if (!gap && sy + y < horizon) { ctx.fillStyle = cols[Math.min(cols.length - 1, band)]; ctx.fillRect(sx - half, sy + y, half * 2, 5); }
+    }
+    // the floor and its grid, rushing toward you
+    ctx.fillStyle = '#120a26'; ctx.fillRect(0, horizon, W, H - horizon);
+    ctx.fillStyle = '#ff5a8a'; ctx.fillRect(0, horizon, W, 4);
+    ctx.fillStyle = '#1fc2b1';
+    for (let i = 0; i < 12; i++) {
+      const k = ((i + (t * 0.8) % 1) / 12), y = horizon + Math.pow(k, 2.2) * (H - horizon);
+      ctx.fillRect(0, Math.round(y), W, 3);
+    }
+    ctx.strokeStyle = '#1fc2b1'; ctx.lineWidth = 3;
+    for (let i = -10; i <= 10; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 40, horizon); ctx.lineTo(W / 2 + i * 260, H); ctx.stroke(); }
+    // a pixel basketball bouncing across the grid
+    const bx = ((t * 160) % (W + 200)) - 100, by = H - 70 - Math.abs(Math.sin(t * 3.2)) * 120;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(bx - 20, H - 52, 40, 8);
+    ball(ctx, bx, by, 22, t * 4, false);
+  }
+
+
+
+  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();

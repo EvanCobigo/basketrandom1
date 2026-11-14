@@ -38,6 +38,8 @@ After play: make the sparks be reddish and orangish. the ball should bounce more
 
 After play: make the court less wide, and the character heads one pixel wider, make the legs one pixel closer to one another, largen the wobbling, to allow for horizontal movement for the player. when the jump key is being held to make the character shoot, the teammate shouldn't be jumping, they should be staying in place.
 
+After play: make the menu more retro with a retro font. add a background for the menu, dropshadow for the text. add animations to the buttons in the menu.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -74,7 +76,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Ball physics with ground, player, rim and backboard collisions
 - [x] Basket detection, scoreboard, score animation, screen shake, round reset
 - [x] Rounds: same rules every round (no modifiers); venue colours and player looks change
-- [x] Menu, pause, victory screen, restart
+- [x] Menu, pause, victory screen, restart: in the game's own 5x7 pixel font with drop shadows, over a retro sunset-and-grid backdrop on the title; buttons bob, lift with a blinking pointer on hover or focus, and squash when pressed; arrows or W/S and Enter pick
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch

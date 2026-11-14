@@ -20,6 +20,7 @@
 <script src="js/rounds.js"></script>
 <script src="js/scoring.js"></script>
 <script src="js/physics.js"></script>
+<script src="js/pixelfont.js"></script>
 <script src="js/render.js"></script>
 <script>
 'use strict';
@@ -85,8 +86,26 @@ canvas.addEventListener('pointerdown', e => {
   const r = canvas.getBoundingClientRect();
   const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
   const b = buttons.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-  if (b) { sfx.click(); b.action(); }
+  if (b) activate(b);
 });
+// Menus: the pointer lights the button under it; arrows or W/S move the focus; Enter presses it.
+let mouse = { x: -1, y: -1 }, menuFocus = 0, menuScene = '', menuPress = null;
+canvas.addEventListener('pointermove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouse = { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  const i = buttons.findIndex(b => mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h);
+  if (i >= 0) menuFocus = i;
+});
+/** Press a button: it squashes for a moment, then its action runs (on the game step, not a timer). */
+function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14, action: b.action, label: b.label }; }
+/** Arrow / W / S focus moves and Enter / Space presses, for any menu scene. */
+function menuKeys() {
+  if (!buttons.length) return false;
+  if (pressed('ArrowDown') || pressed('ArrowRight') || pressed('KeyS')) { menuFocus = (menuFocus + 1) % buttons.length; sfx.click(); }
+  if (pressed('ArrowUp') || pressed('ArrowLeft') || pressed('KeyW')) { menuFocus = (menuFocus + buttons.length - 1) % buttons.length; sfx.click(); }
+  if (pressed('Enter') || pressed('Space')) { activate(buttons[Math.min(menuFocus, buttons.length - 1)]); return true; }
+  return false;
+}
 
 // ---- Audio: started on first input, mute on M --------------------------------------------
 let audio = null, muted = false;
@@ -330,13 +349,13 @@ function snapToPalette(c, w, h) {
   }
   c.putImageData(img, 0, 0);
 }
-function drawCourt(fn) {
+function drawCourt(fn, snap = true) {
   const ps = Math.max(1, Math.round(tune.pixel_size)), pw = Math.ceil(W / ps), ph = Math.ceil(H / ps);
   if (pix.width !== pw || pix.height !== ph) { pix.width = pw; pix.height = ph; }
   pctx.setTransform(1 / ps, 0, 0, 1 / ps, 0, 0); pctx.imageSmoothingEnabled = false;
   pctx.fillStyle = '#14111f'; pctx.fillRect(0, 0, W, H);
   fn(pctx);
-  snapToPalette(pctx, pw, ph);
+  if (snap) snapToPalette(pctx, pw, ph);
   ctx.save(); ctx.imageSmoothingEnabled = false;
   if (state.shake > 0) ctx.translate(Math.round(Math.sin(state.t * 91) * state.shake / ps) * ps, Math.round(Math.cos(state.t * 77) * state.shake * 0.6 / ps) * ps);
   ctx.fillStyle = '#14111f'; ctx.fillRect(-50, -50, W + 100, H + 100);
@@ -373,7 +392,13 @@ function drawGame(opts = {}) {
   }
 }
 function overlay(a = 0.55) { ctx.fillStyle = `rgba(20,16,36,${a})`; ctx.fillRect(0, 0, W, H); }
-function btn(label, x, y, w, h, action, hint, size) { const b = { label, x, y, w, h, action, hint, size }; buttons.push(b); Render.button(ctx, b); }
+function btn(label, x, y, w, h, action, hint, scale) {
+  const i = buttons.length, b = { label, x, y, w, h, action, hint, scale, i, t: state.t + i * 0.4,
+    hot: menuFocus === i, pressT: menuPress && menuPress.label === label ? menuPress.t : 0 };
+  buttons.push(b); Render.button(ctx, b);
+}
+/** Pixel-font text with a drop shadow, for the menus. */
+function ptext(s, x, y, scale, color, o = {}) { return PixelFont.draw(ctx, s, x, y, Object.assign({ scale, color, shadow: Math.max(2, scale) }, o)); }
 
 const scenes = {
   figures: { // every unit side by side, each named, for the outline check (?scene=figures)
@@ -408,31 +433,36 @@ const scenes = {
       physStep(state.attract.map(a => a > 0));
       if (state.stall > 3) Physics.dropBall(world, tune);
       checkStall(dt); state.toastT = 0;
-      if (pressed('Enter') || pressed('Space')) newMatch();
+      menuKeys();
     },
     draw() {
-      drawGame({ hud: false }); overlay(0.45);
-      ctx.save(); ctx.translate(W / 2, 150); ctx.rotate(-0.05);
-      text('FLOP', -14, 0, 120, '#ff9a3c', { weight: 900, stroke: 14, align: 'right' });
-      text('HOOPS', 14, 10, 120, '#1fc2b1', { weight: 900, stroke: 14, align: 'left' });
-      ctx.restore();
-      text('Two wobbly ballers a side. Jump, shoot, bounce, dunk.', W / 2, 250, 22, '#ffffff', { stroke: 5 });
+      drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
+      // the title, bobbing gently, in the pixel font with an outline and a hard shadow
+      const bob = Math.round(Math.sin(state.t * 2) * 4);
+      ptext('FLOP', W / 2 - 18, 118 + bob, 14, '#ff9a3c', { align: 'right', outline: true, shadow: 10 });
+      ptext('HOOPS', W / 2 + 18, 118 - bob, 14, '#1fc2b1', { align: 'left', outline: true, shadow: 10 });
+      ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 212, 3, '#fff1a8');
       for (const team of [0, 1]) {
         const x = W / 2 + (team ? 250 : -250);
-        Render.rr(ctx, x - 160, 300, 320, 150, 18); Render.ink(ctx, 'rgba(29,26,43,0.85)', 5);
-        text(team ? 'PLAYER 2' : 'PLAYER 1', x, 328, 20, Render.TEAM_COLORS[team]);
-        text(Render.TEAM_NAMES[team].toUpperCase(), x, 356, 26, '#ffffff', { weight: 900 });
-        Render.keycap(ctx, x - 80, 404, team ? 'up' : 'W', 1);
-        text('jump/shoot', x - 80, 434, 14, '#c9c3e0', { weight: 700 });
-        Render.keycap(ctx, x + 60, 404, team ? 'down' : 'S', 1);
-        text('bounce/pass', x + 60, 434, 14, '#c9c3e0', { weight: 700 });
+        ctx.fillStyle = '#0a0618'; ctx.fillRect(x - 154, 256, 320, 150);
+        ctx.fillStyle = Render.INK; ctx.fillRect(x - 164, 246, 328, 158);
+        ctx.fillStyle = '#21183f'; ctx.fillRect(x - 160, 250, 320, 150);
+        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 160, 250, 320, 8);
+        ptext(team ? 'PLAYER 2' : 'PLAYER 1', x, 280, 3, Render.TEAM_COLORS[team]);
+        ptext(Render.TEAM_NAMES[team], x, 310, 4, '#ffffff');
+        Render.keycap(ctx, x - 80, 352, team ? 'up' : 'W', 1);
+        ptext('JUMP/SHOOT', x - 80, 384, 2, '#c9c3e0', { shadow: 2 });
+        Render.keycap(ctx, x + 60, 352, team ? 'down' : 'S', 1);
+        ptext('BOUNCE/PASS', x + 60, 384, 2, '#c9c3e0', { shadow: 2 });
       }
-      text('Hop as you swing to move. Catch with hand or belly.', W / 2, 470, 18, '#ffffff', { weight: 700, stroke: 4 });
-      text('With the ball: hold jump and let go to shoot (near the rim: dunk); hold bounce and let go to dribble or pass.', W / 2, 496, 16, '#ffffff', { weight: 700, stroke: 4 });
+      ctx.fillStyle = 'rgba(10,6,24,0.78)'; ctx.fillRect(W / 2 - 440, 420, 880, 66);   // a dark band so the help reads over the grid
+      ptext('HOP AS YOU SWING TO MOVE. CATCH WITH HAND OR BELLY.', W / 2, 432, 2, '#ffffff');
+      ptext('WITH THE BALL: HOLD JUMP, LET GO TO SHOOT (NEAR THE RIM: TAP TO DUNK).', W / 2, 452, 2, '#ffffff');
+      ptext('HOLD BOUNCE, LET GO TO DRIBBLE OR PASS.', W / 2, 472, 2, '#ffffff');
       buttons = [];
-      btn('PLAY', W / 2 - 130, 520, 260, 74, newMatch, 'Enter or Space', 40);
-      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);
-      text(`First to ${tune.win_score} baskets wins  ·  Esc / P pauses`, W / 2, H - 30, 17, '#c9c3e0', { weight: 700, stroke: 4 });
+      btn('PLAY', W / 2 - 130, 506, 260, 74, newMatch, 'ENTER OR SPACE', 6);
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
+      ptext(`FIRST TO ${tune.win_score} BASKETS WINS  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 22, 2, '#c9c3e0');
     },
   },
   card: { // the round card: physics frozen while it flips in
@@ -476,19 +506,20 @@ const scenes = {
   },
   pause: {
     update() {
+      if (menuKeys()) return;
       if (pressed('KeyP') || pressed('Escape')) scene = pauseFrom;
       else if (pressed('KeyR')) newMatch();
       else if (pressed('KeyQ')) toMenu();
     },
     draw() {
       drawGame(); overlay(0.6);
-      text('PAUSED', W / 2, 200, 80, '#ffd23f', { weight: 900, stroke: 12 });
-      text(`${Render.TEAM_NAMES[0]} ${state.score[0]}  -  ${state.score[1]} ${Render.TEAM_NAMES[1]}`, W / 2, 280, 28, '#ffffff', { stroke: 5 });
+      ptext('PAUSED', W / 2, 200, 12, '#ffd23f', { outline: true, shadow: 8 });
+      ptext(`${Render.TEAM_NAMES[0]} ${state.score[0]} - ${state.score[1]} ${Render.TEAM_NAMES[1]}`, W / 2, 280, 4, '#ffffff');
       buttons = [];
-      btn('RESUME', W / 2 - 140, 330, 280, 66, () => { scene = pauseFrom; }, 'P or Esc', 32);
-      btn('RESTART MATCH', W / 2 - 140, 430, 280, 66, newMatch, 'R', 26);
-      btn('MAIN MENU', W / 2 - 140, 530, 280, 66, toMenu, 'Q', 30);
-      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);
+      btn('RESUME', W / 2 - 150, 320, 300, 60, () => { scene = pauseFrom; }, 'P OR ESC', 5);
+      btn('RESTART', W / 2 - 150, 430, 300, 60, newMatch, 'R', 5);
+      btn('MAIN MENU', W / 2 - 150, 540, 300, 60, toMenu, 'Q', 4);
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
     },
   },
   results: { // the winners keep bouncing; the losers stand there
@@ -496,20 +527,20 @@ const scenes = {
       state.resultsT += dt; state.t += dt; updateJuice(dt);
       physStep([state.winner === 0, state.winner === 1]);
       if (state.resultsT > 0.6) {
-        if (pressed('Enter') || pressed('Space')) newMatch();
-        else if (pressed('KeyQ') || pressed('Escape')) toMenu();
+        if (menuKeys()) return;
+        if (pressed('KeyQ') || pressed('Escape')) toMenu();
       }
     },
     draw() {
       drawGame(); overlay(0.45);
       const team = state.winner;
       Render.crown(ctx, W / 2, 150, 2.4);
-      text(`${Render.TEAM_NAMES[team].toUpperCase()} WIN!`, W / 2, 240, 84, Render.TEAM_COLORS[team], { weight: 900, stroke: 13 });
-      text(`${state.score[0]}  -  ${state.score[1]}`, W / 2, 320, 54, '#ffffff', { weight: 900, stroke: 9 });
-      text(`after ${state.round} rounds`, W / 2, 370, 20, '#c9c3e0', { weight: 700, stroke: 4 });
+      ptext(`${Render.TEAM_NAMES[team]} WIN!`, W / 2, 240, 8, Render.TEAM_COLORS[team], { outline: true, shadow: 6 });
+      ptext(`${state.score[0]} - ${state.score[1]}`, W / 2, 320, 8, '#ffffff', { outline: true });
+      ptext(`AFTER ${state.round} ROUNDS`, W / 2, 370, 3, '#c9c3e0');
       buttons = [];
-      btn('REMATCH', W / 2 - 300, 430, 270, 74, newMatch, 'Enter or Space', 34);
-      btn('MAIN MENU', W / 2 + 30, 430, 270, 74, toMenu, 'Q or Esc', 32);
+      btn('REMATCH', W / 2 - 300, 430, 270, 74, newMatch, 'ENTER OR SPACE', 4);
+      btn('MAIN MENU', W / 2 + 30, 430, 270, 74, toMenu, 'Q OR ESC', 4);
     },
   },
 };
@@ -517,6 +548,8 @@ const scenes = {
 // ---- Loop: fixed step, frame time clamped ---------------------------------------------
 function step() {
   if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
+  if (scene !== menuScene) { menuScene = scene; menuFocus = 0; }
+  if (menuPress) { menuPress.t -= STEP; if (menuPress.t <= 0) { const a = menuPress.action; menuPress = null; a(); } }
   scenes[scene].update(STEP); hit.clear();
 }
 let last, acc = 0, ALPHA = 1; // ALPHA: how far the frame is between the last two steps
