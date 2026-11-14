@@ -63,6 +63,7 @@ const Render = (() => {
         ctx.fillStyle = shirt; ctx.fillRect(x - 9, y + 8, 18, 16);                          // shoulders
         if (hype > 0.3 && seed > 0.45) { ctx.fillStyle = skin; ctx.fillRect(x - 11, y - 10, 4, 14); ctx.fillRect(x + 7, y - 10, 4, 14); } // arms up
         ctx.fillStyle = skin; ctx.fillRect(x - 6, y - 4, 12, 12);                             // head
+        if (hype > 0.2 && (Math.abs(i * 37 + Math.floor(t * 14) * 101) % 97) < hype * 5) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 4, y - 2, 8, 8); }   // a camera flash
       }
     }
   }
@@ -149,6 +150,13 @@ const Render = (() => {
       ctx.restore();
     }
 
+    // the back arm: drawn only, behind the torso, hanging from the same shoulder line
+    ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(T.a); ctx.translate(0, -d.torsoH / 2 + 10); ctx.rotate(p.back || 0);
+    ctx.beginPath(); ctx.rect(-d.armW / 2, -5, d.armW, d.armL); ink(ctx, look.skin, 5);
+    ctx.beginPath(); ctx.rect(-d.armW * 0.6, d.armL - 5 - d.armW * 0.5, d.armW * 1.2, d.armW * 1.1); ink(ctx, look.skin, 4);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(-d.armW / 2, -5, d.armW, d.armL);   // a touch darker: it is the far arm
+    ctx.restore();
+
     ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(T.a);
     ctx.beginPath(); ctx.rect(-d.torsoW / 2, -d.torsoH / 2, d.torsoW, d.torsoH);
     ctx.fillStyle = kit.jersey; ctx.fill();
@@ -163,7 +171,10 @@ const Render = (() => {
 
     ctx.save(); ctx.translate(A.x, A.y); ctx.rotate(A.a);
     ctx.beginPath(); ctx.rect(-d.armW / 2, -d.armL / 2, d.armW, d.armL); ink(ctx, look.skin, 5);
-    ctx.beginPath(); ctx.rect(-d.armW * 0.6, d.armL / 2 - d.armW * 0.5, d.armW * 1.2, d.armW * 1.1); ink(ctx, look.skin, 4); // a small hand
+    // the hand; in a shot's follow-through the wrist bends over, palm down
+    const bend = p.followT > 0 ? dir * CONFIG.wrist_bend.value * Math.min(1, p.followT / 0.12) : 0;
+    ctx.translate(0, d.armL / 2 - d.armW * 0.3); ctx.rotate(bend);
+    ctx.beginPath(); ctx.rect(-d.armW * 0.6, -d.armW * 0.2, d.armW * 1.2, d.armW * (bend ? 1.5 : 1.1)); ink(ctx, look.skin, 4);
     ctx.restore();
   }
 

@@ -69,7 +69,7 @@ const Physics = (() => {
     const p = { team, idx, dir, torso, head, legs, arm, dims: d, look, group,
       parts: [torso, head, legs[0], legs[1], arm],
       touch: false, foot: false, sinceGround: 0, sinceFoot: 0, sinceJump: 9, cd: 0, grabCD: 0, downT: 0,
-      prevHeld: false, boosting: false, dribbleT: 0 };
+      prevHeld: false, boosting: false, dribbleT: 0, followT: 0, back: 0, slamRel: null };
     tag(torso, 'torso', p); tag(head, 'head', p); legs.forEach(l => tag(l, 'leg', p)); tag(arm, 'arm', p);
 
     const hx = d.hipX;
@@ -97,7 +97,7 @@ const Physics = (() => {
     engine.positionIterations = 10; engine.velocityIterations = 8; engine.constraintIterations = 4;
     const half = S.courtW / 2, L = CX - half, R = CX + half;
     const w = { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
-      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] };
+      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, dribbleBall: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] };
 
     const statics = [
       box(CX, FLOOR_Y + 200, 4000, 400, 'floor', { friction: 1 }),
@@ -180,7 +180,8 @@ const Physics = (() => {
   /** Put the ball back above centre court with a small random drift. */
   function dropBall(w, T) {
     if (w.hold) release(w, T, 0);
-    if (w.dunk) { w.dunk.p.slam = false; w.dunk = null; }
+    if (w.dunk) { w.dunk.p.slam = false; w.dunk.p.slamRel = null; w.dunk = null; }
+    w.dribbleBall = null;
     w.ball.collisionFilter.mask = 0x1 | 0x2 | 0x4; w.ghostUntil = 0;
     Body.setPosition(w.ball, { x: w.cx, y: w.floorY - T.drop_height });
     Body.setVelocity(w.ball, { x: (w.rng() - 0.5) * 2.4, y: 0 });
@@ -280,11 +281,20 @@ const Physics = (() => {
     // hanging otherwise. Letting go slaps it down through the front.
     const cocking = h && h.armed && held;
     const winding = h && h.barmed && h.bouncing;
-    const target = p.slam ? p.dir * 0.4 : cocking ? -p.dir * T.arm_cock_angle : winding ? -p.dir * 1.3 : held ? -p.dir * T.arm_up_angle : p.dir * 0.15;
+    if (p.followT > 0) p.followT -= dt;
+    const following = p.followT > 0, slamming = p.slamRel != null;
+    // dunking: the arm tracks the ball; after a shot: it trails forward in the follow-through
+    const target = slamming ? p.slamRel : following ? -p.dir * T.follow_angle : cocking ? -p.dir * T.arm_cock_angle
+      : winding ? -p.dir * 1.3 : held ? -p.dir * T.arm_up_angle : p.dir * 0.15;
     const rel = wrap(p.arm.angle - torso.angle);
     const err = wrap(target - rel);
-    const want = tav + clamp(err * T.arm_gain, -T.arm_max_speed, T.arm_max_speed);
-    Body.setAngularVelocity(p.arm, lerp(p.arm.angularVelocity, want, 0.55));
+    const amax = slamming ? 0.9 : T.arm_max_speed;
+    const want = tav + clamp(err * (slamming ? 0.6 : T.arm_gain), -amax, amax);
+    Body.setAngularVelocity(p.arm, lerp(p.arm.angularVelocity, want, slamming ? 0.9 : 0.55));
+    // The back arm is drawn only (no body): its angle from the torso eases toward a pose. It
+    // guides the ball up while cocking, then stays extended behind, lagging, through the release.
+    const backTarget = slamming ? rel * 0.6 : cocking ? -p.dir * (T.arm_cock_angle - 0.9) : following ? p.dir * T.back_arm_lag : -rel * 0.5;
+    p.back = lerp(p.back || 0, backTarget, following ? 0.16 : 0.2);
 
     // Jump: a tap is a short hop; keeping the key down lifts it to full height. Holding keeps
     // hopping on landing, except for a ball carrier, who is busy with the ball.
@@ -348,6 +358,7 @@ const Physics = (() => {
     const con = Constraint.create({ bodyA: p.arm, pointA: { x: -Math.sin(aa) * reach, y: Math.cos(aa) * reach }, bodyB: ball,
       pointB: { x: 0, y: 0 }, length: 0, stiffness: 0.6, damping: 0.1 });
     Composite.add(w.engine.world, con);
+    if (w.dribbleBall) { w.dribbleBall = null; ball.collisionFilter.mask = 0x1 | 0x2 | 0x4; }
     const ownDribble = how === 'dribble' || (w.lastBouncer === p && p.dribbleT > 0);
     w.lastBouncer = null; w.passGuard = null; w.pass = null;
     if (!ownDribble) for (const q of w.players) { q.dribbleT = 0; q.dribbleChain = 0; }
@@ -384,6 +395,7 @@ const Physics = (() => {
     const disc = vy * vy - 2 * g * Y;
     if (X > 30 && disc > 0) vx = lerp(vx, X / ((vy + Math.sqrt(disc)) / g) / ((1 + Math.pow(1 - ball.frictionAir, 60)) / 2), T.shot_assist);
     release(w, T, 0.2);
+    p.followT = T.follow_time;   // classic form: shooting arm trails forward, wrist bent, palm down
     Body.setVelocity(ball, { x: vx * p.dir, y: -vy });
     Body.setAngularVelocity(ball, -p.dir * 0.2);
     const line = predictLine(w, T, hoop);
@@ -446,8 +458,12 @@ const Physics = (() => {
       p.lastDribble = w.time;
       const wild = (p.sloppy + Math.max(0, p.dribbleChain - T.dribble_safe_chain) * 0.5) * T.dribble_error;
       const steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);
-      p.dribbleSteer = steer;   // the lean at the tap: the ball and the slide both go that way until it comes back
-      Body.setVelocity(ball, { x: T.dribble_vx * (steer + 0.25 * p.dir) + (w.rng() * 2 - 1) * wild, y: T.dribble_vy + (w.rng() * 2 - 1) * wild * 0.5 });
+      // every dribble carries you a little forward; leaning forward in the swing carries you further
+      p.dribbleSteer = p.dir * (0.45 + 0.55 * Math.max(0, steer * p.dir));
+      // a dribbled ball passes through opponents' bodies: only an opponent's hand can take it
+      ball.collisionFilter.mask = 0x1 | TEAM_CAT[p.team];
+      w.dribbleBall = { team: p.team, until: w.time + T.dribble_time + 0.6 };
+      Body.setVelocity(ball, { x: T.dribble_vx * (p.dribbleSteer + 0.25 * p.dir) + (w.rng() * 2 - 1) * wild, y: T.dribble_vy + (w.rng() * 2 - 1) * wild * 0.5 });
       Body.setAngularVelocity(p.torso, p.torso.angularVelocity + (w.rng() * 2 - 1) * T.dribble_sway * p.sloppy * 0.01);
       p.dribbleT = T.dribble_time; p.cd = 0;
       p.lastQuality = quality;
@@ -470,46 +486,83 @@ const Physics = (() => {
       && (hoop.boardX - p.torso.position.x) * p.dir > 0;
   }
 
-  /** Start a dunk: the ball leaves the hand on a short controlled arc that ends above the rim. */
+  const DUNK_STYLES = ['tomahawk', 'windmill', 'elbow'];
+  /**
+   * Start a dunk in one of three styles, picked at random:
+   * tomahawk (ball cocked back behind the head, then swung down), windmill (ball swung in a full
+   * circle below and behind the waist, then snapped up and in), elbow (the honey dip: in quickly,
+   * then hanging by the forearm inside the rim). Tomahawks and windmills hang on the rim by the
+   * hand afterwards with chance T.dunk_hang_chance; an elbow dunk always hangs.
+   */
   function startDunk(w, T, hoop) {
     const p = w.hold.p, ball = w.ball;
-    release(w, T, T.dunk_time + 0.4);
-    ball.collisionFilter.mask = 0; w.ghostUntil = 0;   // carried through, nothing knocks it off its path
-    w.dunk = { p, hoop, t: 0, from: { x: ball.position.x, y: ball.position.y } };
+    const style = DUNK_STYLES[Math.floor(w.rng() * DUNK_STYLES.length) % DUNK_STYLES.length];
+    const hang = style === 'elbow' || w.rng() < T.dunk_hang_chance;
+    const dur = T.dunk_time * (style === 'windmill' ? 1.7 : style === 'tomahawk' ? 1.35 : 1);
+    release(w, T, dur + 0.4);
+    ball.collisionFilter.mask = 0; w.ghostUntil = 0; w.dribbleBall = null;   // carried through, nothing knocks it off its path
+    w.dunk = { p, hoop, t: 0, from: { x: ball.position.x, y: ball.position.y }, style, hang, dur };
     p.slam = true;
-    w.onEvent({ type: 'dunkstart', team: p.team });
+    w.onEvent({ type: 'dunkstart', team: p.team, style });
   }
 
-  /** Move the dunk on one step: the ball arcs over and down through the rim, the body follows it in. */
+  /** Where the arm must point (as an angle from the torso) for the hand to reach (x, y). */
+  function armToward(p, x, y) {
+    const t = p.torso, a = t.angle, oy = -p.dims.torsoH / 2 + 10;
+    const sx = t.position.x - Math.sin(a) * oy, sy = t.position.y + Math.cos(a) * oy;   // the shoulder
+    return wrap(Math.atan2(-(x - sx), y - sy) - a);
+  }
+
+  /** Move the dunk on one step: the ball follows its style's path into the rim, the body follows it in. */
   function stepDunk(w, T, dt) {
     const d = w.dunk, p = d.p, h = d.hoop, ball = w.ball, r = ball.r;
     d.t += dt;
     if (!d.body) d.body = { x: p.torso.position.x, y: p.torso.position.y };
-    const k = Math.min(1, d.t / T.dunk_time);
+    const k = Math.min(1, d.t / d.dur);
     const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;   // ease in and out
     const end = { x: h.cx, y: h.rimY - r - 4 };
     const ctrl = { x: lerp(d.from.x, end.x, 0.4), y: Math.min(d.from.y, end.y) - T.dunk_lift };
     const q = (a, b2, c2) => (1 - e) * (1 - e) * a + 2 * (1 - e) * e * b2 + e * e * c2;
+    // where the body ends up: under the rim's front edge; an elbow hang sits closer and higher
+    const hang = d.style === 'elbow' ? { x: h.cx - p.dir * (h.span / 2 + 2), y: h.rimY + 36 } : { x: h.cx - p.dir * (h.span / 2 + 16), y: h.rimY + 46 };
     if (!d.slammed) {
-      const nx = q(d.from.x, ctrl.x, end.x), ny = q(d.from.y, ctrl.y, end.y);
+      let nx, ny;
+      if (d.style === 'tomahawk') {          // back behind the head, then violently down
+        // the cock-back point rides with the dunker: at arm's length, up and behind the head
+        const t0 = p.torso, oy = -p.dims.torsoH / 2 + 10, L = p.dims.armL + r * 0.5;
+        const cock = { x: t0.position.x - Math.sin(t0.angle) * oy - p.dir * L * 0.5, y: t0.position.y + Math.cos(t0.angle) * oy - L * 0.87 };
+        if (k < 0.6) { const u = k / 0.6, eu = 1 - (1 - u) * (1 - u); nx = lerp(d.from.x, cock.x, eu); ny = lerp(d.from.y, cock.y, eu); d.cock = { x: nx, y: ny }; }
+        else { const u = (k - 0.6) / 0.4, eu = u * u, c0 = d.cock || cock; nx = lerp(c0.x, end.x, eu); ny = lerp(c0.y, end.y, eu) - Math.sin(u * Math.PI) * 22; }
+      } else if (d.style === 'windmill') {   // a full circle: back, down past the waist, forward, up and in
+        const R = T.windmill_radius * Math.sin(Math.PI * Math.min(1, k * 1.15));
+        nx = q(d.from.x, ctrl.x, end.x) - Math.sin(2 * Math.PI * k) * R * p.dir;
+        ny = q(d.from.y, ctrl.y, end.y) + (1 - Math.cos(2 * Math.PI * k)) * R;
+      } else { nx = q(d.from.x, ctrl.x, end.x); ny = q(d.from.y, ctrl.y, end.y); }
       Body.setVelocity(ball, { x: nx - ball.position.x, y: ny - ball.position.y });
       Body.setPosition(ball, { x: nx, y: ny });
+      p.slamRel = armToward(p, nx, ny);      // the arm goes where the ball goes
     }
-    // the dunker's body glides along its own eased path up to the front of the rim and hangs there
-    const hang = { x: h.cx - p.dir * (h.span / 2 + 16), y: h.rimY + 46 };
-    const bx = lerp(d.body.x, hang.x, e), by = q(d.body.y, Math.min(d.body.y, hang.y) - 20, hang.y);
+    // the dunker's body glides along its own eased path up to the rim; hanging, it sways a little
+    const sway = d.slammed ? Math.sin(d.hangT * 9) * 6 * Math.max(0, 1 - d.hangT) : 0;
+    const bx = lerp(d.body.x, hang.x, e) + sway, by = q(d.body.y, Math.min(d.body.y, hang.y) - 20, hang.y);
     const vx = (bx - p.torso.position.x) * 0.5, vy = (by - p.torso.position.y) * 0.5;
     for (const part of p.parts) Body.setVelocity(part, { x: lerp(part.velocity.x, vx, 0.6), y: lerp(part.velocity.y, vy, 0.6) });
     Body.setAngularVelocity(p.torso, lerp(p.torso.angularVelocity, (p.dir * 0.15 - wrap(p.torso.angle)) * 0.2, 0.5));
     if (k >= 1 && !d.slammed) {   // the slam: straight down through the rim
       d.slammed = true; d.hangT = 0;
+      d.hangFor = d.hang ? T.dunk_rim_hang * (d.style === 'elbow' ? 1.2 : 1) : T.dunk_hang;
       ball.collisionFilter.mask = 0x1 | 0x2 | 0x4;
       Body.setVelocity(ball, { x: 0, y: T.dunk_speed });
-      ball.shot = { team: p.team, t: w.time, kind: 'dunk', dir: p.dir, clean: true };
+      ball.shot = { team: p.team, t: w.time, kind: 'dunk', style: d.style, dir: p.dir, clean: true };
       h.wobble = 2;
-      w.onEvent({ type: 'dunk', team: p.team, x: h.cx, y: h.rimY });
+      w.onEvent({ type: 'dunk', team: p.team, x: h.cx, y: h.rimY, style: d.style, hang: d.hang });
     }
-    if (d.slammed && (d.hangT += dt) >= T.dunk_hang) { p.slam = false; w.dunk = null; }   // let go of the rim
+    if (d.slammed) {
+      // hand on the front of the rim; in an elbow hang the forearm reaches right inside the basket
+      p.slamRel = d.style === 'elbow' ? armToward(p, h.cx + p.dir * h.span * 0.3, h.rimY + 4) : armToward(p, h.cx - p.dir * h.span / 2, h.rimY);
+      if (d.hang) h.wobble = Math.max(h.wobble, 0.5);
+      if ((d.hangT += dt) >= d.hangFor) { p.slam = false; p.slamRel = null; w.dunk = null; }   // let go of the rim
+    }
   }
 
   function possession(w, held, bheld, T, dt) {
@@ -587,6 +640,10 @@ const Physics = (() => {
     // a free ball: more than half of it inside someone's hand box, or touching an abdomen,
     // snaps it to that hand. Checked every step, so a ball resting against a player is caught too.
     for (const p of w.players) {
+      if (w.dribbleBall && p.team !== w.dribbleBall.team) {   // a dribble: opponents take it with a hand, or not at all
+        if (p.grabCD <= 0 && shareInHandBox(p, ball, T) > 0.5) { grab(w, p, T, 'steal', held[p.team]); break; }
+        continue;
+      }
       if (!canCatch(p)) continue;
       // a dribbler gets their own bounce back on its way up, within reach of the hand
       const own = p === w.lastBouncer && ball.velocity.y < 0 && (() => { const hp = handPos(p); return Math.hypot(hp.x - ball.position.x, hp.y - ball.position.y) < ball.r + T.dribble_reach; })();
@@ -615,7 +672,8 @@ const Physics = (() => {
   function step(w, held, T, dt, bheld = [false, false]) {
     w.time += dt;
     w.bheld = bheld;
-    if (w.ghostUntil && w.time >= w.ghostUntil) { w.ghostUntil = 0; if (!w.dunk) w.ball.collisionFilter.mask = 0x1 | 0x2 | 0x4; }
+    if (w.ghostUntil && w.time >= w.ghostUntil) { w.ghostUntil = 0; if (!w.dunk && !w.dribbleBall) w.ball.collisionFilter.mask = 0x1 | 0x2 | 0x4; }
+    if (w.dribbleBall && w.time >= w.dribbleBall.until) { w.dribbleBall = null; if (!w.dunk && !w.hold) w.ball.collisionFilter.mask = 0x1 | 0x2 | 0x4; }   // a dribble that got away is a loose ball again
     for (const b of w.dynamic) { b._px = b.position.x; b._py = b.position.y; b._pa = b.angle; }
     // while a team has the ball, its key belongs to the carrier: the teammate stays planted
     const busy = q => (w.hold && w.hold.p.team === q.team && w.hold.p !== q) || (w.dunk && w.dunk.p.team === q.team && w.dunk.p !== q);

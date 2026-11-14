@@ -51,6 +51,9 @@ window.CONFIG = {
   dunk_body_range: { value: 175, min: 60, max: 300, step: 5 },  // px from the carrier's body to the rim where TAP TO DUNK shows (standing or flying)
   dunk_time: { value: 0.38, min: 0.08, max: 0.6, step: 0.01 },  // s the slam motion takes
   dunk_hang: { value: 0.18, min: 0, max: 0.6, step: 0.02 },      // s the dunker hangs on the rim after the slam
+  dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk or windmill ends hanging on the rim
+  dunk_rim_hang: { value: 0.9, min: 0.2, max: 2, step: 0.05 },    // s of hanging on the rim when it happens
+  windmill_radius: { value: 55, min: 20, max: 100, step: 5 },     // px radius of a windmill dunk's circle
   dunk_lift: { value: 24, min: 0, max: 80, step: 2 },            // px the ball arcs up before coming down through
   block_window: { value: 0.9, min: 0.2, max: 2, step: 0.05 },   // s after a shot a defender's touch is a block
   block_pop: { value: 8, min: 2, max: 16, step: 0.5 },          // px/step a blocked ball flies back
@@ -112,6 +115,10 @@ window.CONFIG = {
   leg_follow: { value: 0.3, min: 0, max: 1, step: 0.05 },      // 0 floppy legs, 1 rigid legs
   arm_up_angle: { value: 2.5, min: 0.5, max: 3.1, step: 0.05 },// rad the arm lifts while the key is held
   arm_cock_angle: { value: 2.95, min: 1.5, max: 3.1, step: 0.05 }, // rad the arm swings back while cocking a shot
+  follow_time: { value: 0.45, min: 0, max: 1.2, step: 0.05 },     // s the shooting arm holds its follow-through
+  follow_angle: { value: 1.9, min: 0.8, max: 2.8, step: 0.05 },   // rad the shooting arm trails forward after release
+  wrist_bend: { value: 1.3, min: 0, max: 1.8, step: 0.05 },       // rad the wrist bends palm-down in the follow-through
+  back_arm_lag: { value: 1.0, min: 0, max: 2, step: 0.05 },       // rad the back arm stays extended behind after release
   arm_gain: { value: 0.3, min: 0.05, max: 1, step: 0.01 },     // arm motor gain
   arm_max_speed: { value: 0.32, min: 0.05, max: 0.8, step: 0.01 }, // rad/step arm swing limit
 
@@ -143,8 +150,10 @@ window.CONFIG = {
   crowd_hype_time: { value: 2.2, min: 0.3, max: 6, step: 0.1 },  // s the crowd stays on its feet after sparks fly
   fire_time: { value: 1.1, min: 0, max: 3, step: 0.1 },          // s the rim burns after a dunk
   spark_time: { value: 1.2, min: 0, max: 3, step: 0.1 },         // s the cold-spark machines fire on a dunk or a made fadeaway
-  pixel_size: { value: 3, min: 1, max: 6, step: 1 },           // screen px per art pixel on the court
+  pixel_size: { value: 3.5, min: 1, max: 6, step: 0.5 },           // screen px per art pixel on the court
   palette_snap: { value: 1, min: 0, max: 1, step: 1 },          // 1: snap every court pixel to the round's retro palette
   scanlines: { value: 0.12, min: 0, max: 0.5, step: 0.01 },     // darkness of the CRT scanlines
+  vignette: { value: 0.35, min: 0, max: 0.8, step: 0.05 },        // darkness of the screen corners
+  dunk_hitstop: { value: 4, min: 0, max: 12, step: 1 },           // frames frozen on a dunk's slam
   shake: { value: 16, min: 0, max: 40, step: 1 },              // px screen shake on a basket
 };

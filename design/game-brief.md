@@ -47,6 +47,8 @@ After play: improve dribbling mechanic
 
 After play: make it so that shots past the halfway point of the court count for two points, dunks count as one. make it play to 12
 
+After play: add an animation to the shooting where the back arm is extended and lagging back while the front arm trails forward with a bent wrist with palm down (classic shooting form). add different animations to dunks: [Tomahawk Dunk: Cocking the ball back behind your head with one or both hands before violently swinging it down through the rim, Windmill: Swinging the ball in a full circular motion below and behind your waist before snapping it up through the basket, Elbow Hang (The Honey Dip): Hanging on the rim by sliding your entire forearm/elbow inside the basket]. Add a 50% chance to hang on the rim after dunking. when dribbling, make character move slightly forward with each dribble, the ball doesn't interact with the opponents unless it touches the opponent hands (where it can be stolen). once completed, add slight bit more pixilation, and I mean just a small amount. Then add small details to make it more polished. Simple polish that's it. Do whatever you want.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -60,7 +62,7 @@ After play: make it so that shots past the halfway point of the court count for 
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court (860 px); everything chunky (3 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court (860 px); everything chunky (3.5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -95,6 +97,10 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Only opponents collide; teammates pass through each other
 - [x] Planted players pivot on their feet, swinging evenly forward and back (±0.55 rad) at a beat that never fades, so a well-timed hop carries them far; fallen players get back up
 - [x] While a team has the ball, its key moves only the carrier: the teammate stays planted
+- [x] Shooting form: a second (back) arm guides the ball up, then stays extended behind while the shooting arm trails forward with the wrist bent palm-down
+- [x] Three dunk styles at random: tomahawk (cocked behind the head, swung down), windmill (a full circle below the waist, snapped up and in), honey dip (hanging by the forearm inside the rim); tomahawks and windmills hang on the rim half the time
+- [x] Every dribble carries the dribbler a little forward; a dribbled ball passes through opponents' bodies and only an opponent's hand can steal it
+- [x] Polish: points float up off the rim, a few frozen frames on a dunk's slam, darker screen corners, camera flashes in the crowd when it is hyped
 - [x] VS CPU mode: the computer plays the Tealbacks with the same two keys a person has (hops on the swing to the ball, shoots by distance with some error, taps to dunk, jumps to block, sometimes passes); 2 PLAYERS mode on one keyboard
 - [x] No erratic launches: the planted swing takes over only near upright and turns no faster than itself; a tumbling body's hop is steered no harder than a full swing; body parts capped at 22 px/step outside dunks; hops carry by the lean (hop_reach)
 - [x] Shots: one arc per cock-back and spot (forward 3.5-14, up 11-13, 1 s cock-back); lean, drift and momentum change nothing; strong aim help toward the rim's centre
