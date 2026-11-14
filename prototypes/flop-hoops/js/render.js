@@ -7,7 +7,7 @@
  * with thick ink outlines. It reads physics bodies and game state; it never changes either.
  */
 const Render = (() => {
-  const INK = '#1d1a2b', LW = 4.5;
+  const INK = '#1d1a2b', LW = 6;
   const TEAM_NAMES = ['Tangerines', 'Tealbacks'];
   const TEAM_COLORS = ['#ff9a3c', '#1fc2b1'];
   const TEAM_DARK = ['#b5461b', '#118580'];
@@ -257,100 +257,73 @@ const Render = (() => {
     ctx.beginPath(); ctx.ellipse(x, f + 6, r * k, 7 * k, 0, 0, Math.PI * 2); ctx.fill();
   }
 
-  /** Draw one ragdoll. `kit` is the team's colours, `look` the player's own; eyes track `target`. */
+  /** Draw one ragdoll as simple blocks. `kit` is the team's colours, `look` the player's own; eyes track `target`. */
   function player(ctx, p, al, kit, target) {
     const d = p.dims, look = p.look, dir = p.dir;
     const T = pose(p.torso, al), Hd = pose(p.head, al), A = pose(p.arm, al);
-    shadow(ctx, T.x, T.y + d.torsoH, 30);
+    shadow(ctx, T.x, T.y + d.torsoH, 28);
 
     for (const leg of p.legs) {
       const P = pose(leg, al);
       ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.a);
-      rr(ctx, -d.legW / 2, -d.legL / 2, d.legW, d.legL, d.legW / 2); ink(ctx, look.skin);
-      rr(ctx, -d.legW / 2, d.legL / 2 - 17, d.legW, 9, 3); ink(ctx, '#ffffff', 3);
-      ctx.beginPath(); // shoe, toe pointing the way the team attacks
-      ctx.moveTo(-d.legW / 2 - dir * 2, d.legL / 2 - 8);
-      ctx.quadraticCurveTo(dir * (d.legW + 6), d.legL / 2 - 10, dir * (d.legW + 4), d.legL / 2 + 3);
-      ctx.lineTo(-dir * (d.legW / 2 + 2), d.legL / 2 + 4); ctx.closePath();
-      ink(ctx, look.shoe, 3.5);
+      ctx.beginPath(); ctx.rect(-d.legW / 2, -d.legL / 2, d.legW, d.legL); ink(ctx, look.skin);
+      ctx.beginPath(); ctx.rect(-d.legW / 2, d.legL / 2 - 16, d.legW, 8); ink(ctx, '#ffffff', 3);
+      ctx.beginPath(); ctx.rect(dir > 0 ? -d.legW / 2 - 2 : -d.legW / 2 - 10, d.legL / 2 - 8, d.legW + 12, 11); ink(ctx, look.shoe);
       ctx.restore();
     }
 
-    // torso: jersey over shorts, a side stripe and the number
+    // torso: a plain jersey block over shorts, with one trim stripe
     ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(T.a);
-    rr(ctx, -d.torsoW / 2, -d.torsoH / 2, d.torsoW, d.torsoH, 16);
-    ctx.save(); ctx.clip();
-    ctx.fillStyle = kit.jersey; ctx.fillRect(-d.torsoW / 2, -d.torsoH / 2, d.torsoW, d.torsoH);
-    ctx.fillStyle = kit.shorts; ctx.fillRect(-d.torsoW / 2, d.torsoH / 2 - d.torsoH * 0.34, d.torsoW, d.torsoH);
-    ctx.fillStyle = kit.trim; ctx.fillRect(-d.torsoW / 2, d.torsoH / 2 - d.torsoH * 0.34 - 4, d.torsoW, 5);
-    ctx.fillRect(-dir * d.torsoW / 2 - 3, -d.torsoH / 2, 8 * dir, d.torsoH);
-    ctx.restore();
+    ctx.beginPath(); ctx.rect(-d.torsoW / 2, -d.torsoH / 2, d.torsoW, d.torsoH);
+    ctx.fillStyle = kit.jersey; ctx.fill();
+    ctx.fillStyle = kit.shorts; ctx.fillRect(-d.torsoW / 2, d.torsoH / 2 - d.torsoH * 0.34, d.torsoW, d.torsoH * 0.34);
+    ctx.fillStyle = kit.trim; ctx.fillRect(-d.torsoW / 2, -d.torsoH * 0.12, d.torsoW, 7);
     ink(ctx, null);
-    ctx.beginPath(); ctx.arc(0, -d.torsoH / 2, 11, 0, Math.PI); ctx.lineWidth = 3; ctx.strokeStyle = kit.trim; ctx.stroke();
-    text(ctx, String(look.num), dir * 3, -4, 20, kit.trim, { stroke: 4 });
     ctx.restore();
 
-    head(ctx, Hd.x, Hd.y, d.headR, T.a * 0.7, dir, look, kit, target, p.sinceGround > 0.15);
+    head(ctx, Hd.x, Hd.y, d.headS, T.a * 0.7, dir, look, kit, target, p.sinceGround > 0.15);
 
-    // the arm, on top: sleeve, skinny arm, mitten hand
+    // the arm, on top: a straight block with a square hand
     ctx.save(); ctx.translate(A.x, A.y); ctx.rotate(A.a);
-    rr(ctx, -d.armW / 2, -d.armL / 2, d.armW, d.armL, d.armW / 2); ink(ctx, look.skin);
-    rr(ctx, -d.armW / 2 - 2, -d.armL / 2 - 2, d.armW + 4, 16, 6); ink(ctx, kit.jersey, 3.5);
-    ctx.beginPath(); ctx.ellipse(0, d.armL / 2 - 1, d.armW * 0.75, d.armW * 0.62, 0, 0, Math.PI * 2); ink(ctx, look.skin, 3.5);
+    ctx.beginPath(); ctx.rect(-d.armW / 2, -d.armL / 2, d.armW, d.armL); ink(ctx, look.skin);
+    ctx.beginPath(); ctx.rect(-d.armW / 2 - 2, -d.armL / 2 - 2, d.armW + 4, 14); ink(ctx, kit.jersey, 3.5);
+    ctx.beginPath(); ctx.rect(-d.armW * 0.75, d.armL / 2 - d.armW * 0.6, d.armW * 1.5, d.armW * 1.3); ink(ctx, look.skin, 3.5);
     ctx.restore();
   }
 
-  function head(ctx, x, y, r, a, dir, look, kit, target, air) {
+  /** A square head with block hair, square eyes and a slot mouth. `s` is the side length. */
+  function head(ctx, x, y, s, a, dir, look, kit, target, air) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-    const st = look.style;
-    if (st === 'puff') { // big round hair behind the head
-      ctx.beginPath();
-      for (let i = 0; i < 9; i++) { const q = Math.PI * (0.85 + i * 0.165); ctx.arc(Math.cos(q) * r * 0.85 - dir * 3, Math.sin(q) * r * 0.85 - r * 0.15, r * 0.42, 0, Math.PI * 2); }
-      ctx.fillStyle = look.hair; ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-dir * 3, -r * 0.2, r * 1.22, r * 1.1, 0, 0, Math.PI * 2); ink(ctx, look.hair);
-    }
-    if (st === 'bun') { ctx.beginPath(); ctx.ellipse(-dir * r * 0.5, -r * 1.05, r * 0.42, r * 0.36, 0, 0, Math.PI * 2); ink(ctx, look.hair); }
-    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ink(ctx, look.skin);
-    ctx.beginPath(); ctx.ellipse(-dir * r * 0.55, r * 0.08, r * 0.17, r * 0.24, 0, 0, Math.PI * 2); ink(ctx, look.skin, 3); // ear
+    const h = s / 2, st = look.style, u = s / 8; // u: one "block" of detail
+    const blk = (bx, by, bw, bh, fill, lw = 3.5) => { ctx.beginPath(); ctx.rect(bx, by, bw, bh); ink(ctx, fill, lw); };
+    if (st === 'puff') blk(-h - u, -h - u * 1.6, s + u * 2, s * 0.85 + u, look.hair);         // big block of hair behind
+    if (st === 'bun') blk(-dir * u * 2 - u * 1.4, -h - u * 2.4, u * 2.8, u * 2.6, look.hair);
+    blk(-h, -h, s, s, look.skin, LW);
 
-    // hair and hats on top
+    // hair and hats: blocks only
     if (st === 'spikes') {
-      ctx.beginPath(); ctx.moveTo(-r * 0.95, -r * 0.15);
-      const n = 5;
-      for (let i = 0; i <= n; i++) {
-        const q = Math.PI + (i / n) * Math.PI;
-        const px = Math.cos(q) * r * 1.0, py = Math.sin(q) * r * 1.0;
-        const sx = Math.cos(q + 0.3) * r * 1.45, sy = Math.sin(q + 0.3) * r * 1.45;
-        ctx.lineTo(px, py); if (i < n) ctx.lineTo(sx - dir * 4, sy);
-      }
-      ctx.lineTo(r * 0.95, -r * 0.15); ctx.quadraticCurveTo(0, -r * 0.55, -r * 0.95, -r * 0.15); ink(ctx, look.hair, 3.5);
+      blk(-h, -h - u, s, u * 2, look.hair);
+      for (let i = 0; i < 3; i++) blk(-h + i * u * 2.8 - dir * u * 0.3, -h - u * 2.4, u * 1.6, u * 1.6, look.hair, 3);
     } else if (st === 'cap') {
-      ctx.beginPath(); ctx.arc(0, -r * 0.12, r * 1.02, Math.PI, 0); ctx.closePath(); ink(ctx, kit.shorts);
-      ctx.beginPath(); ctx.moveTo(dir * r * 0.6, -r * 0.2); ctx.quadraticCurveTo(dir * r * 1.6, -r * 0.22, dir * r * 1.75, -r * 0.05);
-      ctx.lineTo(dir * r * 0.6, -r * 0.05); ctx.closePath(); ink(ctx, kit.shorts, 3.5);
-      ctx.beginPath(); ctx.arc(0, -r * 1.12, r * 0.13, 0, Math.PI * 2); ink(ctx, kit.trim, 2.5);
+      blk(-h - 1, -h - u * 1.2, s + 2, u * 2.6, kit.shorts);
+      blk(dir > 0 ? h - 2 : -h - u * 3 + 2, -h + u * 0.6, u * 3, u * 0.9, kit.shorts, 3);
     } else if (st === 'mohawk') {
-      ctx.beginPath(); ctx.moveTo(-dir * r * 0.5, -r * 0.85);
-      ctx.quadraticCurveTo(-dir * r * 0.1, -r * 1.9, dir * r * 0.5, -r * 1.55);
-      ctx.quadraticCurveTo(dir * r * 0.3, -r * 1.1, dir * r * 0.45, -r * 0.88); ctx.closePath(); ink(ctx, look.hair, 3.5);
+      blk(-u, -h - u * 3, u * 2, u * 3.4, look.hair, 3);
     } else if (st === 'band' || st === 'bun' || st === 'puff') {
-      if (st !== 'puff') { ctx.beginPath(); ctx.arc(0, 0, r, Math.PI * 1.05, Math.PI * 1.95); ctx.closePath(); ink(ctx, look.hair, 3.5); }
-      ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r - 1, 0, Math.PI * 2); ctx.clip();
-      ctx.fillStyle = kit.trim === '#1d1a2b' ? '#ffffff' : kit.trim; ctx.fillRect(-r, -r * 0.5, r * 2, r * 0.26);
-      ctx.restore();
-      if (st === 'band') { ctx.beginPath(); ctx.moveTo(-dir * r * 0.9, -r * 0.38); ctx.lineTo(-dir * r * 1.45, -r * 0.1); ctx.lineTo(-dir * r * 1.35, -r * 0.48); ctx.closePath(); ink(ctx, kit.jersey, 3); }
+      if (st !== 'puff') blk(-h, -h, s, u * 1.6, look.hair, 3);
+      blk(-h, -h + u * 1.6, s, u * 1.1, kit.trim === '#1d1a2b' ? '#ffffff' : kit.trim, 3);
     }
 
-    // eyes look at the ball
+    // square eyes, pupils shifted toward the ball by whole blocks
     const la = Math.atan2(target.y - y, target.x - x) - a;
-    const ex = Math.cos(la) * r * 0.07, ey = Math.sin(la) * r * 0.07;
-    for (const [px, s] of [[dir * r * 0.22, 1], [dir * r * 0.64, 0.85]]) {
-      ctx.beginPath(); ctx.ellipse(px, -r * 0.05, r * 0.19 * s, r * 0.24, 0, 0, Math.PI * 2); ink(ctx, '#ffffff', 2.5);
-      ctx.beginPath(); ctx.ellipse(px + ex * 1.6, -r * 0.05 + ey * 1.8, r * 0.08, r * 0.11, 0, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+    const px = Math.round(Math.cos(la)) * u * 0.45, py = Math.round(Math.sin(la)) * u * 0.45;
+    for (const ex of [dir * u * 0.6, dir * u * 2.8]) {
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(ex - u, -u * 1.1, u * 2, u * 2);
+      ctx.fillStyle = INK; ctx.fillRect(ex - u * 0.5 + px, -u * 0.6 + py, u, u);
     }
-    ctx.lineWidth = 3; ctx.strokeStyle = INK;
-    if (air) { ctx.beginPath(); ctx.ellipse(dir * r * 0.48, r * 0.45, r * 0.11, r * 0.15, 0, 0, Math.PI * 2); ctx.fillStyle = '#7a2a35'; ctx.fill(); ctx.stroke(); }
-    else { ctx.beginPath(); ctx.arc(dir * r * 0.42, r * 0.28, r * 0.22, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke(); }
+    ctx.fillStyle = INK;
+    if (air) ctx.fillRect(dir * u * 1.8 - u * 0.5, u * 1.6, u, u * 1.2);   // open mouth in the air
+    else ctx.fillRect(dir * u * 1.8 - u * 0.9, u * 2, u * 1.8, u * 0.5);   // flat line on the ground
     ctx.restore();
   }
 
@@ -378,6 +351,12 @@ const Render = (() => {
     const B = pose(w.ball, al);
     for (const p of w.players) player(ctx, p, al, w.S.kits[p.team], B);
     ball(ctx, B.x, B.y, w.ball.circleRadius, B.a);
+    if (w.hold) { // the carrier's shot charge, a block meter over the head
+      const p = w.hold.p, Hd = pose(p.head, al), bw = 56, x = Hd.x - bw / 2, y = Hd.y - p.dims.headS - 26;
+      ctx.beginPath(); ctx.rect(x, y, bw, 12); ink(ctx, '#1d1a2b', 4);
+      ctx.fillStyle = w.hold.charge >= 1 ? '#ffd23f' : TEAM_COLORS[p.team];
+      ctx.fillRect(x + 2, y + 2, (bw - 4) * Math.floor(w.hold.charge * 8) / 8, 8);
+    }
     for (const h of w.hoops) hoopFront(ctx, h, t);
     if (B.y + w.ball.circleRadius < 0) { // ball above the screen: a marker at the top edge
       const x = Math.max(30, Math.min(W - 30, B.x));

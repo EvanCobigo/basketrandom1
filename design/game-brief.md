@@ -15,11 +15,13 @@ Build a Complete Basket Random Clone. Act as a senior full-stack game developer 
 
 Answers: Not a copy: Original in the genre. Build this?: Build it.
 
+After play: Allow for the character to grab the ball. Only allow collisions between enemies, not teammates. Make it look more pixelated. Make the characters look less make them look more just like simplistic. Allow the characters to grab the balls when you press the jump key. Make it so that the amount of time you hold on the jump key coincides with the amount of jump or the height of the jump. Then same thing, you keep holding to fire. Make the characters bobble side to side when they're not currently jumping, and eyes, as well as the cartoonish details, make them look a little bit more blocky. Implement dunking mechanics, as well as fadeaway mechanics, and blocks.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, and a court whose rules change every round.
 
 **Genre:** arcade sports (floppy physics sport)
 
-**Controls:** Player 1 W, Player 2 Up Arrow; each key drives both of that team's players; hold to keep hopping. Esc or P pauses.
+**Controls:** Player 1 W, Player 2 Up Arrow; each key drives both of that team's players. Tap to hop, hold to jump higher; holding while touching the ball grabs it; keep holding to charge, let go to shoot. Esc or P pauses.
 
 **Question:** Does one key plus floppy physics give a match that is chaotic, funny and still winnable on skill?
 
@@ -28,7 +30,7 @@ Answers: Not a copy: Original in the genre. Build this?: Build it.
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: bold flat-vector cut-out style with thick dark outlines; big round heads with simple faces, noodle arms, stubby legs; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: a big round card flips in naming the round's twist. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: pixelated (the court drawn at low resolution and scaled up), simple blocky characters with square heads, square eyes and block hair, thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: a big round card flips in naming the round's twist. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -54,12 +56,18 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Menu, pause, victory screen, restart
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
+- [x] Grab the ball by touching it with the key held; hold to charge, release to shoot
+- [x] Jump height follows how long the key is held
+- [x] Dunks near the rim, fadeaways when drifting or leaning away, blocks and steals by defenders
+- [x] Only opponents collide; teammates pass through each other
+- [x] Idle side-to-side bobble when not jumping
 
 ## Your systems
 - ragdoll physics · in the slice
 - randomised rounds · in the slice
 - local 2-player · in the slice
 - menus and game states · in the slice
+- ball handling (grab, shoot, dunk, fadeaway, block) · in the slice
 
 ## Keep
 -

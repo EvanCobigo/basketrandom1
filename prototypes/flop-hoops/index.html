@@ -129,6 +129,10 @@ const sfx = {
   whistle() { tone(2100, 0.12, 'sine', 0.12, 0, 2300); tone(2100, 0.28, 'sine', 0.12, 0.15, 2250); },
   win() { [392, 523, 659, 784, 659, 784, 1046].forEach((f, i) => tone(f, 0.22, 'square', 0.09, i * 0.12)); },
   click() { tone(660, 0.05, 'square', 0.06); },
+  grab() { tone(392, 0.06, 'square', 0.08); tone(523, 0.08, 'square', 0.06, 0.05); },
+  shoot(c) { tone(300 + c * 300, 0.16, 'triangle', 0.14, 0, 700 + c * 500); },
+  dunk() { tone(110, 0.3, 'square', 0.22, 0, 55); noise(0.25, 0.35, 700); },
+  block() { noise(0.12, 0.3, 1600); tone(180, 0.12, 'square', 0.12, 0, 90); },
 };
 
 // ---- Game state -----------------------------------------------------------------------
@@ -137,11 +141,21 @@ let scene, state, world = null, pauseFrom = 'play', prevTwists = [], prevVenue =
 function reset() {
   seed = Number(params.get('seed')) || CONFIG.seed;
   state = { t: 0, score: [0, 0], round: 0, twist: '', venue: '', settings: null, cardT: 0, scoredT: 0,
-    scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, particles: [], resultsT: 0, attract: [0, 0], gained: '' };
+    scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
   prevTwists = []; prevVenue = '';
 }
+const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
+function callout(s, team) { state.toast = s; state.toastT = 1.1; state.toastTeam = team; }
 function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); return; }
+  if (ev.type === 'grab') { sfx.grab(); events.push({ type: 'grab', team: ev.team }); return; }
+  if (ev.type === 'shoot' || ev.type === 'fadeaway') {
+    sfx.shoot(ev.charge); events.push({ type: ev.type, team: ev.team });
+    if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
+    return;
+  }
+  if (ev.type === 'dunk') { sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
+  if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
   if (ev.type !== 'hit' || ev.speed < 1.2) return;
   if (ev.on === 'player') { sfx.bop(ev.speed); events.push({ type: 'touch', team: ev.team }); }
   else if (ev.on === 'floor') sfx.floor(ev.speed);
@@ -166,9 +180,12 @@ function physStep(held) {
   return { prev, cur: { x: b.position.x, y: b.position.y } };
 }
 function heldKeys() { return KEYS.map(k => down.has(k)); }
+const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
 function score(hoop) {
-  const team = hoop.team;
-  state.score[team]++; state.pops[team] = 1; state.shake = tune.shake; state.scorer = team; state.scoredT = 0;
+  const team = hoop.team, shot = world.ball.shot;
+  state.scoreKind = shot && shot.team === team ? SCORE_KINDS[shot.kind] : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
+  state.toastT = 0; // the score banner names the shot; no callout on top of it
+  state.score[team]++; state.pops[team] = 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
   hoop.sway = 1.5;
   const c = [Render.TEAM_COLORS[team], '#ffd23f', '#ffffff', Render.TEAM_DARK[team]];
   for (let i = 0; i < 70; i++) {
@@ -189,26 +206,43 @@ function updateJuice(dt) {
 }
 /** A ball that stops moving (on a backboard top, wedged in a corner) is dropped again. */
 function checkStall(dt) {
-  const v = world.ball.velocity;
-  state.stall = Math.hypot(v.x, v.y) < 0.4 ? state.stall + dt : 0;
-  if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; state.toast = 'Re-drop!'; state.toastT = 1.2; sfx.whistle(); }
+  const b = world.ball, v = b.velocity, r = b.circleRadius;
+  const corner = (b.position.x < world.L + r + 40 || b.position.x > world.R - r - 40) && b.position.y > world.floorY - r * 2.5;
+  state.stall = !world.hold && (Math.hypot(v.x, v.y) < 0.4 || corner) ? state.stall + dt : 0;
+  if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; state.toast = 'Re-drop!'; state.toastT = 1.1; state.toastTeam = -1; sfx.whistle(); }
 }
 
 // ---- Scenes ---------------------------------------------------------------------------
-function drawGame(opts = {}) {
-  ctx.save();
-  if (state.shake > 0) ctx.translate(Math.sin(state.t * 91) * state.shake, Math.cos(state.t * 77) * state.shake * 0.6);
+// The court is drawn small into `pix` and scaled up with no smoothing: the pixel look.
+// Text and the HUD are drawn at full size on top, so they stay readable.
+const pix = document.createElement('canvas'), pctx = pix.getContext('2d');
+function drawCourt(fn) {
+  const ps = Math.max(1, Math.round(tune.pixel_size)), pw = Math.ceil(W / ps), ph = Math.ceil(H / ps);
+  if (pix.width !== pw || pix.height !== ph) { pix.width = pw; pix.height = ph; }
+  pctx.setTransform(1 / ps, 0, 0, 1 / ps, 0, 0); pctx.imageSmoothingEnabled = false;
+  pctx.fillStyle = '#14111f'; pctx.fillRect(0, 0, W, H);
+  fn(pctx);
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  if (state.shake > 0) ctx.translate(Math.round(Math.sin(state.t * 91) * state.shake / ps) * ps, Math.round(Math.cos(state.t * 77) * state.shake * 0.6 / ps) * ps);
   ctx.fillStyle = '#14111f'; ctx.fillRect(-50, -50, W + 100, H + 100);
-  Render.world(ctx, world, ALPHA, state.t, W, H, opts.hud === false ? null : () => Render.scoreboard(ctx, W, {
-    score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) }));
-  for (const p of state.particles) {
-    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.fillRect(-6, -3, 12, 6); ctx.restore();
+  ctx.drawImage(pix, 0, 0, pw * ps, ph * ps);
+  ctx.restore(); ctx.imageSmoothingEnabled = true;
+}
+function drawGame(opts = {}) {
+  drawCourt(c => {
+    Render.world(c, world, ALPHA, state.t, W, H, null);
+    for (const p of state.particles) { c.fillStyle = p.c; c.fillRect(p.x - 6, p.y - 6, 12, 12); }
+  });
+  if (opts.hud !== false) {
+    Render.scoreboard(ctx, W, { score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
+    if (scene === 'play' || scene === 'scored') text(state.twist.toUpperCase(), W / 2, 128, 16, '#ffffff', { stroke: 4 });
   }
-  ctx.restore();
-  if (opts.hud !== false && (scene === 'play' || scene === 'scored')) { // twist reminder under the scoreboard
-    text(state.twist.toUpperCase(), W / 2, 128, 16, '#ffffff', { stroke: 4 });
+  if (state.toastT > 0) {
+    const k = Math.min(1, (1.1 - state.toastT) / 0.12);
+    ctx.save(); ctx.translate(W / 2, 196); ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k);
+    text(state.toast, 0, 0, 44, state.toastTeam >= 0 ? Render.TEAM_COLORS[state.toastTeam] : '#ffd23f', { weight: 900, stroke: 9 });
+    ctx.restore();
   }
-  if (state.toastT > 0) text(state.toast, W / 2, 200, 40, '#ffd23f', { weight: 900, stroke: 8 });
 }
 function overlay(a = 0.55) { ctx.fillStyle = `rgba(20,16,36,${a})`; ctx.fillRect(0, 0, W, H); }
 function btn(label, x, y, w, h, action, hint, size) { const b = { label, x, y, w, h, action, hint, size }; buttons.push(b); Render.button(ctx, b); }
@@ -218,26 +252,27 @@ const scenes = {
     update(dt) { state.t += dt; },
     draw() {
       if (!world) buildRound(1);
-      ctx.fillStyle = '#2a2440'; ctx.fillRect(0, 0, W, H);
-      const names = ['spikes', 'cap', 'mohawk', 'puff', 'bun', 'band'];
       const styles = ['spikes', 'cap', 'mohawk', 'puff', 'bun', 'band'];
-      const p0 = world.players[0];
-      styles.forEach((st, i) => {
-        const team = i < 3 ? 0 : 1, src = world.players[team * 2];
-        const fake = Object.assign({}, src, { look: Object.assign({}, src.look, { style: st }) });
-        const dx = 120 + i * 140 - src.torso.position.x, dy = -180;
-        ctx.save(); ctx.translate(dx, dy);
-        Render.player(ctx, fake, 1, world.S.kits[team], { x: src.torso.position.x + 300, y: 300 });
-        ctx.restore();
-        text(i < 3 ? 'Tangerine' : 'Tealback', 120 + i * 140, 548, 16, Render.TEAM_COLORS[team], { stroke: 4 });
-        text(names[i], 120 + i * 140, 572, 16, '#ffffff', { stroke: 4 });
+      drawCourt(c => { // drawn through the same pixel buffer as play
+        c.fillStyle = '#2a2440'; c.fillRect(0, 0, W, H);
+        styles.forEach((st, i) => {
+          const team = i < 3 ? 0 : 1, src = world.players[team * 2];
+          const fake = Object.assign({}, src, { look: Object.assign({}, src.look, { style: st }) });
+          c.save(); c.translate(120 + i * 140 - src.torso.position.x, -180);
+          Render.player(c, fake, 1, world.S.kits[team], { x: src.torso.position.x + 300, y: 300 });
+          c.restore();
+        });
+        Render.ball(c, 1000, 380, 34, 0.4, false);
+        const h = world.hoops[1];
+        c.save(); c.translate(1150 - h.boardX, 420 - h.rimY); Render.hoopBack(c, h); Render.hoopFront(c, h, 0); c.restore();
       });
-      Render.ball(ctx, 1000, 380, 34, 0.4, false); text('Ball', 1000, 450, 16, '#ffffff', { stroke: 4 });
-      ctx.save(); ctx.translate(1150 - world.hoops[1].boardX, 420 - world.hoops[1].rimY);
-      const h = world.hoops[1]; Render.hoopBack(ctx, h); Render.hoopFront(ctx, h, 0); ctx.restore();
+      styles.forEach((st, i) => {
+        text(i < 3 ? 'Tangerine' : 'Tealback', 120 + i * 140, 548, 16, Render.TEAM_COLORS[i < 3 ? 0 : 1], { stroke: 4 });
+        text(st, 120 + i * 140, 572, 16, '#ffffff', { stroke: 4 });
+      });
+      text('Ball', 1000, 450, 16, '#ffffff', { stroke: 4 });
       text('Hoop', 1130, 560, 16, '#ffffff', { stroke: 4 });
       text('FLOP HOOPS: the cast', W / 2, 60, 34, '#ffd23f', { stroke: 6 });
-      void p0;
     },
   },
   title: {
@@ -265,7 +300,7 @@ const scenes = {
         Render.keycap(ctx, x, 404, team ? 'up' : 'W', 1);
         text(team ? 'Up Arrow' : 'W key', x + 82, 404, 16, '#c9c3e0', { weight: 700 });
       }
-      text('Hold to hop again and raise your arm. Let go to slap it down.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
+      text('Tap to hop, hold to jump higher. Touch the ball while holding to grab it; let go to shoot.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
       buttons = [];
       btn('PLAY', W / 2 - 130, 520, 260, 74, newMatch, 'Enter or Space', 40);
       btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);
@@ -305,7 +340,8 @@ const scenes = {
       const k = Math.min(1, state.scoredT / 0.25), team = state.scorer;
       ctx.save(); ctx.translate(W / 2, 250); ctx.scale(k, k); ctx.rotate(-0.04);
       text(`${Render.TEAM_NAMES[team].toUpperCase()} SCORE!`, 0, 0, 64, Render.TEAM_COLORS[team], { weight: 900, stroke: 11 });
-      text(`${state.score[0]} - ${state.score[1]}`, 0, 64, 36, '#ffffff', { weight: 900, stroke: 7 });
+      text(state.scoreKind, 0, 62, 40, '#ffd23f', { weight: 900, stroke: 8 });
+      text(`${state.score[0]} - ${state.score[1]}`, 0, 116, 36, '#ffffff', { weight: 900, stroke: 7 });
       ctx.restore();
       buttons = [];
     },
