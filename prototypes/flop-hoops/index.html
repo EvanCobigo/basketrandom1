@@ -91,6 +91,7 @@ canvas.addEventListener('pointerdown', e => {
   const b = buttons.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
   if (b) activate(b);
   else if (scene === 'settings') settingsClick(x, y);
+  else if (scene === 'title' && levelClick(x, y)) dragKey = 'ai_level';
 });
 // Settings list: the wheel scrolls it; clicking or dragging on a slider sets that value.
 let dragKey = null;
@@ -103,7 +104,8 @@ canvas.addEventListener('pointermove', e => {
   mouse = { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
   const i = buttons.findIndex(b => mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h);
   if (i >= 0) menuFocus = i;
-  if (dragKey && e.buttons) settingsSlide(dragKey, mouse.x);
+  if (dragKey === 'ai_level' && e.buttons && scene === 'title') Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (mouse.x - LEVEL.x) / LEVEL.w)) * 4));
+  else if (dragKey && e.buttons && scene === 'settings') settingsSlide(dragKey, mouse.x);
 });
 /** Press a button: it squashes for a moment, then its action runs (on the game step, not a timer). */
 function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14, action: b.action, label: b.label }; }
@@ -202,7 +204,7 @@ function onPhysEvent(ev) {
   }
   if (ev.type === 'dribbleout') { sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
   if (ev.type === 'bounce') { sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
-  if (ev.type === 'dunkstart') { sfx.grab(); events.push({ type: 'dunkstart', team: ev.team }); return; }
+  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team); world.hype = Math.max(world.hype || 0, 0.7); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
   if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 10, { speed: 320, life: 0.45, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; state.hitstop = tune.dunk_hitstop; events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
@@ -258,7 +260,8 @@ function bounceKeys() { return BOUNCE_KEYS.map(k => down.has(k)); }
 /** Both teams' keys this step: [jump keys, bounce keys]. Against the CPU, it presses the Tealbacks' keys. */
 function teamKeys() {
   const j = heldKeys(), b = bounceKeys();
-  if (cpu) { AI.update(cpu, world, tune, STEP * tune.game_speed); j[1] = cpu.jump; b[1] = cpu.bounce; }
+  if (cpu && scene === 'play') { AI.update(cpu, world, tune, STEP * tune.game_speed); j[1] = cpu.jump; b[1] = cpu.bounce; }
+  else if (cpu) { j[1] = false; b[1] = false; }   // the CPU stands down during a basket's celebration
   return [j, b];
 }
 function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
@@ -277,7 +280,7 @@ function score(hoop) {
   state.scoreKind = own ? (shot.perfect ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
     : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
   if (pts === 2) state.scoreKind = (shot.perfect ? 'PERFECT ' : '') + 'LONG SHOT!';
-  if (own && shot.kind === 'dunk' && DUNK_NAMES[shot.style]) state.scoreKind = DUNK_NAMES[shot.style];
+  if (own && shot.kind === 'dunk' && DUNK_NAMES[shot.style]) state.scoreKind = (shot.oop ? 'ALLEY-OOP ' : '') + DUNK_NAMES[shot.style];
   state.floats.push({ x: hoop.cx, y: hoop.rimY - 30, t: 1.1, text: '+' + pts, color: pts === 2 ? '#ff9a3c' : '#ffffff' });   // the points float up off the rim
   state.points = pts;
   state.toastT = 0; // the score banner names the shot; no callout on top of it
@@ -340,6 +343,14 @@ function checkStall(dt) {
   const corner = (b.position.x < world.L + r + 40 || b.position.x > world.R - r - 40) && b.position.y > world.floorY - r * 2.5;
   state.stall = !world.hold && (Math.hypot(v.x, v.y) < 0.4 || corner) ? state.stall + dt : 0;
   if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; state.toast = 'Re-drop!'; state.toastT = 1.1; state.toastTeam = -1; sfx.whistle(); }
+}
+
+// The CPU difficulty slider on the title: click or drag along it to pick a level.
+const LEVEL = { x: W / 2 - 150, y: 652, w: 300 };
+function levelClick(x, y) {
+  if (Math.abs(y - LEVEL.y) > 22 || x < LEVEL.x - 14 || x > LEVEL.x + LEVEL.w + 14) return false;
+  Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (x - LEVEL.x) / LEVEL.w)) * 4)); sfx.click();
+  return true;
 }
 
 // ---- Settings menu: every coefficient in config.js, by section ----------------------------
@@ -528,11 +539,24 @@ const scenes = {
       ptext('WITH THE BALL: HOLD JUMP, LET GO TO SHOOT (NEAR THE RIM: TAP TO DUNK).', W / 2, 452, 2, '#ffffff');
       ptext('TAP BOUNCE TO DRIBBLE (TAP AGAIN AS IT RISES), HOLD IT TO PASS.', W / 2, 472, 2, '#ffffff');
       buttons = [];
-      btn('VS CPU', W / 2 - 300, 506, 270, 74, () => newMatch('cpu'), 'PLAYER 1 VS COMPUTER', 4);
-      btn('2 PLAYERS', W / 2 + 30, 506, 270, 74, () => newMatch('2p'), 'ONE KEYBOARD', 4);
+      btn('VS CPU', W / 2 - 300, 500, 270, 64, () => newMatch('cpu'), 'PLAYER 1 VS COMPUTER', 4);
+      btn('2 PLAYERS', W / 2 + 30, 500, 270, 64, () => newMatch('2p'), 'ONE KEYBOARD', 4);
+      // CPU difficulty: a five-step slider with what the level does written under it
+      const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];
+      btn('<', LEVEL.x - 64, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv - 1), '', 4);
+      btn('>', LEVEL.x + LEVEL.w + 20, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv + 1), '', 4);
+      ptext(`CPU LEVEL ${lv}: ${L.name}`, W / 2, LEVEL.y - 34, 3, '#ffd23f');
+      ctx.fillStyle = '#0a0618'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w, 10);
+      ctx.fillStyle = '#1fc2b1'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w * (lv - 1) / 4, 10);
+      for (let n = 1; n <= 5; n++) {   // the five stops; the current one is the knob
+        const x = LEVEL.x + LEVEL.w * (n - 1) / 4, on = n === lv;
+        ctx.fillStyle = Render.INK; ctx.fillRect(x - (on ? 11 : 7), LEVEL.y - (on ? 15 : 9), on ? 22 : 14, on ? 30 : 18);
+        ctx.fillStyle = on ? '#ffffff' : n < lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - (on ? 8 : 4), LEVEL.y - (on ? 12 : 6), on ? 16 : 8, on ? 24 : 12);
+      }
+      ptext(L.does, W / 2, LEVEL.y + 32, 2, '#ffffff');
       btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3);
       btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
-      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 22, 2, '#c9c3e0');
+      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 14, 2, '#c9c3e0');
     },
   },
   settings: {

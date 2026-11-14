@@ -285,7 +285,7 @@ const Physics = (() => {
     const following = p.followT > 0, slamming = p.slamRel != null;
     // dunking: the arm tracks the ball; after a shot: it trails forward in the follow-through
     const target = slamming ? p.slamRel : following ? -p.dir * T.follow_angle : cocking ? -p.dir * T.arm_cock_angle
-      : winding ? -p.dir * 1.3 : held ? -p.dir * T.arm_up_angle : p.dir * 0.15;
+      : winding ? -p.dir * 1.3 : held ? -p.dir * T.arm_up_angle : p.dir * 0.15 - a * T.arm_hang;   // idle: hangs toward straight down, so it sways little
     const rel = wrap(p.arm.angle - torso.angle);
     const err = wrap(target - rel);
     const amax = slamming ? 0.9 : T.arm_max_speed;
@@ -293,8 +293,9 @@ const Physics = (() => {
     Body.setAngularVelocity(p.arm, lerp(p.arm.angularVelocity, want, slamming ? 0.9 : 0.55));
     // The back arm is drawn only (no body): its angle from the torso eases toward a pose. It
     // guides the ball up while cocking, then stays extended behind, lagging, through the release.
-    const backTarget = slamming ? rel * 0.6 : cocking ? -p.dir * (T.arm_cock_angle - 0.9) : following ? p.dir * T.back_arm_lag : -rel * 0.5;
-    p.back = lerp(p.back || 0, backTarget, following ? 0.16 : 0.2);
+    // (a real jump shot moves the off arm very little: it lifts a bit as a guide and settles back)
+    const backTarget = slamming ? rel * 0.4 : cocking || following ? -p.dir * T.back_arm_guide : -a * T.arm_hang;
+    p.back = lerp(p.back || 0, backTarget, cocking || following || slamming ? 0.12 : 0.4);   // idle: keeps up with the body, so it hangs still
 
     // Jump: a tap is a short hop; keeping the key down lifts it to full height. Holding keeps
     // hopping on landing, except for a ball carrier, who is busy with the ball.
@@ -359,10 +360,11 @@ const Physics = (() => {
       pointB: { x: 0, y: 0 }, length: 0, stiffness: 0.6, damping: 0.1 });
     Composite.add(w.engine.world, con);
     if (w.dribbleBall) { w.dribbleBall = null; ball.collisionFilter.mask = 0x1 | 0x2 | 0x4; }
+    const fromPass = !!(w.pass && w.pass.team === p.team && w.pass.from !== p && w.time < w.pass.until);   // caught off a teammate's pass
     const ownDribble = how === 'dribble' || (w.lastBouncer === p && p.dribbleT > 0);
     w.lastBouncer = null; w.passGuard = null; w.pass = null;
     if (!ownDribble) for (const q of w.players) { q.dribbleT = 0; q.dribbleChain = 0; }
-    w.hold = { p, con, t: 0, prevK: held, charge: 0, armed: !held, cocking: false, bcharge: 0, barmed: !bheldNow || ownDribble, bouncing: false, dunkReady: false };
+    w.hold = { p, con, fromPass, t: 0, prevK: held, charge: 0, armed: !held, cocking: false, bcharge: 0, barmed: !bheldNow || ownDribble, bouncing: false, dunkReady: false };
     ball.shot = null;
     w.onEvent({ type: how, team: p.team });
   }
@@ -495,15 +497,15 @@ const Physics = (() => {
    * hand afterwards with chance T.dunk_hang_chance; an elbow dunk always hangs.
    */
   function startDunk(w, T, hoop) {
-    const p = w.hold.p, ball = w.ball;
+    const p = w.hold.p, ball = w.ball, oop = w.hold.fromPass && w.hold.t < T.oop_window;   // alley-oop: dunked straight off a pass
     const style = DUNK_STYLES[Math.floor(w.rng() * DUNK_STYLES.length) % DUNK_STYLES.length];
     const hang = style === 'elbow' || w.rng() < T.dunk_hang_chance;
     const dur = T.dunk_time * (style === 'windmill' ? 1.7 : style === 'tomahawk' ? 1.35 : 1);
     release(w, T, dur + 0.4);
     ball.collisionFilter.mask = 0; w.ghostUntil = 0; w.dribbleBall = null;   // carried through, nothing knocks it off its path
-    w.dunk = { p, hoop, t: 0, from: { x: ball.position.x, y: ball.position.y }, style, hang, dur };
+    w.dunk = { p, hoop, t: 0, from: { x: ball.position.x, y: ball.position.y }, style, hang, dur, oop };
     p.slam = true;
-    w.onEvent({ type: 'dunkstart', team: p.team, style });
+    w.onEvent({ type: 'dunkstart', team: p.team, style, oop });
   }
 
   /** Where the arm must point (as an angle from the torso) for the hand to reach (x, y). */
@@ -533,10 +535,21 @@ const Physics = (() => {
         const cock = { x: t0.position.x - Math.sin(t0.angle) * oy - p.dir * L * 0.5, y: t0.position.y + Math.cos(t0.angle) * oy - L * 0.87 };
         if (k < 0.6) { const u = k / 0.6, eu = 1 - (1 - u) * (1 - u); nx = lerp(d.from.x, cock.x, eu); ny = lerp(d.from.y, cock.y, eu); d.cock = { x: nx, y: ny }; }
         else { const u = (k - 0.6) / 0.4, eu = u * u, c0 = d.cock || cock; nx = lerp(c0.x, end.x, eu); ny = lerp(c0.y, end.y, eu) - Math.sin(u * Math.PI) * 22; }
-      } else if (d.style === 'windmill') {   // a full circle: back, down past the waist, forward, up and in
-        const R = T.windmill_radius * Math.sin(Math.PI * Math.min(1, k * 1.15));
-        nx = q(d.from.x, ctrl.x, end.x) - Math.sin(2 * Math.PI * k) * R * p.dir;
-        ny = q(d.from.y, ctrl.y, end.y) + (1 - Math.cos(2 * Math.PI * k)) * R;
+      } else if (d.style === 'windmill') {
+        // The arm stays at full length and turns about the shoulder: clockwise on screen for the
+        // team attacking the right hoop (mirrored for the other), forward and down past the
+        // waist, back behind, up over the top, and on round until the ball is in the hoop.
+        const t0 = p.torso, oy = -p.dims.torsoH / 2 + 10, L = p.dims.armL - 5 + r * T.palm_offset;
+        const sx = t0.position.x - Math.sin(t0.angle) * oy, sy = t0.position.y + Math.cos(t0.angle) * oy;
+        if (d.th0 === undefined) {
+          d.th0 = Math.atan2(-(d.from.x - sx), d.from.y - sy);                       // where the arm points now
+          const thEnd = Math.atan2(-(end.x - hang.x), end.y - (hang.y + oy));       // where it must point at the rim
+          let turn = ((thEnd - d.th0) * p.dir) % (2 * Math.PI); if (turn < 0) turn += 2 * Math.PI;
+          if (turn < Math.PI * 1.2) turn += 2 * Math.PI;                             // always at least a full swing
+          d.turn = turn * p.dir;
+        }
+        const th = d.th0 + d.turn * e, fin = Math.max(0, (k - 0.85) / 0.15);
+        nx = lerp(sx - Math.sin(th) * L, end.x, fin * fin); ny = lerp(sy + Math.cos(th) * L, end.y, fin * fin);
       } else { nx = q(d.from.x, ctrl.x, end.x); ny = q(d.from.y, ctrl.y, end.y); }
       Body.setVelocity(ball, { x: nx - ball.position.x, y: ny - ball.position.y });
       Body.setPosition(ball, { x: nx, y: ny });
@@ -553,7 +566,7 @@ const Physics = (() => {
       d.hangFor = d.hang ? T.dunk_rim_hang * (d.style === 'elbow' ? 1.2 : 1) : T.dunk_hang;
       ball.collisionFilter.mask = 0x1 | 0x2 | 0x4;
       Body.setVelocity(ball, { x: 0, y: T.dunk_speed });
-      ball.shot = { team: p.team, t: w.time, kind: 'dunk', style: d.style, dir: p.dir, clean: true };
+      ball.shot = { team: p.team, t: w.time, kind: 'dunk', style: d.style, oop: d.oop, dir: p.dir, clean: true };
       h.wobble = 2;
       w.onEvent({ type: 'dunk', team: p.team, x: h.cx, y: h.rimY, style: d.style, hang: d.hang });
     }

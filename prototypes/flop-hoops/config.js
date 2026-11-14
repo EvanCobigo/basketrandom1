@@ -10,9 +10,9 @@ window.CONFIG = {
 
   // ---- Match ----
   win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
-  ai_skill: { value: 0.6, min: 0, max: 1, step: 0.05 },           // CPU: 0 sloppy and slow, 1 sharp and quick
-  ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at middling skill
-  ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at zero skill
+  ai_level: { value: 3, min: 1, max: 5, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend (what each does is in js/ai.js)
+  ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at the middle level
+  ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at the lowest level
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   score_time: { value: 1.4, min: 0.8, max: 4, step: 0.1 },     // s of celebration after a basket
@@ -49,11 +49,10 @@ window.CONFIG = {
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
   dunk_body_range: { value: 175, min: 60, max: 300, step: 5 },  // px from the carrier's body to the rim where TAP TO DUNK shows (standing or flying)
-  dunk_time: { value: 0.38, min: 0.08, max: 0.6, step: 0.01 },  // s the slam motion takes
+  dunk_time: { value: 0.75, min: 0.08, max: 1.5, step: 0.01 },  // s the slam motion takes
   dunk_hang: { value: 0.18, min: 0, max: 0.6, step: 0.02 },      // s the dunker hangs on the rim after the slam
   dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk or windmill ends hanging on the rim
   dunk_rim_hang: { value: 0.9, min: 0.2, max: 2, step: 0.05 },    // s of hanging on the rim when it happens
-  windmill_radius: { value: 55, min: 20, max: 100, step: 5 },     // px radius of a windmill dunk's circle
   dunk_lift: { value: 24, min: 0, max: 80, step: 2 },            // px the ball arcs up before coming down through
   block_window: { value: 0.9, min: 0.2, max: 2, step: 0.05 },   // s after a shot a defender's touch is a block
   block_pop: { value: 8, min: 2, max: 16, step: 0.5 },          // px/step a blocked ball flies back
@@ -70,6 +69,7 @@ window.CONFIG = {
   pass_guard: { value: 0.6, min: 0, max: 2, step: 0.05 },        // s after a bounce that opponents cannot catch it
   pass_ghost: { value: 0.3, min: 0, max: 1, step: 0.05 },        // s a pass passes straight through opponents
   pass_catch_window: { value: 1.5, min: 0.3, max: 3, step: 0.1 },  // s a pass can be taken off a teammate's legs or chest
+  oop_window: { value: 1.2, min: 0.2, max: 3, step: 0.1 },         // s after catching a pass that a dunk counts as an alley-oop
   dribble_threshold: { value: 0.25, min: 0, max: 1, step: 0.05 }, // bounce charge below which a release is a dribble
   dribble_vx: { value: 1.6, min: 0, max: 6, step: 0.1 },         // px/step forward speed of a dribble
   dribble_vy: { value: 6, min: 1, max: 14, step: 0.5 },          // px/step downward throw of a dribble
@@ -118,7 +118,8 @@ window.CONFIG = {
   follow_time: { value: 0.45, min: 0, max: 1.2, step: 0.05 },     // s the shooting arm holds its follow-through
   follow_angle: { value: 1.9, min: 0.8, max: 2.8, step: 0.05 },   // rad the shooting arm trails forward after release
   wrist_bend: { value: 1.3, min: 0, max: 1.8, step: 0.05 },       // rad the wrist bends palm-down in the follow-through
-  back_arm_lag: { value: 1.0, min: 0, max: 2, step: 0.05 },       // rad the back arm stays extended behind after release
+  back_arm_guide: { value: 0.3, min: 0, max: 2, step: 0.05 },     // rad the back arm lifts as a guide while shooting
+  arm_hang: { value: 0.7, min: 0, max: 1, step: 0.05 },           // how much idle arms hang straight down instead of swinging with the body
   arm_gain: { value: 0.3, min: 0.05, max: 1, step: 0.01 },     // arm motor gain
   arm_max_speed: { value: 0.32, min: 0.05, max: 0.8, step: 0.01 }, // rad/step arm swing limit
 
