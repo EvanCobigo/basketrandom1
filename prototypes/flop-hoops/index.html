@@ -33,7 +33,7 @@ const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.sp
 const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
 const W = 1280, H = 720;        // logical size
 const PIXEL = false;
-const FONT = '"Trebuchet MS", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif';
+const FONT = '"Courier New", ui-monospace, Menlo, Consolas, monospace'; // retro: a blocky monospace
 const TITLE = 'Flop Hoops';
 const CONTROLS = ['Player 1: W', 'Player 2: Up Arrow', 'Esc / P: pause', 'M: mute'];
 const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
@@ -168,17 +168,29 @@ function buildRound(round) {
   prevTwists = S.twists; prevVenue = S.venue;
   state.settings = S; state.round = round; state.twist = S.title; state.venue = S.venueName;
   world = Physics.createWorld(S, tune, rng, onPhysEvent);
+  buildPalette(S);
   state.stall = 0;
 }
 function newMatch() { reset(); nextRound(); events.push({ type: 'match' }); }
 function nextRound() { buildRound(state.round + 1); state.cardT = 0; scene = 'card'; sfx.whistle(); }
 function pauseGame() { pauseFrom = scene; scene = 'pause'; }
 function toMenu() { reset(); buildRound(1); scene = 'title'; }
+// Game speed: the physics advances tune.game_speed steps per game step (below 1 is slower).
+// A key held at any moment between physics steps still reaches the next one.
+let physAcc = 0, pending = [false, false];
 function physStep(held) {
   const b = world.ball, prev = { x: b.position.x, y: b.position.y };
-  Physics.step(world, held, tune, STEP);
+  pending = pending.map((p, i) => p || held[i]);
+  physAcc += tune.game_speed;
+  while (physAcc >= 1) {
+    const now = pending.map((p, i) => held[i] || (p && !physStepSaw[i]));
+    Physics.step(world, now, tune, STEP);
+    physStepSaw = now.slice(); pending = [false, false]; physAcc -= 1;
+  }
   return { prev, cur: { x: b.position.x, y: b.position.y } };
 }
+let physStepSaw = [false, false];
+function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
 function heldKeys() { return KEYS.map(k => down.has(k)); }
 const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
 function score(hoop) {
@@ -206,31 +218,68 @@ function updateJuice(dt) {
 }
 /** A ball that stops moving (on a backboard top, wedged in a corner) is dropped again. */
 function checkStall(dt) {
-  const b = world.ball, v = b.velocity, r = b.circleRadius;
+  const b = world.ball, v = b.velocity, r = b.r;
   const corner = (b.position.x < world.L + r + 40 || b.position.x > world.R - r - 40) && b.position.y > world.floorY - r * 2.5;
   state.stall = !world.hold && (Math.hypot(v.x, v.y) < 0.4 || corner) ? state.stall + dt : 0;
   if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; state.toast = 'Re-drop!'; state.toastT = 1.1; state.toastTeam = -1; sfx.whistle(); }
 }
 
 // ---- Scenes ---------------------------------------------------------------------------
-// The court is drawn small into `pix` and scaled up with no smoothing: the pixel look.
-// Text and the HUD are drawn at full size on top, so they stay readable.
-const pix = document.createElement('canvas'), pctx = pix.getContext('2d');
+// The court is drawn small into `pix`, cut down to a few shades per colour channel, and scaled
+// up with no smoothing, under faint scanlines: the retro look. Text and the HUD are drawn at full
+// size on top, so they stay readable.
+const pix = document.createElement('canvas'), pctx = pix.getContext('2d', { willReadFrequently: true });
+// The retro palette: every colour this round can draw (venue, kits, skins, ball, hoops), plus a
+// few steps between the sky's two colours. Each court pixel snaps to its nearest entry, which
+// removes soft edges and bands gradients. Lookups are cached per colour.
+let palette = null, paletteCache = new Map();
+function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function buildPalette(S) {
+  const v = Render.VENUES[S.venue], cols = new Set(['#1d1a2b', '#ffffff', '#14111f', '#2a2440', '#e8591a', '#8d93a8', '#3d4a7a',
+    '#e04a3a', '#ef4b35', '#c23c2c', '#f4f6fb', '#ffd23f', '#000000', '#4a4560', '#8a8296']);
+  for (const k of ['floor', 'edge', 'line', 'side', 'accent']) if (v[k].startsWith('#')) cols.add(v[k]);
+  for (const kit of S.kits) { cols.add(kit.jersey); cols.add(kit.shorts); }
+  for (const team of S.looks) for (const l of team) { cols.add(l.skin); cols.add(l.shoe); }
+  const out = [...cols].map(hexRGB);
+  const a = hexRGB(v.top), b = hexRGB(v.bottom);
+  for (let i = 0; i <= 5; i++) { const t = i / 5; out.push(a.map((x, j) => Math.round(x + (b[j] - x) * t))); out.push(a.map((x, j) => Math.round((x + (b[j] - x) * t) * 0.6))); }
+  palette = out; paletteCache = new Map();
+}
+function snapToPalette(c, w, h) {
+  if (!palette || tune.palette_snap < 1) return;
+  const img = c.getImageData(0, 0, w, h), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const key = d[i] << 16 | d[i + 1] << 8 | d[i + 2];
+    let m = paletteCache.get(key);
+    if (m === undefined) {
+      let best = 1e9;
+      for (let k = 0; k < palette.length; k++) {
+        const q = palette[k], dr = q[0] - d[i], dg = q[1] - d[i + 1], db = q[2] - d[i + 2], dist = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (dist < best) { best = dist; m = k; }
+      }
+      paletteCache.set(key, m);
+    }
+    const q = palette[m]; d[i] = q[0]; d[i + 1] = q[1]; d[i + 2] = q[2];
+  }
+  c.putImageData(img, 0, 0);
+}
 function drawCourt(fn) {
   const ps = Math.max(1, Math.round(tune.pixel_size)), pw = Math.ceil(W / ps), ph = Math.ceil(H / ps);
   if (pix.width !== pw || pix.height !== ph) { pix.width = pw; pix.height = ph; }
   pctx.setTransform(1 / ps, 0, 0, 1 / ps, 0, 0); pctx.imageSmoothingEnabled = false;
   pctx.fillStyle = '#14111f'; pctx.fillRect(0, 0, W, H);
   fn(pctx);
+  snapToPalette(pctx, pw, ph);
   ctx.save(); ctx.imageSmoothingEnabled = false;
   if (state.shake > 0) ctx.translate(Math.round(Math.sin(state.t * 91) * state.shake / ps) * ps, Math.round(Math.cos(state.t * 77) * state.shake * 0.6 / ps) * ps);
   ctx.fillStyle = '#14111f'; ctx.fillRect(-50, -50, W + 100, H + 100);
   ctx.drawImage(pix, 0, 0, pw * ps, ph * ps);
   ctx.restore(); ctx.imageSmoothingEnabled = true;
+  if (tune.scanlines > 0) { ctx.fillStyle = `rgba(0,0,0,${tune.scanlines})`; for (let y = 0; y < H; y += ps) ctx.fillRect(0, y, W, Math.max(1, ps / 2)); }
 }
 function drawGame(opts = {}) {
   drawCourt(c => {
-    Render.world(c, world, ALPHA, state.t, W, H, null);
+    Render.world(c, world, courtAlpha(), state.t, W, H);
     for (const p of state.particles) { c.fillStyle = p.c; c.fillRect(p.x - 6, p.y - 6, 12, 12); }
   });
   if (opts.hud !== false) {
@@ -252,26 +301,23 @@ const scenes = {
     update(dt) { state.t += dt; },
     draw() {
       if (!world) buildRound(1);
-      const styles = ['spikes', 'cap', 'mohawk', 'puff', 'bun', 'band'];
-      drawCourt(c => { // drawn through the same pixel buffer as play
+      const xs = [260, 520];
+      drawCourt(c => { // drawn through the same retro pipeline as play
         c.fillStyle = '#2a2440'; c.fillRect(0, 0, W, H);
-        styles.forEach((st, i) => {
-          const team = i < 3 ? 0 : 1, src = world.players[team * 2];
-          const fake = Object.assign({}, src, { look: Object.assign({}, src.look, { style: st }) });
-          c.save(); c.translate(120 + i * 140 - src.torso.position.x, -180);
-          Render.player(c, fake, 1, world.S.kits[team], { x: src.torso.position.x + 300, y: 300 });
+        [0, 1].forEach(team => {
+          const src = world.players[team * 2];
+          c.save(); c.translate(xs[team] - src.torso.position.x, -170);
+          Render.player(c, src, 1, world.S.kits[team]);
           c.restore();
         });
-        Render.ball(c, 1000, 380, 34, 0.4, false);
+        Render.ball(c, 820, 420, 34, 0, false);
         const h = world.hoops[1];
-        c.save(); c.translate(1150 - h.boardX, 420 - h.rimY); Render.hoopBack(c, h); Render.hoopFront(c, h, 0); c.restore();
+        c.save(); c.translate(1100 - h.boardX, 400 - h.rimY); Render.hoopBack(c, h); Render.hoopFront(c, h, 0); c.restore();
       });
-      styles.forEach((st, i) => {
-        text(i < 3 ? 'Tangerine' : 'Tealback', 120 + i * 140, 548, 16, Render.TEAM_COLORS[i < 3 ? 0 : 1], { stroke: 4 });
-        text(st, 120 + i * 140, 572, 16, '#ffffff', { stroke: 4 });
-      });
-      text('Ball', 1000, 450, 16, '#ffffff', { stroke: 4 });
-      text('Hoop', 1130, 560, 16, '#ffffff', { stroke: 4 });
+      text('Tangerines baller', xs[0], 560, 18, Render.TEAM_COLORS[0], { stroke: 4 });
+      text('Tealbacks baller', xs[1], 560, 18, Render.TEAM_COLORS[1], { stroke: 4 });
+      text('Ball', 820, 480, 18, '#ffffff', { stroke: 4 });
+      text('Hoop', 1080, 560, 18, '#ffffff', { stroke: 4 });
       text('FLOP HOOPS: the cast', W / 2, 60, 34, '#ffd23f', { stroke: 6 });
     },
   },
@@ -300,7 +346,7 @@ const scenes = {
         Render.keycap(ctx, x, 404, team ? 'up' : 'W', 1);
         text(team ? 'Up Arrow' : 'W key', x + 82, 404, 16, '#c9c3e0', { weight: 700 });
       }
-      text('Tap to hop, hold to jump higher. Touch the ball while holding to grab it; let go to shoot.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
+      text('Time hops with the rock. Catch with hand or belly; hold to cock back, let go to fire.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
       buttons = [];
       btn('PLAY', W / 2 - 130, 520, 260, 74, newMatch, 'Enter or Space', 40);
       btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);

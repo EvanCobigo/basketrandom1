@@ -17,11 +17,13 @@ Answers: Not a copy: Original in the genre. Build this?: Build it.
 
 After play: Allow for the character to grab the ball. Only allow collisions between enemies, not teammates. Make it look more pixelated. Make the characters look less make them look more just like simplistic. Allow the characters to grab the balls when you press the jump key. Make it so that the amount of time you hold on the jump key coincides with the amount of jump or the height of the jump. Then same thing, you keep holding to fire. Make the characters bobble side to side when they're not currently jumping, and eyes, as well as the cartoonish details, make them look a little bit more blocky. Implement dunking mechanics, as well as fadeaway mechanics, and blocks.
 
+After play: create a hitbox that surrounds the hand of the character, if more than half of the basketball is inside the box, the ball is teleported to the player's hand. Same process if the ball touches the abdomen, but not the foot. make the game speed slower, The player should be rocking forwards and backwards when feet are touching the floor. The vertical coefficient shouldn't be affected as much by the amount of cockback as opposed to the horizontal coefficient. Make the characters much slimmer and the hoops much smaller. Make it really look retro. The characters are currently just accumulating in a little blob at a certain point. If the foot hitbox is touching the floor, keep it grounded instead of slipping and allowing character to fall over eternally and never get back to bobbling back and forth to allow for character movement. Make it so that whenever the player holds on the key and the ball is in hand, the ball is in its cockback firing phase. When the ball is picked up out of air, the movement key needs to be let go, then the ball can be fired. Make the characters not have faces at all, just make them have a squircle shaped heads. The ball should be squircle shaped as well. Arms should be much longer, and shirts shouldn't have detail. we'll add that later.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, and a court whose rules change every round.
 
 **Genre:** arcade sports (floppy physics sport)
 
-**Controls:** Player 1 W, Player 2 Up Arrow; each key drives both of that team's players. Tap to hop, hold to jump higher; holding while touching the ball grabs it; keep holding to charge, let go to shoot. Esc or P pauses.
+**Controls:** Player 1 W, Player 2 Up Arrow; each key drives both of that team's players. Players rock forward and back while planted: time the hop with the rock to move. Tap to hop, hold to jump higher. The ball snaps to a hand when over half of it is in the hand box, or when it hits the abdomen (never the feet). With the ball, hold to cock back and let go to fire; after a catch made with the key down, let go once first. Esc or P pauses.
 
 **Question:** Does one key plus floppy physics give a match that is chaotic, funny and still winnable on skill?
 
@@ -30,7 +32,7 @@ After play: Allow for the character to grab the ball. Only allow collisions betw
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: pixelated (the court drawn at low resolution and scaled up), simple blocky characters with square heads, square eyes and block hair, thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: a big round card flips in naming the round's twist. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; slim faceless characters with squircle heads, long arms and plain shirts; a squircle ball; small hoops; thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: a big round card flips in naming the round's twist. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -56,11 +58,13 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Menu, pause, victory screen, restart
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
-- [x] Grab the ball by touching it with the key held; hold to charge, release to shoot
+- [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
+- [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held
 - [x] Dunks near the rim, fadeaways when drifting or leaning away, blocks and steals by defenders
 - [x] Only opponents collide; teammates pass through each other
-- [x] Idle side-to-side bobble when not jumping
+- [x] Planted players rock forward and back (timing the hop with the rock moves them); planted feet grip; fallen players get back up
+- [x] Slower game speed; players eased apart so they never pile into one blob
 
 ## Your systems
 - ragdoll physics · in the slice

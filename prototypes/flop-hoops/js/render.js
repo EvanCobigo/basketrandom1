@@ -25,7 +25,7 @@ const Render = (() => {
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
     ctx.lineWidth = lw; ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
   }
-  function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+  function rr(ctx, x, y, w, h) { ctx.beginPath(); ctx.rect(x, y, w, h); } // retro: every panel square-cornered
   function text(ctx, s, x, y, size, fill, o = {}) {
     ctx.font = `${o.weight || 800} ${size}px ${FONT}`;
     ctx.textAlign = o.align || 'center'; ctx.textBaseline = 'middle';
@@ -209,156 +209,123 @@ const Render = (() => {
   // ---- Hoops ----------------------------------------------------------------------------
   /** Pole, backboard face and the back half of the rim: drawn behind the players. */
   function hoopBack(ctx, h) {
-    const f = F(), outward = h.side, poleX = h.boardX + outward * 26;
-    ctx.beginPath(); ctx.rect(poleX - 8, h.rimY - 40, 16, f - h.rimY + 40); ink(ctx, '#8d93a8');
-    rr(ctx, poleX - 15, f - 70, 30, 70, 6); ink(ctx, '#3d4a7a');
-    ctx.beginPath(); ctx.rect(Math.min(poleX, h.boardX), h.rimY - 50, Math.abs(poleX - h.boardX), 12); ink(ctx, '#8d93a8');
-    // backboard face, seen at a slight angle
-    const fx = h.boardX, fw = outward * 30;
+    const f = F(), outward = h.side, poleX = h.boardX + outward * 20, top = h.boardTop, bot = h.boardBot;
+    ctx.beginPath(); ctx.rect(poleX - 6, top + 20, 12, f - top - 20); ink(ctx, '#8d93a8');
+    ctx.beginPath(); ctx.rect(poleX - 12, f - 56, 24, 56); ink(ctx, '#3d4a7a');
+    ctx.beginPath(); ctx.rect(Math.min(poleX, h.boardX), top + 24, Math.abs(poleX - h.boardX), 10); ink(ctx, '#8d93a8');
+    // backboard face, seen at a slight angle, with its target square
+    const fx = h.boardX, fw = outward * 22;
     ctx.beginPath();
-    ctx.moveTo(fx, h.rimY - 142); ctx.lineTo(fx + fw, h.rimY - 150); ctx.lineTo(fx + fw, h.rimY + 10); ctx.lineTo(fx, h.rimY + 18); ctx.closePath();
+    ctx.moveTo(fx, top); ctx.lineTo(fx + fw, top - 6); ctx.lineTo(fx + fw, bot - 6); ctx.lineTo(fx, bot); ctx.closePath();
     ink(ctx, '#f4f6fb');
-    ctx.beginPath();
-    ctx.moveTo(fx + fw * 0.2, h.rimY - 60); ctx.lineTo(fx + fw * 0.8, h.rimY - 62); ctx.lineTo(fx + fw * 0.8, h.rimY - 8); ctx.lineTo(fx + fw * 0.2, h.rimY - 6); ctx.closePath();
+    ctx.beginPath(); ctx.rect(Math.min(fx + fw * 0.2, fx + fw * 0.8), h.rimY - 38, Math.abs(fw * 0.6), 34);
     ctx.lineWidth = 4; ctx.strokeStyle = '#e04a3a'; ctx.stroke();
-    rr(ctx, h.boardX - 7, h.rimY - 142, 14, 160, 4); ink(ctx, '#ffffff');
+    ctx.beginPath(); ctx.rect(h.boardX - 5, top, 10, bot - top); ink(ctx, '#ffffff');
     // back half of the rim
-    const cx = (h.x1 + h.x2) / 2, rx = (h.x2 - h.x1) / 2;
-    ctx.beginPath(); ctx.ellipse(cx, h.rimY, rx, 8, 0, Math.PI, 0);
-    ctx.lineWidth = 9; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 4; ctx.strokeStyle = '#c23c2c'; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(h.cx, h.rimY, (h.x2 - h.x1) / 2, 6, 0, Math.PI, 0);
+    ctx.lineWidth = 8; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 4; ctx.strokeStyle = '#c23c2c'; ctx.stroke();
   }
 
   /** Net and the front half of the rim: drawn over the ball, so a basket goes in. */
   function hoopFront(ctx, h, t) {
-    const sway = Math.sin(t * 18) * 6 * h.sway + Math.sin(t * 30) * 3 * h.wobble;
-    const top1 = h.x1 + 5, top2 = h.x2 - 5, inset = (top2 - top1) * 0.18;
-    const b1 = top1 + inset + sway, b2 = top2 - inset + sway, depth = 62 + h.sway * 8;
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)'; ctx.lineWidth = 2.5;
+    const sway = Math.sin(t * 18) * 5 * h.sway + Math.sin(t * 30) * 3 * h.wobble;
+    const top1 = h.x1 + 4, top2 = h.x2 - 4, inset = (top2 - top1) * 0.2;
+    const b1 = top1 + inset + sway, b2 = top2 - inset + sway, depth = 44 + h.sway * 6;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
     ctx.beginPath();
-    const n = 5;
+    const n = 3;
     for (let i = 0; i <= n; i++) {
       const tx = lerp(top1, top2, i / n), bx = lerp(b1, b2, i / n);
       ctx.moveTo(tx, h.rimY); ctx.lineTo(bx, h.rimY + depth);
       if (i < n) { ctx.moveTo(tx, h.rimY); ctx.lineTo(lerp(b1, b2, (i + 1) / n), h.rimY + depth); }
       if (i > 0) { ctx.moveTo(tx, h.rimY); ctx.lineTo(lerp(b1, b2, (i - 1) / n), h.rimY + depth); }
     }
-    ctx.moveTo(lerp(top1, b1, 0.5), h.rimY + depth / 2); ctx.lineTo(lerp(top2, b2, 0.5), h.rimY + depth / 2);
     ctx.moveTo(b1, h.rimY + depth); ctx.lineTo(b2, h.rimY + depth);
     ctx.stroke();
-    const cx = (h.x1 + h.x2) / 2, rx = (h.x2 - h.x1) / 2, dy = Math.sin(t * 40) * 2 * h.wobble;
-    ctx.beginPath(); ctx.ellipse(cx, h.rimY + dy, rx, 8, 0, 0, Math.PI);
-    ctx.lineWidth = 10; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 5; ctx.strokeStyle = '#ef4b35'; ctx.stroke();
+    const dy = Math.sin(t * 40) * 2 * h.wobble;
+    ctx.beginPath(); ctx.ellipse(h.cx, h.rimY + dy, (h.x2 - h.x1) / 2, 6, 0, 0, Math.PI);
+    ctx.lineWidth = 9; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 5; ctx.strokeStyle = '#ef4b35'; ctx.stroke();
   }
 
   // ---- Players --------------------------------------------------------------------------
   function shadow(ctx, x, y, r) {
     const f = F(), k = Math.max(0.25, 1 - (f - y) / 500);
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.beginPath(); ctx.ellipse(x, f + 6, r * k, 7 * k, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x - r * k, f + 2, r * 2 * k, 7 * k);
   }
 
-  /** Draw one ragdoll as simple blocks. `kit` is the team's colours, `look` the player's own; eyes track `target`. */
-  function player(ctx, p, al, kit, target) {
+  /** A squircle path (superellipse, exponent 4) of half-size r around the origin. */
+  function squirclePath(ctx, r) {
+    const pts = Physics.squircle(r, 32);
+    ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
+  }
+
+  /**
+   * Draw one slim ragdoll in plain blocks: no face and no shirt detail, only a squircle head,
+   * a solid shirt over darker shorts, block legs and shoes, and a long arm with a square hand.
+   */
+  function player(ctx, p, al, kit) {
     const d = p.dims, look = p.look, dir = p.dir;
     const T = pose(p.torso, al), Hd = pose(p.head, al), A = pose(p.arm, al);
-    shadow(ctx, T.x, T.y + d.torsoH, 28);
+    shadow(ctx, T.x, T.y + d.torsoH, 22);
 
     for (const leg of p.legs) {
       const P = pose(leg, al);
       ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.a);
-      ctx.beginPath(); ctx.rect(-d.legW / 2, -d.legL / 2, d.legW, d.legL); ink(ctx, look.skin);
-      ctx.beginPath(); ctx.rect(-d.legW / 2, d.legL / 2 - 16, d.legW, 8); ink(ctx, '#ffffff', 3);
-      ctx.beginPath(); ctx.rect(dir > 0 ? -d.legW / 2 - 2 : -d.legW / 2 - 10, d.legL / 2 - 8, d.legW + 12, 11); ink(ctx, look.shoe);
+      ctx.beginPath(); ctx.rect(-d.legW / 2, -d.legL / 2, d.legW, d.legL); ink(ctx, look.skin, 5);
+      ctx.beginPath(); ctx.rect(dir > 0 ? -d.legW / 2 - 2 : -d.legW / 2 - 8, d.legL / 2 - 7, d.legW + 10, 10); ink(ctx, look.shoe, 5);
       ctx.restore();
     }
 
-    // torso: a plain jersey block over shorts, with one trim stripe
     ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(T.a);
     ctx.beginPath(); ctx.rect(-d.torsoW / 2, -d.torsoH / 2, d.torsoW, d.torsoH);
     ctx.fillStyle = kit.jersey; ctx.fill();
-    ctx.fillStyle = kit.shorts; ctx.fillRect(-d.torsoW / 2, d.torsoH / 2 - d.torsoH * 0.34, d.torsoW, d.torsoH * 0.34);
-    ctx.fillStyle = kit.trim; ctx.fillRect(-d.torsoW / 2, -d.torsoH * 0.12, d.torsoW, 7);
-    ink(ctx, null);
+    ctx.fillStyle = kit.shorts; ctx.fillRect(-d.torsoW / 2, d.torsoH / 2 - d.torsoH * 0.32, d.torsoW, d.torsoH * 0.32);
+    ink(ctx, null, 5);
     ctx.restore();
 
-    head(ctx, Hd.x, Hd.y, d.headS, T.a * 0.7, dir, look, kit, target, p.sinceGround > 0.15);
+    ctx.save(); ctx.translate(Hd.x, Hd.y); ctx.rotate(T.a * 0.7);
+    squirclePath(ctx, d.headS / 2); ink(ctx, look.skin, 5);
+    ctx.restore();
 
-    // the arm, on top: a straight block with a square hand
     ctx.save(); ctx.translate(A.x, A.y); ctx.rotate(A.a);
-    ctx.beginPath(); ctx.rect(-d.armW / 2, -d.armL / 2, d.armW, d.armL); ink(ctx, look.skin);
-    ctx.beginPath(); ctx.rect(-d.armW / 2 - 2, -d.armL / 2 - 2, d.armW + 4, 14); ink(ctx, kit.jersey, 3.5);
-    ctx.beginPath(); ctx.rect(-d.armW * 0.75, d.armL / 2 - d.armW * 0.6, d.armW * 1.5, d.armW * 1.3); ink(ctx, look.skin, 3.5);
-    ctx.restore();
-  }
-
-  /** A square head with block hair, square eyes and a slot mouth. `s` is the side length. */
-  function head(ctx, x, y, s, a, dir, look, kit, target, air) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-    const h = s / 2, st = look.style, u = s / 8; // u: one "block" of detail
-    const blk = (bx, by, bw, bh, fill, lw = 3.5) => { ctx.beginPath(); ctx.rect(bx, by, bw, bh); ink(ctx, fill, lw); };
-    if (st === 'puff') blk(-h - u, -h - u * 1.6, s + u * 2, s * 0.85 + u, look.hair);         // big block of hair behind
-    if (st === 'bun') blk(-dir * u * 2 - u * 1.4, -h - u * 2.4, u * 2.8, u * 2.6, look.hair);
-    blk(-h, -h, s, s, look.skin, LW);
-
-    // hair and hats: blocks only
-    if (st === 'spikes') {
-      blk(-h, -h - u, s, u * 2, look.hair);
-      for (let i = 0; i < 3; i++) blk(-h + i * u * 2.8 - dir * u * 0.3, -h - u * 2.4, u * 1.6, u * 1.6, look.hair, 3);
-    } else if (st === 'cap') {
-      blk(-h - 1, -h - u * 1.2, s + 2, u * 2.6, kit.shorts);
-      blk(dir > 0 ? h - 2 : -h - u * 3 + 2, -h + u * 0.6, u * 3, u * 0.9, kit.shorts, 3);
-    } else if (st === 'mohawk') {
-      blk(-u, -h - u * 3, u * 2, u * 3.4, look.hair, 3);
-    } else if (st === 'band' || st === 'bun' || st === 'puff') {
-      if (st !== 'puff') blk(-h, -h, s, u * 1.6, look.hair, 3);
-      blk(-h, -h + u * 1.6, s, u * 1.1, kit.trim === '#1d1a2b' ? '#ffffff' : kit.trim, 3);
-    }
-
-    // square eyes, pupils shifted toward the ball by whole blocks
-    const la = Math.atan2(target.y - y, target.x - x) - a;
-    const px = Math.round(Math.cos(la)) * u * 0.45, py = Math.round(Math.sin(la)) * u * 0.45;
-    for (const ex of [dir * u * 0.6, dir * u * 2.8]) {
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(ex - u, -u * 1.1, u * 2, u * 2);
-      ctx.fillStyle = INK; ctx.fillRect(ex - u * 0.5 + px, -u * 0.6 + py, u, u);
-    }
-    ctx.fillStyle = INK;
-    if (air) ctx.fillRect(dir * u * 1.8 - u * 0.5, u * 1.6, u, u * 1.2);   // open mouth in the air
-    else ctx.fillRect(dir * u * 1.8 - u * 0.9, u * 2, u * 1.8, u * 0.5);   // flat line on the ground
+    ctx.beginPath(); ctx.rect(-d.armW / 2, -d.armL / 2, d.armW, d.armL); ink(ctx, look.skin, 5);
+    ctx.beginPath(); ctx.rect(-d.armW * 0.9, d.armL / 2 - d.armW * 0.7, d.armW * 1.8, d.armW * 1.6); ink(ctx, look.skin, 4);
     ctx.restore();
   }
 
   // ---- Ball -----------------------------------------------------------------------------
+  /** The squircle ball with its seams. */
   function ball(ctx, x, y, r, a, withShadow = true) {
     if (withShadow) shadow(ctx, x, y, r);
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ink(ctx, '#e8591a', Math.max(3, r * 0.14));
-    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r - 1, 0, Math.PI * 2); ctx.clip();
-    ctx.translate(x, y); ctx.rotate(a);
-    ctx.strokeStyle = INK; ctx.lineWidth = Math.max(2, r * 0.09);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    squirclePath(ctx, r); ink(ctx, '#e8591a', Math.max(4, r * 0.18));
+    squirclePath(ctx, r - 1); ctx.save(); ctx.clip();
+    ctx.strokeStyle = INK; ctx.lineWidth = Math.max(3, r * 0.12);
     ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.moveTo(0, -r); ctx.lineTo(0, r);
-    ctx.moveTo(-r * 0.35, -r); ctx.quadraticCurveTo(-r * 0.95, 0, -r * 0.35, r);
-    ctx.moveTo(r * 0.35, -r); ctx.quadraticCurveTo(r * 0.95, 0, r * 0.35, r);
+    ctx.moveTo(-r * 0.45, -r); ctx.quadraticCurveTo(-r * 0.95, 0, -r * 0.45, r);
+    ctx.moveTo(r * 0.45, -r); ctx.quadraticCurveTo(r * 0.95, 0, r * 0.45, r);
     ctx.stroke();
     ctx.restore();
-    ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.32, r * 0.5, Math.PI * 1.05, Math.PI * 1.5);
-    ctx.lineWidth = r * 0.14; ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(x - r * 0.6, y - r * 0.65, r * 0.4, r * 0.18);
   }
 
   /** The whole court: venue, hoops, players, ball, nets. */
-  function world(ctx, w, al, t, W, H, hud) {
+  function world(ctx, w, al, t, W, H) {
     venue(ctx, w, W, H, t);
     for (const h of w.hoops) hoopBack(ctx, h);
-    if (hud) hud();
-    const B = pose(w.ball, al);
-    for (const p of w.players) player(ctx, p, al, w.S.kits[p.team], B);
-    ball(ctx, B.x, B.y, w.ball.circleRadius, B.a);
-    if (w.hold) { // the carrier's shot charge, a block meter over the head
-      const p = w.hold.p, Hd = pose(p.head, al), bw = 56, x = Hd.x - bw / 2, y = Hd.y - p.dims.headS - 26;
+    const B = pose(w.ball, al), r = w.ball.r;
+    for (const p of w.players) player(ctx, p, al, w.S.kits[p.team]);
+    ball(ctx, B.x, B.y, r, B.a);
+    if (w.hold) { // the carrier's cock-back charge, a block meter over the head
+      const p = w.hold.p, Hd = pose(p.head, al), bw = 52, x = Hd.x - bw / 2, y = Hd.y - p.dims.headS - 22;
       ctx.beginPath(); ctx.rect(x, y, bw, 12); ink(ctx, '#1d1a2b', 4);
-      ctx.fillStyle = w.hold.charge >= 1 ? '#ffd23f' : TEAM_COLORS[p.team];
-      ctx.fillRect(x + 2, y + 2, (bw - 4) * Math.floor(w.hold.charge * 8) / 8, 8);
+      ctx.fillStyle = !w.hold.armed ? '#8a83a8' : w.hold.charge >= 1 ? '#ffd23f' : TEAM_COLORS[p.team];
+      ctx.fillRect(x + 2, y + 2, (bw - 4) * Math.max(w.hold.armed ? 0 : 1, Math.floor(w.hold.charge * 8) / 8), 8);
     }
     for (const h of w.hoops) hoopFront(ctx, h, t);
-    if (B.y + w.ball.circleRadius < 0) { // ball above the screen: a marker at the top edge
+    if (B.y + r < 0) { // ball above the screen: a marker at the top edge
       const x = Math.max(30, Math.min(W - 30, B.x));
       ctx.beginPath(); ctx.moveTo(x, 6); ctx.lineTo(x - 14, 30); ctx.lineTo(x + 14, 30); ctx.closePath(); ink(ctx, '#e8591a', 3);
     }
