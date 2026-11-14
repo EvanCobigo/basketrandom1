@@ -57,7 +57,7 @@ const Physics = (() => {
     const filt = { group, category: TEAM_CAT[team], mask: CAT.STATIC | CAT.BALL | TEAM_CAT[1 - team] };
     const torso = Bodies.rectangle(x, torsoY, d.torsoW, d.torsoH, { chamfer: { radius: d.torsoW * 0.3 },
       density: 0.0036, friction: 0.5, frictionAir: 0.012, restitution: 0.1, collisionFilter: filt });
-    const head = Bodies.rectangle(x, headY, d.headS, d.headS, { chamfer: { radius: d.headS * 0.32 },
+    const head = Bodies.rectangle(x, headY, d.headS, d.headS, { chamfer: { radius: d.headS * 0.12 },
       density: 0.0011, friction: 0.3, frictionAir: 0.01, restitution: 0.3, collisionFilter: filt });
     const legs = [-1, 1].map(s => Bodies.rectangle(x + s * d.torsoW * 0.22, hipY + d.legL / 2 - 4, d.legW, d.legL, {
       chamfer: { radius: 3 }, density: 0.003, friction: 1.4, frictionStatic: 2, frictionAir: 0.012, restitution: 0, collisionFilter: filt }));
@@ -490,7 +490,7 @@ const Physics = (() => {
     for (const p of w.players) for (const part of p.parts) capSpeed(part, 30);
 
     for (const h of w.hoops) {   // the net drags a free ball passing through it: the swish
-      if (!w.hold && ball.position.x > h.x1 && ball.position.x < h.x2 && ball.position.y > h.rimY && ball.position.y < h.rimY + 46) {
+      if (!w.hold && ball.position.x > h.x1 && ball.position.x < h.x2 && ball.position.y > h.rimY && ball.position.y < h.rimY + 56) {
         Body.setVelocity(ball, { x: ball.velocity.x * 0.86, y: ball.velocity.y * 0.96 });
         h.sway = Math.min(1.5, h.sway + 0.12);
       }

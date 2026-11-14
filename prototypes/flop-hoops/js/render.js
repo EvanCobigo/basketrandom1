@@ -23,7 +23,7 @@ const Render = (() => {
   }
   function ink(ctx, fill, lw = LW) {
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    ctx.lineWidth = lw; ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.lineWidth = lw; ctx.strokeStyle = INK; ctx.lineJoin = 'miter'; ctx.lineCap = 'square'; ctx.stroke(); // square corners: blocky
   }
   function rr(ctx, x, y, w, h) { ctx.beginPath(); ctx.rect(x, y, w, h); } // retro: every panel square-cornered
   function text(ctx, s, x, y, size, fill, o = {}) {
@@ -76,8 +76,8 @@ const Render = (() => {
   function hoopFront(ctx, h, t) {
     const sway = Math.sin(t * 18) * 5 * h.sway + Math.sin(t * 30) * 3 * h.wobble;
     const top1 = h.x1 + 4, top2 = h.x2 - 4, inset = (top2 - top1) * 0.2;
-    const b1 = top1 + inset + sway, b2 = top2 - inset + sway, depth = 44 + h.sway * 6;
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+    const b1 = top1 + inset + sway, b2 = top2 - inset + sway, depth = 54 + h.sway * 6;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(3, CONFIG.pixel_size.value * 1.2); // at least one art pixel wide
     ctx.beginPath();
     const n = 3;
     for (let i = 0; i <= n; i++) {
@@ -131,7 +131,7 @@ const Render = (() => {
     ctx.restore();
 
     ctx.save(); ctx.translate(Hd.x, Hd.y); ctx.rotate(T.a * 0.7);
-    squirclePath(ctx, d.headS / 2); ink(ctx, look.skin, 5);
+    squirclePath(ctx, d.headS / 2, CONFIG.head_shape.value); ink(ctx, look.skin, 5);
     ctx.restore();
 
     ctx.save(); ctx.translate(A.x, A.y); ctx.rotate(A.a);

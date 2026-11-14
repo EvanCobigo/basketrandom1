@@ -10,10 +10,10 @@ window.CONFIG = {
 
   // ---- Match ----
   win_score: { value: 5, min: 1, max: 11, step: 1 },          // baskets to win
-  game_speed: { value: 0.72, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
-  card_time: { value: 1.5, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
-  score_time: { value: 2.0, min: 0.8, max: 4, step: 0.1 },     // s of celebration after a basket
-  stall_time: { value: 4.5, min: 2, max: 10, step: 0.5 },      // s a still ball waits before a re-drop
+  game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
+  card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
+  score_time: { value: 1.4, min: 0.8, max: 4, step: 0.1 },     // s of celebration after a basket
+  stall_time: { value: 3.5, min: 2, max: 10, step: 0.5 },      // s a still ball waits before a re-drop
 
   // ---- Jumping (one key) ----
   jump_height: { value: 210, min: 60, max: 320, step: 5 },     // px a fully held jump rises
@@ -68,10 +68,11 @@ window.CONFIG = {
   rock_follow: { value: 0.6, min: 0.05, max: 1, step: 0.05 },   // how tightly a planted body tracks its swing
   getup_time: { value: 0.7, min: 0.1, max: 3, step: 0.05 },     // s lying down before springing back up
   getup_pop: { value: 7, min: 0, max: 15, step: 0.5 },          // px/step upward pop when getting up
-  body_width: { value: 20, min: 12, max: 50, step: 1 },         // px torso width
-  limb_width: { value: 11, min: 5, max: 20, step: 1 },          // px leg width (arms are 0.8 of it)
-  arm_width: { value: 12, min: 6, max: 30, step: 1 },           // px arm thickness
+  body_width: { value: 28, min: 12, max: 50, step: 1 },         // px torso width
+  limb_width: { value: 15, min: 5, max: 20, step: 1 },          // px leg width (arms are 0.8 of it)
+  arm_width: { value: 15, min: 6, max: 30, step: 1 },           // px arm thickness
   head_size: { value: 11, min: 8, max: 30, step: 1 },           // px head half-size
+  head_shape: { value: 8, min: 2, max: 12, step: 0.5 },         // head outline exponent: 2 round, 4 squircle, 8+ nearly square
   arm_length: { value: 64, min: 40, max: 140, step: 2 },        // px shoulder to fingertip: an 82" wingspan less the shoulders, halved
   torso_length: { value: 54, min: 30, max: 90, step: 1 },       // px hip to shoulder (a 6 ft 6 in player at about 2 px per inch)
   leg_length: { value: 88, min: 40, max: 120, step: 1 },        // px floor to hip
@@ -84,7 +85,7 @@ window.CONFIG = {
   arm_max_speed: { value: 0.32, min: 0.05, max: 0.8, step: 0.01 }, // rad/step arm swing limit
 
   // ---- Ball ----
-  ball_radius: { value: 25, min: 16, max: 60, step: 1 },       // px
+  ball_radius: { value: 21, min: 16, max: 60, step: 1 },       // px
   ball_shape: { value: 2.6, min: 2, max: 5, step: 0.1 },        // ball outline exponent: 2 round, 4 squircle
   ball_bounce: { value: 0.8, min: 0.3, max: 0.98, step: 0.01 },// restitution
   ball_mass: { value: 1.3, min: 0.3, max: 5, step: 0.1 },      // Matter mass units
@@ -98,14 +99,14 @@ window.CONFIG = {
   // ---- Court ----
   court_width: { value: 980, min: 900, max: 1240, step: 10 }, // px
   rim_height: { value: 235, min: 200, max: 420, step: 5 },     // px from floor to rim
-  rim_span_min: { value: 65, min: 60, max: 160, step: 2 },     // px rim opening (grows with the ball)
-  rim_ball_ratio: { value: 1.3, min: 1.05, max: 2, step: 0.05 }, // rim opening as a multiple of the ball's width
-  board_height: { value: 110, min: 60, max: 200, step: 5 },    // px backboard height
+  rim_span_min: { value: 40, min: 30, max: 160, step: 2 },     // px rim opening (grows with the ball)
+  rim_ball_ratio: { value: 1.4, min: 1.05, max: 2, step: 0.05 }, // rim opening as a multiple of the ball's width: 1.4 balls fit
+  board_height: { value: 135, min: 60, max: 200, step: 5 },    // px backboard height
   board_inset: { value: 40, min: 20, max: 120, step: 2 },      // px from side wall to backboard
 
 
   // ---- Look and juice ----
-  pixel_size: { value: 3, min: 1, max: 6, step: 1 },           // screen px per art pixel on the court
+  pixel_size: { value: 5, min: 1, max: 6, step: 1 },           // screen px per art pixel on the court
   palette_snap: { value: 1, min: 0, max: 1, step: 1 },          // 1: snap every court pixel to the round's retro palette
   scanlines: { value: 0.12, min: 0, max: 0.5, step: 0.01 },     // darkness of the CRT scanlines
   shake: { value: 16, min: 0, max: 40, step: 1 },              // px screen shake on a basket
