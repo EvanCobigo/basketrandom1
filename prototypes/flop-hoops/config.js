@@ -48,16 +48,27 @@ window.CONFIG = {
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
+  dunk_slot: { value: 4, min: 0, max: 20, step: 1 },              // px above the rim the ball's centre is carried to before the slam
+  dunk_arm_dx: { value: 0.55, min: 0.2, max: 0.9, step: 0.05 },   // how far short of the rim (in arm lengths) the dunker tops out
+  dunk_arm_ext: { value: 0.9, min: 0.6, max: 1, step: 0.02 },     // how far the arm is stretched at the top (1 = fully)
+  dunk_vx_max: { value: 8, min: 2, max: 14, step: 0.5 },          // px/step of sideways speed a dunk jump may need at most
+  dunk_apex_vy: { value: 2.5, min: 0.5, max: 8, step: 0.5 },      // px/step of rising speed under which the slam may come (near the top)
+  dunk_slot_tol: { value: 6, min: 0, max: 20, step: 1 },          // px of margin inside the rim's opening the ball must be within
+  dunk_timeout: { value: 1.1, min: 0.4, max: 2.5, step: 0.05 },   // s a dunk may take before the ball is given up
+  dunk_arm_speed: { value: 0.9, min: 0.1, max: 0.9, step: 0.05 },  // rad/step the arm may turn at most while carrying the ball up in a dunk
+  dunk_pop: { value: 18, min: 6, max: 40, step: 1 },              // px the ball may be knocked from the hand (by the rim) before it flies free
+  dunk_toward_vx: { value: -0.3, min: -3, max: 1, step: 0.1 },    // px/step: an airborne carrier moving away from the rim faster than this gets no dunk
+  dunk_lean_min: { value: -0.2, min: -1, max: 0.5, step: 0.05 },  // rad: an airborne carrier leaning back more than this gets no dunk
+  contest_range: { value: 150, min: 50, max: 300, step: 10 },     // px from the rim within which a defender's arm goes straight up for a dunk
+  swat_speed: { value: 10, min: 3, max: 20, step: 0.5 },          // px/step a dunk blocked by a hand or head is swatted away at
   dunk_min_gap: { value: 24, min: 0, max: 80, step: 2 },          // px a dunker must be from the rim, on the court side (under or behind it never dunks)
   dunk_ground_x: { value: 70, min: 20, max: 160, step: 2 },       // px from the rim a standing carrier may start a dunk
   dunk_reach_x: { value: 110, min: 40, max: 220, step: 5 },       // px from the rim a jump may top out and still dunk
   dunk_fall_limit: { value: 4, min: 0, max: 12, step: 0.5 },      // px/step downward speed above which a falling dunker is too late
   oop_bonus: { value: 1.3, min: 1, max: 2, step: 0.05 },          // an alley-oop catch gets this much more dunk reach
-  dunk_time: { value: 0.6, min: 0.08, max: 1.5, step: 0.01 },  // s the slam motion takes
   dunk_hang: { value: 0.18, min: 0, max: 0.6, step: 0.02 },      // s the dunker hangs on the rim after the slam
   dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk or windmill ends hanging on the rim
   dunk_rim_hang: { value: 0.9, min: 0.2, max: 2, step: 0.05 },    // s of hanging on the rim when it happens
-  dunk_lift: { value: 24, min: 0, max: 80, step: 2 },            // px the ball arcs up before coming down through
   block_window: { value: 0.9, min: 0.2, max: 2, step: 0.05 },   // s after a shot a defender's touch is a block
   block_pop: { value: 8, min: 2, max: 16, step: 0.5 },          // px/step a blocked ball flies back
   strip_speed: { value: 9, min: 3, max: 20, step: 0.5 },        // px/step hit that knocks a held ball loose
@@ -84,7 +95,7 @@ window.CONFIG = {
   dribble_safe_chain: { value: 6, min: 1, max: 20, step: 1 },     // dribbles in a row before the chain itself adds wobble
   dribble_sway: { value: 1.6, min: 0, max: 5, step: 0.1 },        // how much each dribble in a chain adds to the sway
   perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
-  perfect_graze: { value: 8, min: 0, max: 15, step: 1 },         // px a perfect shot may overlap the rim or board and still count
+  perfect_graze: { value: 0, min: 0, max: 15, step: 1 },         // px a perfect shot may overlap the rim or board and still count
   soft_touch: { value: 3, min: 0, max: 10, step: 0.5 },          // px/step: a basket whose rim contact was this soft still counts as rainbow
   trail_width: { value: 1.6, min: 0.5, max: 3, step: 0.1 },        // trail block size, in ball radii
   trail_length: { value: 18, min: 0, max: 60, step: 1 },        // steps of ball trail behind a fired shot

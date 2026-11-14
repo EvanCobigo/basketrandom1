@@ -117,6 +117,10 @@ const AI = (() => {
       const p = hold.p, hoop = w.hoops.find(h => h.team === c.team), dir = p.dir, span = hoop.span;
       const mate = w.players.find(q => q.team === c.team && q !== p);
       const X = Math.abs(hoop.cx - ball.position.x);
+      // a defender up at the rim with a hand raised would swat the dunk: level 4+ waits for them to come down (or goes around)
+      const rimFoe = w.players.find(q => q.team !== c.team && Math.abs(q.torso.position.x - hoop.cx) < T.contest_range * 0.8);
+      const foeUp = rimFoe && (rimFoe.sinceGround > 0.04 || Math.abs(rimFoe.torso.position.x - hoop.cx) < 50);
+      if (hold.dunkReady && foeUp && level >= 4 && hold.t < 2.2 && c.rng() < 0.5 + skill * 0.4) { c.wait = react * 0.3; return c; }
       if (hold.dunkReady) { c.jump = true; c.holdT = tap; c.dribs = 0; return c; }   // at the rim: a tap dunks
       if (!hold.armed || !hold.barmed) return c;                                      // let go once after the catch
       const foeNear = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - p.torso.position.x) < 90);
@@ -178,6 +182,13 @@ const AI = (() => {
       c.dribs = 0;
       const foe = hold.p;
       const gap = Math.min(...w.players.filter(q => q.team === c.team).map(q => Math.abs(q.torso.position.x - foe.torso.position.x)));
+      // level 2+: a dunk is coming at our rim: jump with a straight arm to meet it (a hand or the head on the ball swats it away)
+      if (level >= 2 && w.dunk && !w.dunk.slammed && w.dunk.p === foe) {
+        const rimX = w.dunk.hoop.cx, cand = w.players.filter(q => q.team === c.team).sort((q1, q2) => Math.abs(q1.torso.position.x - rimX) - Math.abs(q2.torso.position.x - rimX))[0];
+        if (cand && Math.abs(cand.torso.position.x - rimX) < T.contest_range && c.rng() < (0.3 + skill * 0.6) * st.block) { c.jump = true; c.holdT = 0.32; return c; }
+      }
+      // level 3+: the carrier is closing on our rim and the dunk prompt is up: be under it, ready to jump
+      if (level >= 3 && hold.dunkReady && c.rng() < (0.2 + skill * 0.5) * st.block) { c.jump = true; c.holdT = 0.3; return c; }
       // level 2+: a shot being cocked nearby: get up so we are in the air as it is let go
       if (level >= 2 && hold.cocking && hold.charge > 0.4 && gap < 170 && c.rng() < (0.4 + skill * 0.5) * st.block) { c.jump = true; c.holdT = 0.3; return c; }
       // level 4+: right next to the carrier: raise the arm to get a hand on the ball

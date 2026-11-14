@@ -16,3 +16,17 @@
   licence: {id: MIT}
   date: 2026-11-14
   ships: true
+- path: js/font.js
+  origin: licensed
+  tool: "the Departure Mono 1.500 woff2, base64-embedded by a script"
+  source: {vendor: "Helena Zhang", product: "Departure Mono 1.500", url: "https://github.com/rektdeckard/departure-mono"}
+  licence: {id: OFL-1.1}
+  date: 2026-11-14
+  ships: true
+- path: assets/DepartureMono-LICENSE.txt
+  origin: licensed
+  tool: "copied from the release zip"
+  source: {vendor: "Helena Zhang", product: "Departure Mono 1.500", url: "https://github.com/rektdeckard/departure-mono"}
+  licence: {id: OFL-1.1}
+  date: 2026-11-14
+  ships: true

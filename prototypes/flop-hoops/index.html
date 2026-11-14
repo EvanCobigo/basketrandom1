@@ -16,6 +16,7 @@
 <body>
 <canvas id="game"></canvas>
 <script src="config.js"></script>
+<script src="js/font.js"></script>
 <script src="js/settings.js"></script>
 <script src="vendor/matter.min.js"></script>
 <script src="js/rounds.js"></script>
@@ -36,7 +37,7 @@ const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.sp
 const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
 const W = 1280, H = 720;        // logical size
 const PIXEL = false;
-const FONT = '"Courier New", ui-monospace, Menlo, Consolas, monospace'; // retro: a blocky monospace
+const FONT = '"Departure Mono", "Courier New", ui-monospace, Menlo, Consolas, monospace'; // Departure Mono (js/font.js)
 const TITLE = 'Flop Hoops';
 const CONTROLS = ['Player 1: W jump/shoot, S bounce', 'Player 2: Up jump/shoot, Down bounce', 'Esc / P: pause', 'M: mute'];
 const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
@@ -119,66 +120,109 @@ function menuKeys() {
 }
 
 // ---- Audio: started on first input, mute on M --------------------------------------------
+// Everything is synthesised. Voices go through a soft compressor, and a share of each goes to a
+// short generated room reverb, so effects sound rounded and have a little space around them.
 let audio = null, muted = false;
 function startAudio() {
   if (!audio) {
     const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)(); // a check may inject one
+    const has = f => typeof ac[f] === 'function';
     const out = ac.createGain(); out.gain.value = muted ? 0 : tune.volume;
-    out.connect(ac.destination); audio = { ac, out };
-    // one second of noise for the swish, from a fixed LCG (sound only, not gameplay)
+    let head = out;
+    if (has('createDynamicsCompressor')) {   // glue: loud hits do not clip, quiet ones stay present
+      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -20; comp.knee.value = 18; comp.ratio.value = 3.2; comp.attack.value = 0.004; comp.release.value = 0.18;
+      comp.connect(out); head = comp;
+    }
+    out.connect(ac.destination);
+    const bus = ac.createGain(); bus.gain.value = 1; bus.connect(head);
+    let send = null;
+    if (has('createConvolver') && has('createBuffer')) {   // a 1.5 s room: decaying, softened noise, different in each ear
+      const len = Math.floor(ac.sampleRate * 1.5), ir = ac.createBuffer(2, len, ac.sampleRate);
+      let x = 777; for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let lp = 0;
+        for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; lp += ((x / 0x3fffffff - 1) - lp) * 0.42; d[k] = lp * Math.pow(1 - k / len, 2.6); } }
+      const cv = ac.createConvolver(); cv.buffer = ir; const wet = ac.createGain(); wet.gain.value = 0.34;
+      send = ac.createGain(); send.gain.value = 1; send.connect(cv); cv.connect(wet); wet.connect(head);
+    }
+    audio = { ac, out, bus, send, has };
+    // one second of noise for the swishes and cheers, from a fixed LCG (sound only, not gameplay)
     const len = ac.sampleRate, buf = ac.createBuffer(1, len, ac.sampleRate), data = buf.getChannelData(0);
-    let x = 12345; for (let i = 0; i < len; i++) { x = (x * 1103515245 + 12345) & 0x7fffffff; data[i] = x / 0x3fffffff - 1; }
+    let x = 12345; for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; data[k] = x / 0x3fffffff - 1; }
     audio.noise = buf;
   }
   if (audio.ac.state === 'suspended') audio.ac.resume();
 }
 function setMuted(m) { muted = m; if (audio) audio.out.gain.value = m ? 0 : tune.volume; }
 addEventListener('tune', () => setMuted(muted));
-function tone(freq, dur, type = 'square', vol = 0.3, delay = 0, freq2 = freq) {
-  if (!audio || muted) return;
-  const t = audio.ac.currentTime + delay, o = audio.ac.createOscillator(), g = audio.ac.createGain();
-  o.type = type; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq2, t + dur);
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(audio.out); o.start(t); o.stop(t + dur);
+let sfxSeed = 99; const arand = () => { sfxSeed = (sfxSeed * 1103515245 + 12345) & 0x7fffffff; return sfxSeed / 0x7fffffff; };   // sound only
+/** Route a node to the dry bus, and to the reverb by `verb` (0..1), panned by `pan` (-1..1). */
+function route(node, verb, pan) {
+  let n = node;
+  if (pan && audio.has('createStereoPanner')) { const p = audio.ac.createStereoPanner(); p.pan.value = pan; n.connect(p); n = p; }
+  n.connect(audio.bus);
+  if (audio.send && verb) { const g = audio.ac.createGain(); g.gain.value = verb; n.connect(g); g.connect(audio.send); }
 }
-function noise(dur, vol, freq, delay = 0) {
+/**
+ * One voice: a tone with a soft attack and a curved decay, optionally two slightly detuned
+ * oscillators, a low-pass that closes as it fades, a pitch glide, and a send to the reverb.
+ * Options: type, vol, delay, to (glide target Hz), att (s), detune (cents), lp (Hz), verb, pan.
+ */
+function tone(freq, dur, type = 'sine', vol = 0.3, delay = 0, to = freq, o = {}) {
   if (!audio || muted) return;
-  const t = audio.ac.currentTime + delay, src = audio.ac.createBufferSource(), f = audio.ac.createBiquadFilter(), g = audio.ac.createGain();
-  src.buffer = audio.noise; f.type = 'bandpass'; f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(freq * 0.4, t + dur);
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(f).connect(g).connect(audio.out); src.start(t); src.stop(t + dur);
+  const ac = audio.ac, t = ac.currentTime + delay, att = o.att ?? 0.006, g = ac.createGain();
+  const peak = Math.max(0.0002, vol);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + att);
+  g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.02, (dur - att) / 4.2));
+  let node = g;
+  if (o.lp) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(o.lp, t); f.frequency.exponentialRampToValueAtTime(Math.max(120, o.lp * 0.25), t + dur); f.Q.value = 0.7; g.connect(f); node = f; }
+  const dets = o.detune ? [-o.detune, o.detune] : [0];
+  for (const d of dets) {
+    const osc = ac.createOscillator(); osc.type = type; osc.frequency.setValueAtTime(freq, t); if (d) osc.detune.value = d;
+    if (to !== freq) osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + Math.min(dur, o.glide ?? dur));
+    osc.connect(g); osc.start(t); osc.stop(t + dur + 0.05);
+  }
+  if (dets.length > 1) g.gain.value = 0.0001;   // (the ramp above sets the level; two voices share it)
+  route(node, o.verb ?? 0.12, o.pan);
+}
+/** Shaped noise: a band (or a sweep from `freq` to `to`), a soft attack and a curved decay. */
+function noise(dur, vol, freq, delay = 0, o = {}) {
+  if (!audio || muted) return;
+  const ac = audio.ac, t = ac.currentTime + delay, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  src.buffer = audio.noise; src.loop = dur > 0.95; f.type = o.type || 'bandpass'; f.Q.value = o.q ?? 0.9;
+  f.frequency.setValueAtTime(freq, t); if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(60, o.to), t + dur);
+  const att = o.att ?? 0.004; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + att); g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.015, (dur - att) / 4));
+  src.connect(f); f.connect(g); route(g, o.verb ?? 0.1, o.pan); src.start(t, arand() * 0.5); src.stop(t + dur + 0.05);
+}
+/** A struck metal or glass sound: inharmonic partials that each ring a little differently. */
+function ring(freq, dur, vol, delay = 0, verb = 0.3, ratios = [1, 1.62, 2.51, 3.7]) {
+  ratios.forEach((r, k) => tone(freq * r, dur * (1 - k * 0.18), 'sine', vol / (1 + k * 0.9), delay, freq * r, { att: 0.002, verb }));
 }
 const lastSound = {};
 function limited(key, gap) { const t = state ? state.t : 0; if (lastSound[key] !== undefined && t - lastSound[key] < gap && t >= lastSound[key]) return true; lastSound[key] = t; return false; }
+const PENT = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.7, 1318.5, 1568];   // C major pentatonic, so stacked sounds never clash
 const sfx = {
-  jump(team) { if (!limited('jump' + team, 0.05)) tone(team ? 330 : 280, 0.12, 'square', 0.07, 0, team ? 620 : 540); },
-  floor(v) { if (!limited('floor', 0.05)) tone(150, 0.14, 'triangle', Math.min(0.45, v * 0.04), 0, 60); },
-  board(v) { if (!limited('board', 0.05)) { tone(210, 0.1, 'square', Math.min(0.18, v * 0.02), 0, 120); noise(0.06, Math.min(0.2, v * 0.02), 900); } },
-  rim(v) { if (!limited('rim', 0.06)) { tone(880, 0.25, 'triangle', Math.min(0.22, v * 0.03)); tone(1310, 0.16, 'square', Math.min(0.06, v * 0.01)); } },
-  bop(v) { if (!limited('bop', 0.04)) tone(260, 0.08, 'sine', Math.min(0.3, 0.05 + v * 0.025), 0, 170); },
-  swish() { noise(0.35, 0.3, 3200); [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.18, 'square', 0.08, 0.12 + i * 0.08)); },
-  whistle() { tone(2100, 0.12, 'sine', 0.12, 0, 2300); tone(2100, 0.28, 'sine', 0.12, 0.15, 2250); },
-  win() { [392, 523, 659, 784, 659, 784, 1046].forEach((f, i) => tone(f, 0.22, 'square', 0.09, i * 0.12)); },
-  click() { tone(660, 0.05, 'square', 0.06); },
-  grab() { tone(392, 0.06, 'square', 0.08); tone(523, 0.08, 'square', 0.06, 0.05); },
-  shoot(c) { tone(300 + c * 300, 0.16, 'triangle', 0.14, 0, 700 + c * 500); },
-  dunk() { tone(110, 0.3, 'square', 0.22, 0, 55); noise(0.25, 0.35, 700); },
-  cheer(big) { // a crowd: two bands of noise swelling and fading, a few rising whoops on top
+  click() { tone(1760, 0.07, 'sine', 0.05, 0, 1760, { att: 0.002, verb: 0.08 }); tone(2640, 0.05, 'sine', 0.025, 0.012, 2640, { att: 0.002, verb: 0.05 }); },
+  jump(team) { if (limited('jump' + team, 0.05)) return; const k = team ? 1.12 : 1; noise(0.11, 0.05, 500 * k, 0, { to: 1500 * k, q: 1.1, att: 0.02, pan: team ? 0.3 : -0.3 }); tone(190 * k, 0.12, 'sine', 0.07, 0, 330 * k, { att: 0.01, glide: 0.08, pan: team ? 0.3 : -0.3 }); },
+  floor(v) { if (limited('floor', 0.05)) return; const a = Math.min(0.4, v * 0.04); tone(150, 0.16, 'sine', a, 0, 52, { att: 0.002, glide: 0.1, verb: 0.05 }); noise(0.03, a * 0.35, 1800, 0, { type: 'lowpass', q: 0.5 }); },
+  bop(v) { if (limited('bop', 0.04)) return; const a = Math.min(0.28, 0.05 + v * 0.022); tone(230, 0.1, 'sine', a, 0, 120, { att: 0.003, glide: 0.07, verb: 0.05 }); noise(0.045, a * 0.5, 700, 0, { type: 'lowpass', q: 0.4 }); },
+  board(v) { if (limited('board', 0.05)) return; const a = Math.min(0.2, v * 0.02); tone(260, 0.14, 'triangle', a, 0, 200, { att: 0.002, verb: 0.15 }); tone(392, 0.1, 'sine', a * 0.6, 0, 330, { att: 0.002 }); noise(0.05, a * 0.8, 1100, 0, { q: 1.4 }); },
+  rim(v) { if (limited('rim', 0.06)) return; ring(880 + arand() * 60, 0.7, Math.min(0.2, v * 0.028), 0, 0.35); noise(0.03, 0.05, 3400, 0, { q: 1.6 }); },
+  swish() { noise(0.34, 0.16, 4200, 0, { to: 1500, q: 0.7, att: 0.02, verb: 0.25 }); [2, 4, 5].forEach((n, k) => tone(PENT[n] * 2, 0.5, 'sine', 0.05, 0.1 + k * 0.07, PENT[n] * 2, { att: 0.004, verb: 0.45 })); },
+  grab() { noise(0.035, 0.07, 2600, 0, { q: 1.5 }); tone(520, 0.1, 'sine', 0.07, 0, 780, { att: 0.004, glide: 0.06 }); },
+  shoot(c) { noise(0.2, 0.08, 500, 0, { to: 2600 + c * 1200, q: 0.9, att: 0.05, verb: 0.2 }); tone(300 + c * 160, 0.18, 'sine', 0.06, 0, 700 + c * 300, { att: 0.02, glide: 0.16 }); },
+  bounce(c) { tone(210 + c * 110, 0.11, 'triangle', 0.11, 0, 130, { att: 0.003, glide: 0.08, lp: 1800, verb: 0.08 }); tone(420 + c * 220, 0.06, 'sine', 0.03, 0, 300, { att: 0.002 }); },
+  dunk() { tone(96, 0.7, 'sine', 0.5, 0, 36, { att: 0.002, glide: 0.4, verb: 0.3 }); noise(0.09, 0.35, 5200, 0, { type: 'highpass', q: 0.5, att: 0.001, verb: 0.35 }); tone(180, 0.22, 'triangle', 0.2, 0, 70, { att: 0.002, glide: 0.15 }); noise(0.4, 0.14, 900, 0.02, { to: 250, q: 0.6, verb: 0.3 }); },
+  swat() { noise(0.09, 0.3, 2600, 0, { q: 1.2, att: 0.001, verb: 0.2 }); tone(260, 0.16, 'triangle', 0.22, 0, 90, { att: 0.002, glide: 0.1 }); ring(1400, 0.3, 0.06, 0.01, 0.2, [1, 1.5]); },
+  block() { noise(0.1, 0.24, 2200, 0, { q: 1.2, att: 0.001, verb: 0.15 }); tone(220, 0.14, 'triangle', 0.16, 0, 95, { att: 0.002, glide: 0.1 }); },
+  whistle() { for (const d of [0, 0.2]) { tone(2650, 0.17, 'sine', 0.07, d, 2750, { att: 0.012, verb: 0.3 }); tone(2660, 0.17, 'sine', 0.035, d + 0.005, 2770, { att: 0.012, detune: 14 }); noise(0.16, 0.03, 4800, d, { type: 'highpass', att: 0.01 }); } },
+  win() { [0, 2, 3, 5, 6, 8].forEach((n, k) => { tone(PENT[n], 0.6, 'sawtooth', 0.045, k * 0.11, PENT[n], { att: 0.01, lp: 3200, detune: 7, verb: 0.4 }); tone(PENT[n] / 2, 0.6, 'sine', 0.05, k * 0.11, PENT[n] / 2, { verb: 0.3 }); }); },
+  perfect() { [3, 4, 5, 7].forEach((n, k) => { tone(PENT[n] * 2, 0.6, 'sine', 0.06, k * 0.055, PENT[n] * 2, { att: 0.003, verb: 0.5 }); tone(PENT[n] * 4, 0.3, 'sine', 0.02, k * 0.055, PENT[n] * 4, { att: 0.003, verb: 0.5 }); }); },
+  cheer(big) {   // a crowd: noise through vowel-like bands, swelling and settling, with a few claps on top
     if (!audio || muted) return;
-    const ac = audio.ac, t = ac.currentTime;
-    for (const [f, q] of [[900, 0.8], [1700, 1.2]]) {
-      const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain();
-      src.buffer = audio.noise; src.loop = true; bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18 * big, t + 0.25);
-      g.gain.setValueAtTime(0.18 * big, t + 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
-      src.connect(bp).connect(g).connect(audio.out); src.start(t); src.stop(t + 1.9);
-    }
-    [0.1, 0.32, 0.55].forEach((d, i) => tone(380 + i * 70, 0.35, 'sine', 0.035 * big, d, 760 + i * 90));
+    [[600, 1.4], [1100, 1.6], [2500, 1.2]].forEach(([f, q], k) => noise(1.9, 0.1 * big * (k === 2 ? 0.55 : 1), f, 0.02 * k, { q, att: 0.35, verb: 0.35, pan: (k - 1) * 0.25 }));
+    for (let k = 0; k < 7; k++) noise(0.05, 0.05 * big, 1800 + arand() * 1400, 0.3 + k * 0.09 + arand() * 0.05, { q: 1.1, att: 0.001, verb: 0.3, pan: arand() * 1.6 - 0.8 });
+    [0.12, 0.3, 0.52].forEach((d, k) => tone(330 + k * 70, 0.4, 'sine', 0.018 * big, d, 640 + k * 90, { att: 0.08, verb: 0.4 }));
   },
-  sparks() { noise(0.9, 0.12, 5200); noise(0.5, 0.08, 3000, 0.15); },
-  bounce(c) { tone(200 + c * 120, 0.09, 'triangle', 0.16, 0, 120); },
-  perfect() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, 'square', 0.06, i * 0.05)); },
-  block() { noise(0.12, 0.3, 1600); tone(180, 0.12, 'square', 0.12, 0, 90); },
+  sparks() { noise(0.9, 0.07, 6500, 0, { type: 'highpass', q: 0.5, att: 0.05, verb: 0.3 }); for (let k = 0; k < 8; k++) tone(PENT[3 + (k % 5)] * 2, 0.12, 'sine', 0.025, 0.05 * k + arand() * 0.04, PENT[3 + (k % 5)] * 2, { att: 0.002, verb: 0.4, pan: arand() * 1.4 - 0.7 }); },
 };
 
 // ---- Game state -----------------------------------------------------------------------
@@ -205,10 +249,12 @@ function onPhysEvent(ev) {
     return;
   }
   if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
+  if (ev.type === 'dunkmiss') { sfx.rim(6); puff(ev.x, ev.y, 7, { speed: 220, life: 0.3, colors: ['#ffd23f', '#ffffff'], size: 6, g: 500 }); events.push({ type: 'dunkmiss', team: ev.team, reason: ev.reason, best: ev.best, grounded: ev.grounded, style: ev.style, t: ev.t }); return; }
   if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team); world.hype = Math.max(world.hype || 0, 0.7); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
   if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; state.hitstop = tune.dunk_hitstop; events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
+  if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
   if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
   if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
@@ -277,7 +323,8 @@ const DUNK_NAMES = { tomahawk: 'TOMAHAWK DUNK!', windmill: 'WINDMILL DUNK!', elb
 function score(hoop) {
   const team = hoop.team, shot = world.ball.shot, own = shot && shot.team === team;
   if (own && shot.kind !== 'dunk') {
-    const soft = (shot.hardest || 0) <= tune.soft_touch;   // clean, or only a soft kiss of rim or board: what happened, not the prediction
+    // rainbow = what really happened: clean (or a soft kiss), never knocked by a player, and crossing the rim plane near its middle
+    const soft = (shot.hardest || 0) <= tune.soft_touch && !shot.deflected && (shot.crossPerfect === true || shot.perfect === true);
     shot.perfect = soft;
     if (world.trail && world.trail.shot === shot) world.trail.mode = soft ? 'rainbow' : shot.kind === 'fade' ? 'blue' : 'green';
   }

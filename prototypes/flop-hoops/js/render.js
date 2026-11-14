@@ -27,7 +27,7 @@ const Render = (() => {
   }
   function rr(ctx, x, y, w, h) { ctx.beginPath(); ctx.rect(x, y, w, h); } // retro: every panel square-cornered
   function text(ctx, s, x, y, size, fill, o = {}) {
-    ctx.font = `${o.weight || 800} ${size}px ${FONT}`;
+    ctx.font = `${size}px ${FONT}`;   // Departure Mono has one weight: heft comes from the outline
     ctx.textAlign = o.align || 'center'; ctx.textBaseline = 'middle';
     if (o.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = o.stroke; ctx.strokeStyle = o.strokeColor || INK; ctx.strokeText(s, x, y); }
     ctx.fillStyle = fill; ctx.fillText(s, x, y);
@@ -347,6 +347,16 @@ const Render = (() => {
     ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x, y + h - 6, w, 6);             // bottom shade
     const sc = b.scale || 4;
     PixelFont.draw(ctx, b.label, x + w / 2, y + h / 2, { scale: sc, color: INK, shadow: Math.max(1, sc / 2), shadowColor: 'rgba(0,0,0,0.25)' });
+    if (hot) { // the gleam: a bright glint circling the button's border, and a sheen sweeping over its face
+      const per = 2 * (w + h + 8), sp = (t * 220) % per, seg = 22;
+      const at = d => { d = ((d % per) + per) % per; const W2 = w + 8, H2 = h + 8;
+        if (d < W2) return [x - 4 + d, y - 4]; d -= W2; if (d < H2) return [x + w + 4, y - 4 + d]; d -= H2; if (d < W2) return [x + w + 4 - d, y + h + 4]; d -= W2; return [x - 4, y + h + 4 - d]; };
+      for (let k = 0; k < seg; k += 2) { const [gx, gy] = at(sp - k); ctx.globalAlpha = 1 - k / seg; ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(gx) - 3, Math.round(gy) - 3, 6, 6); }
+      ctx.globalAlpha = 1;
+      const sweep = ((t * 0.9) % 1.6) / 1.6;   // every 1.6 s a slanted white band slides left to right across the face
+      if (sweep < 1) { ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        const bx = x - 30 + sweep * (w + 60); ctx.beginPath(); ctx.moveTo(bx, y); ctx.lineTo(bx + 14, y); ctx.lineTo(bx - 6, y + h); ctx.lineTo(bx - 20, y + h); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    }
     if (hot && Math.floor(t * 4) % 2) { // the blinking pointer
       const px = x - 26, py = y + h / 2, s = 4;
       ctx.fillStyle = '#ffffff';

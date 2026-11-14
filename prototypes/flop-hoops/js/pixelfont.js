@@ -67,6 +67,15 @@ const PixelFont = (() => {
   };
   const ADV = 6; // cells per character, including one cell of spacing
 
+  // Departure Mono (embedded by js/font.js) is used once it has loaded; the bitmap glyphs above are
+  // the stand-in for the first few frames, and for any character the font lacks.
+  let adv = 0.6;   // the font's advance per character, in ems (measured on first use)
+  const real = () => window.FONT_OK === true;
+  function measureAdv(ctx) { ctx.save(); ctx.font = "100px 'Departure Mono'"; const w = ctx.measureText('M').width / 100; ctx.restore(); if (w > 0.3 && w < 1) adv = w; }
+  let measured = false;
+  /** The font size whose character width matches a bitmap of cells `scale` px wide (6 cells to a character). */
+  const sizeOf = scale => 6 * scale / adv;
+
   /** Width in px of `str` at `scale`. */
   function width(str, scale) { return Math.max(0, String(str).length * ADV - 1) * scale; }
 
@@ -85,11 +94,24 @@ const PixelFont = (() => {
    *   shadowColor, outline (true for a one-cell outline), outlineColor
    */
   function draw(ctx, str, x, y, o = {}) {
-    const s = o.scale || 3, w = width(str, s);
+    const s = o.scale || 3, sh = o.shadow === undefined ? s : o.shadow;
+    str = String(str).toUpperCase();   // menus are set in capitals
+    if (real()) {
+      if (!measured) { measureAdv(ctx); measured = true; }
+      const size = sizeOf(s);
+      ctx.save(); ctx.font = `${size}px 'Departure Mono'`; ctx.textBaseline = 'middle'; ctx.textAlign = o.align === 'left' ? 'left' : o.align === 'right' ? 'right' : 'center';
+      const w = ctx.measureText(String(str)).width, yy = Math.round(y + size * 0.04), xx = Math.round(x);
+      const layer = (dx, dy, color) => { ctx.fillStyle = color; ctx.fillText(String(str), xx + dx, yy + dy); };
+      if (sh) layer(sh, sh, o.shadowColor || 'rgba(10,6,24,0.85)');
+      if (o.outline) for (const [dx, dy] of [[-s, 0], [s, 0], [0, -s], [0, s], [-s, -s], [s, s], [-s, s], [s, -s]]) layer(dx, dy, o.outlineColor || '#1d1a2b');
+      layer(0, 0, o.color || '#ffffff');
+      ctx.restore();
+      return w;
+    }
+    const w = width(str, s);
     let x0 = o.align === 'left' ? x : o.align === 'right' ? x - w : x - w / 2;
     x0 = Math.round(x0); const y0 = Math.round(y - 3.5 * s);
     const layer = (dx, dy, color) => { const p = new Path2D(); cells(str, x0 + dx, y0 + dy, s, p); ctx.fillStyle = color; ctx.fill(p); };
-    const sh = o.shadow === undefined ? s : o.shadow;
     if (sh) layer(sh, sh, o.shadowColor || 'rgba(10,6,24,0.85)');
     if (o.outline) for (const [dx, dy] of [[-s, 0], [s, 0], [0, -s], [0, s], [-s, -s], [s, s], [-s, s], [s, -s]]) layer(dx, dy, o.outlineColor || '#1d1a2b');
     layer(0, 0, o.color || '#ffffff');
