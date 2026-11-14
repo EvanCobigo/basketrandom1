@@ -17,6 +17,7 @@ window.CONFIG = {
   // ---- Jumping (one key) ----
   jump_height: { value: 165, min: 60, max: 320, step: 5 },     // px a jump from flat ground rises
   jump_forward: { value: 2.6, min: 0, max: 8, step: 0.1 },     // px/step push toward the hoop you attack
+  jump_chase: { value: 3.4, min: 0, max: 8, step: 0.1 },      // px/step pull toward the ball's side on each hop
   jump_spin: { value: 0.075, min: 0, max: 0.3, step: 0.005 },  // rad/step forward tip on each jump
   jump_tilt_mix: { value: 0.6, min: 0, max: 1, step: 0.05 },   // 0 = straight up, 1 = along the body
   jump_jitter: { value: 0.08, min: 0, max: 0.3, step: 0.01 },  // +- fraction of random jump strength
@@ -41,6 +42,7 @@ window.CONFIG = {
   ball_bounce: { value: 0.8, min: 0.3, max: 0.98, step: 0.01 },// restitution before the round twist
   ball_mass: { value: 1.3, min: 0.3, max: 5, step: 0.1 },      // Matter mass units
   ball_kick: { value: 2.6, min: 0, max: 8, step: 0.1 },        // px/step extra pop off any body hit
+  ball_lift: { value: 0.9, min: 0, max: 3, step: 0.05 },      // share of each hit's pop sent upward
   ball_spin: { value: 0.18, min: 0, max: 0.6, step: 0.01 },    // rad/step random spin added on hits
   ball_air: { value: 0.004, min: 0, max: 0.03, step: 0.001 },  // air drag
   ball_max_speed: { value: 26, min: 10, max: 40, step: 1 },    // px/step cap, so it never tunnels

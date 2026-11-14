@@ -219,7 +219,7 @@ const scenes = {
     draw() {
       if (!world) buildRound(1);
       ctx.fillStyle = '#2a2440'; ctx.fillRect(0, 0, W, H);
-      const names = ['Tangerine: spikes', 'Tangerine: cap', 'Tangerine: mohawk', 'Tealback: puff', 'Tealback: bun', 'Tealback: band'];
+      const names = ['spikes', 'cap', 'mohawk', 'puff', 'bun', 'band'];
       const styles = ['spikes', 'cap', 'mohawk', 'puff', 'bun', 'band'];
       const p0 = world.players[0];
       styles.forEach((st, i) => {
@@ -229,7 +229,8 @@ const scenes = {
         ctx.save(); ctx.translate(dx, dy);
         Render.player(ctx, fake, 1, world.S.kits[team], { x: src.torso.position.x + 300, y: 300 });
         ctx.restore();
-        text(names[i], 120 + i * 140, 560, 16, '#ffffff', { stroke: 4 });
+        text(i < 3 ? 'Tangerine' : 'Tealback', 120 + i * 140, 548, 16, Render.TEAM_COLORS[team], { stroke: 4 });
+        text(names[i], 120 + i * 140, 572, 16, '#ffffff', { stroke: 4 });
       });
       Render.ball(ctx, 1000, 380, 34, 0.4, false); text('Ball', 1000, 450, 16, '#ffffff', { stroke: 4 });
       ctx.save(); ctx.translate(1150 - world.hoops[1].boardX, 420 - world.hoops[1].rimY);
@@ -252,8 +253,8 @@ const scenes = {
     draw() {
       drawGame({ hud: false }); overlay(0.45);
       ctx.save(); ctx.translate(W / 2, 150); ctx.rotate(-0.05);
-      text('FLOP', -150, 0, 120, '#ff9a3c', { weight: 900, stroke: 14 });
-      text('HOOPS', 175, 10, 120, '#1fc2b1', { weight: 900, stroke: 14 });
+      text('FLOP', -14, 0, 120, '#ff9a3c', { weight: 900, stroke: 14, align: 'right' });
+      text('HOOPS', 14, 10, 120, '#1fc2b1', { weight: 900, stroke: 14, align: 'left' });
       ctx.restore();
       text('Two wobbly ballers a side. One key each. New rules every round.', W / 2, 250, 22, '#ffffff', { stroke: 5 });
       for (const team of [0, 1]) {
@@ -267,7 +268,7 @@ const scenes = {
       text('Hold to hop again and raise your arm. Let go to slap it down.', W / 2, 478, 19, '#ffffff', { weight: 700, stroke: 4 });
       buttons = [];
       btn('PLAY', W / 2 - 130, 520, 260, 74, newMatch, 'Enter or Space', 40);
-      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 74, 190, 52, () => setMuted(!muted), 'M', 22);
+      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);
       text(`First to ${tune.win_score} baskets wins  ·  Esc / P pauses`, W / 2, H - 30, 17, '#c9c3e0', { weight: 700, stroke: 4 });
     },
   },
@@ -323,7 +324,7 @@ const scenes = {
       btn('RESUME', W / 2 - 140, 330, 280, 66, () => { scene = pauseFrom; }, 'P or Esc', 32);
       btn('RESTART MATCH', W / 2 - 140, 430, 280, 66, newMatch, 'R', 26);
       btn('MAIN MENU', W / 2 - 140, 530, 280, 66, toMenu, 'Q', 30);
-      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 74, 190, 52, () => setMuted(!muted), 'M', 22);
+      btn(muted ? 'Sound: off' : 'Sound: on', W - 220, H - 112, 190, 52, () => setMuted(!muted), 'M', 22);
     },
   },
   results: { // the winners keep bouncing; the losers stand there
@@ -370,6 +371,7 @@ function timer() { if (document.visibilityState === 'visible' && clock.now() - l
 window.game = {
   get scene() { return scene; },
   get state() { return state; },
+  get ball() { return world ? { x: world.ball.position.x, y: world.ball.position.y } : null; }, // read-only, for checks
   press(code) { hit.add(code); },
   hold(code, on) { on ? down.add(code) : down.delete(code); },
   get events() { return events; },

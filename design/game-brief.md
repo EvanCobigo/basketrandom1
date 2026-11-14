@@ -47,13 +47,13 @@ Every touch is contested from second one: the skill is timing your hop against t
 - Win: first team to 5 baskets. Lose: the other team reaches 5 first.
 
 ## Features
-- [ ] Multi-body ragdoll players (head, torso, arms, legs) on one key per team
-- [ ] Ball physics with ground, player, rim and backboard collisions
-- [ ] Basket detection, scoreboard, score animation, screen shake, round reset
-- [ ] Randomised rounds: proportions, ball size, court width, gravity/jump, bounce, venue, outfits
-- [ ] Menu, pause, victory screen, restart
+- [x] Multi-body ragdoll players (head, torso, arms, legs) on one key per team
+- [x] Ball physics with ground, player, rim and backboard collisions
+- [x] Basket detection, scoreboard, score animation, screen shake, round reset
+- [x] Randomised rounds: proportions, ball size, court width, gravity/jump, bounce, venue, outfits
+- [x] Menu, pause, victory screen, restart
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
-- [ ] Fixed physics timestep, requestAnimationFrame render, responsive canvas
+- [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
 
 ## Your systems
 - ragdoll physics · in the slice

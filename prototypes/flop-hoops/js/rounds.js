@@ -9,7 +9,7 @@
 const Rounds = (() => {
   /** Each twist multiplies (or adds to) the base values; strength scales how far. */
   const TWISTS = [
-    { id: 'normal', name: 'Regulation', sub: 'Just basketball. Probably.' },
+    { id: 'normal', name: 'Normal Ball', sub: 'Just basketball. Probably.' },
     { id: 'giant_ball', name: 'Giant Ball', sub: 'Hard to miss. Hard to steer.', ballR: 1.6 },
     { id: 'pea_ball', name: 'Pea Ball', sub: 'Tiny ball, tiny margin.', ballR: 0.65 },
     { id: 'moon', name: 'Moon Gravity', sub: 'Float... float... clang.', grav: 0.55, jump: 1.2 },

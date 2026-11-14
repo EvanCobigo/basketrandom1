@@ -179,7 +179,9 @@ const Physics = (() => {
       let jx = Math.sin(a) * m, jy = -(1 - m) - Math.cos(a) * m;
       if (jy > -0.35) jy = -0.35;            // even upside down, a jump goes up a little
       const n = Math.hypot(jx, jy); jx /= n; jy /= n;
-      const vx = jx * v + p.dir * T.jump_forward, vy = jy * v;
+      // each hop also leans toward the ball's side, so a player who overran it can turn back
+      const chase = clamp((w.ball.position.x - torso.position.x) / 140, -1, 1) * T.jump_chase;
+      const vx = jx * v + p.dir * T.jump_forward + chase, vy = jy * v;
       for (const part of p.parts) {
         Body.setVelocity(part, { x: part.velocity.x * 0.25 + vx, y: Math.min(part.velocity.y, 0) * 0.25 + vy });
       }
@@ -215,7 +217,8 @@ const Physics = (() => {
       const dx = ball.position.x - kk.part.position.x, dy = ball.position.y - kk.part.position.y;
       const n = Math.hypot(dx, dy) || 1;
       const boost = T.ball_kick * clamp(kk.rel / 10, 0.3, 1.3);
-      Body.setVelocity(ball, { x: ball.velocity.x + dx / n * boost, y: ball.velocity.y + dy / n * boost - boost * 0.25 });
+      const low = ball.position.y > w.floorY - ball.circleRadius * 3 ? 1.5 : 1; // a ball near the floor pops up harder
+      Body.setVelocity(ball, { x: ball.velocity.x + dx / n * boost, y: ball.velocity.y + dy / n * boost - boost * T.ball_lift * low });
       Body.setAngularVelocity(ball, ball.angularVelocity + (w.rng() - 0.5) * T.ball_spin);
     }
     capSpeed(ball, T.ball_max_speed);
