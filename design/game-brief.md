@@ -30,6 +30,8 @@ After play: Preserve existing assets and visual effects. The basketball, basketb
 
 After play: make it so that when you bounce the ball, the enemies cannot grab it for a short period of time to encourage ball passing between teammates. When "dribbling" if the release period is short enough, the ball should just do a short bounce, and the player should move lean and do small jumps with the ball. make shooting a bit easier and simpler, the ball's trajectory should not be influenced by the momentum of the character: the ball should always follow the same parabolic trajectory to the hoop, even if character is leaning backwards etcetera.
 
+After play: make the perfect effect easier to proc, as in if the ball hits the rim very slightly it counts as a perfect / or make the rim slightly larger and I mean really slightly larger. Make the dunking easier to do, the dunking should prompt when the player has the ball and is near the basket, even when standing on the ground, and it should be a tap of the jump key to proc a dunk, also when passing, the ball should pass through the enemy, (make sure this is a short time frame). add more particles to things, but make the particles feel polished - not just excessive. the ball should be held either at the base of the hand, or on the palm of the hand. currently it's being held on the chest without touching the arm.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -76,11 +78,13 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Only opponents collide; teammates pass through each other
 - [x] Planted players pivot on their feet, swinging evenly forward and back at a beat that never fades; fallen players get back up
 - [x] Shots: one arc per cock-back and spot (forward 3.5-14, up 11-13, 1 s cock-back); lean, drift and momentum change nothing; strong aim help toward the rim's centre
-- [x] Bounce key: hold to wind up, let go to bounce the ball forward as a pass; opponents cannot catch a bounced ball for 0.6 s
+- [x] Bounce key: hold to wind up, let go to bounce the ball forward as a pass; a pass slips through opponents for 0.3 s and they cannot catch it for 0.6 s
 - [x] Dribble: a quick tap bounces the ball at the feet while the player leans in and hops forward with it, catching it back
-- [x] Dunk: near the rim in the air (ball and body measured to the rim), letting go of the cocked shot dunks: the ball arcs in over the rim and the dunker is carried to it
+- [x] Dunk: with the ball near your hoop, standing or flying, TAP TO DUNK shows; a tap of the jump key dunks: the ball arcs in over the rim and the dunker is carried up to it
 - [x] Quicker pace than iteration 4 (game speed 0.9, shorter round card and celebration); players eased apart so they never pile into one blob
-- [x] Fired ball trail: white; rainbow with a PERFECT! callout on a clean line through the rim; green if an on-target shot touches rim or backboard before going through
+- [x] Fired ball trail: white; rainbow with a PERFECT! callout on a line through the rim (a graze of up to 5 px still counts); green if any other on-target shot touches rim or backboard before going through
+- [x] The ball is held in the palm, just past the hand, whatever the arm's angle at the catch
+- [x] Particles, few and short: landing and bounce dust, rim sparks, net flecks, a dunk burst, tidier score confetti
 - [x] SWISH and PERFECT SWISH baskets; HUSTLE higher jumps for a team 2+ points behind; pickup flash
 - [x] Catches checked every step: larger hand box, abdomen overlap
 

@@ -162,10 +162,13 @@ function onPhysEvent(ev) {
   if (ev.type === 'dribbleout') { sfx.bounce(0.1); events.push({ type: 'dribbleout', team: ev.team }); return; }
   if (ev.type === 'bounce') { sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); events.push({ type: 'dunkstart', team: ev.team }); return; }
-  if (ev.type === 'dunk') { sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
+  if (ev.type === 'dunk') { puff(ev.x, ev.y, 10, { speed: 320, life: 0.45, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; events.push({ type: 'dunk', team: ev.team }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
+  if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
   if (ev.type !== 'hit' || ev.speed < 1.2) return;
+  if (ev.on === 'floor' && ev.speed > 3) puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 14 });
+  if (ev.on === 'rim' && ev.speed > 2) puff(ev.x, ev.y, 4, { speed: 220, life: 0.25, colors: ['#ffd23f', '#ffffff'], size: 6, g: 600 });
   if (ev.on === 'player') { sfx.bop(ev.speed); events.push({ type: 'touch', team: ev.team }); }
   else if (ev.on === 'floor') sfx.floor(ev.speed);
   else if (ev.on === 'board') { sfx.board(ev.speed); if (ev.hoop) ev.hoop.wobble = 1; }
@@ -206,30 +209,44 @@ let physStepSaw = [false, false], physStepSawB = [false, false];
 function bounceKeys() { return BOUNCE_KEYS.map(k => down.has(k)); }
 function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
 function heldKeys() { return KEYS.map(k => down.has(k)); }
+const DUST = () => (world && Render.VENUES[world.S.venue].line) || '#ffffff';
 const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
 function score(hoop) {
   const team = hoop.team, shot = world.ball.shot, own = shot && shot.team === team;
-  state.scoreKind = own ? (shot.perfect && shot.clean ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
+  state.scoreKind = own ? (shot.perfect ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
     : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
   state.toastT = 0; // the score banner names the shot; no callout on top of it
   state.score[team]++; state.pops[team] = 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
   hoop.sway = 1.5;
   const c = [Render.TEAM_COLORS[team], '#ffd23f', '#ffffff', Render.TEAM_DARK[team]];
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 36; i++) {
     state.particles.push({ x: (hoop.x1 + hoop.x2) / 2, y: hoop.rimY + 20, vx: (rng() - 0.5) * 900, vy: -200 - rng() * 700,
       a: rng() * 6, va: (rng() - 0.5) * 20, life: 1.2 + rng() * 0.8, c: c[i % 4] });
   }
   sfx.swish();
+  puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 6, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
   events.push({ type: 'score', team, score: state.score.slice() });
   state.winner = Scoring.winner(state.score, tune.win_score);
   scene = 'scored';
+}
+// ---- Particles: few, short and purposeful. A separate random keeps gameplay rolls untouched.
+let fxSeed = 7;
+function fxr() { fxSeed = (fxSeed * 1103515245 + 12345) & 0x7fffffff; return fxSeed / 0x7fffffff; }
+/** Spawn n particles at (x, y): spread is the launch speed in px/s, up its upward bias, g gravity. */
+function puff(x, y, n, o) {
+  for (let i = 0; i < n; i++) {
+    const a = o.angle !== undefined ? o.angle + (fxr() - 0.5) * (o.cone || Math.PI) : fxr() * Math.PI * 2;
+    const sp = o.speed * (0.5 + fxr() * 0.5);
+    state.particles.push({ x: x + (fxr() - 0.5) * (o.jitter || 0), y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (o.up || 0),
+      a: 0, va: 0, life: o.life * (0.7 + fxr() * 0.3), max: o.life, c: o.colors[i % o.colors.length], size: o.size || 8, g: o.g ?? 900, drag: o.drag ?? 0.9 });
+  }
 }
 function updateJuice(dt) {
   state.pops = state.pops.map(p => Math.max(0, p - dt * 2.5));
   state.shake = Math.max(0, state.shake - dt * tune.shake * 2.2);
   state.toastT = Math.max(0, state.toastT - dt);
   if (world && world.flash) world.flash.t = Math.max(0, world.flash.t - dt);
-  for (const p of state.particles) { p.vy += 1400 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.99; p.a += p.va * dt; p.life -= dt; }
+  for (const p of state.particles) { const d = Math.pow(p.drag ?? 0.99, dt * 60); p.vy += (p.g ?? 1400) * dt; p.vx *= d; p.vy *= p.g === 0 ? d : 1; p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt; p.life -= dt; }
   state.particles = state.particles.filter(p => p.life > 0 && p.y < H + 20);
 }
 /** A ball that stops moving (on a backboard top, wedged in a corner) is dropped again. */
@@ -296,7 +313,8 @@ function drawCourt(fn) {
 function drawGame(opts = {}) {
   drawCourt(c => {
     Render.world(c, world, courtAlpha(), state.t, W, H);
-    for (const p of state.particles) { c.fillStyle = p.c; c.fillRect(p.x - 6, p.y - 6, 12, 12); }
+    for (const p of state.particles) { const k = p.max ? Math.max(0, p.life / p.max) : 1, sz = (p.size || 12) * (p.max ? 0.4 + 0.6 * k : 1); c.globalAlpha = p.max ? Math.min(1, k * 1.5) : 1; c.fillStyle = p.c; c.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz); }
+    c.globalAlpha = 1;
   });
   if (opts.hud !== false) {
     Render.scoreboard(ctx, W, { score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
@@ -304,6 +322,10 @@ function drawGame(opts = {}) {
       const t = world.hustle[0] ? 0 : 1;
       text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128, 16, Render.TEAM_COLORS[t], { stroke: 4 });
     }
+  }
+  if (world && world.hold && world.hold.dunkReady && (scene === 'play')) {
+    const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;
+    text(`TAP ${p.team ? 'UP' : 'W'} TO DUNK`, h.cx, h.boardTop - 30, 18, on ? '#ffd23f' : '#ffffff', { weight: 900, stroke: 5 });
   }
   if (state.toastT > 0) {
     const k = Math.min(1, (1.1 - state.toastT) / 0.12);

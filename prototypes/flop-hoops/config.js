@@ -31,6 +31,7 @@ window.CONFIG = {
 
   // ---- Ball handling: grab, shoot, fadeaway, dunk, block ----
   regrab_delay: { value: 0.4, min: 0, max: 1.5, step: 0.05 },   // s before a player who let go can grab again
+  palm_offset: { value: 0.55, min: 0, max: 1.2, step: 0.05 },    // ball centre past the hand, in ball radii: held in the palm
   belly_margin: { value: 6, min: 0, max: 30, step: 1 },          // px the abdomen catch reaches past the torso
   hand_box: { value: 78, min: 20, max: 120, step: 2 },          // px side of the square catch box around each hand
   shot_charge_time: { value: 1.0, min: 0.2, max: 2.5, step: 0.05 }, // s of holding to reach full shot power
@@ -43,8 +44,7 @@ window.CONFIG = {
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
-  dunk_range: { value: 80, min: 20, max: 200, step: 5 },        // px from the ball to the spot above the rim where a dunk is on
-  dunk_body_range: { value: 150, min: 60, max: 300, step: 5 },  // px from the dunker's body to the rim
+  dunk_body_range: { value: 175, min: 60, max: 300, step: 5 },  // px from the carrier's body to the rim where TAP TO DUNK shows (standing or flying)
   dunk_time: { value: 0.22, min: 0.08, max: 0.6, step: 0.01 },  // s the slam motion takes
   dunk_lift: { value: 24, min: 0, max: 80, step: 2 },            // px the ball arcs up before coming down through
   block_window: { value: 0.9, min: 0.2, max: 2, step: 0.05 },   // s after a shot a defender's touch is a block
@@ -60,6 +60,7 @@ window.CONFIG = {
   dribble_reach: { value: 70, min: 0, max: 160, step: 5 },       // px from the hand a rising dribble is caught back
   bounce_regrab: { value: 0.3, min: 0, max: 1, step: 0.05 },    // s before the bouncer can catch it again
   pass_guard: { value: 0.6, min: 0, max: 2, step: 0.05 },        // s after a bounce that opponents cannot catch it
+  pass_ghost: { value: 0.3, min: 0, max: 1, step: 0.05 },        // s a pass passes straight through opponents
   dribble_threshold: { value: 0.25, min: 0, max: 1, step: 0.05 }, // bounce charge below which a release is a dribble
   dribble_vx: { value: 1.6, min: 0, max: 6, step: 0.1 },         // px/step forward speed of a dribble
   dribble_vy: { value: 6, min: 1, max: 14, step: 0.5 },          // px/step downward throw of a dribble
@@ -69,6 +70,7 @@ window.CONFIG = {
   dribble_hop_gap: { value: 0.18, min: 0.05, max: 0.6, step: 0.01 }, // s between small hops
   dribble_lean: { value: 0.3, min: 0, max: 0.8, step: 0.02 },    // rad forward lean while dribbling
   perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
+  perfect_graze: { value: 5, min: 0, max: 15, step: 1 },         // px a perfect shot may overlap the rim or board and still count
   trail_length: { value: 18, min: 0, max: 60, step: 1 },        // steps of ball trail behind a fired shot
   hustle_gap: { value: 2, min: 1, max: 10, step: 1 },           // points behind before a team hustles
   hustle_jump: { value: 1.15, min: 1, max: 1.6, step: 0.01 },   // jump height multiplier while hustling

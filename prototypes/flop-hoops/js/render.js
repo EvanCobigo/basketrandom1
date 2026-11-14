@@ -278,6 +278,6 @@ const Render = (() => {
     if (b.hint) text(ctx, b.hint, b.x + b.w / 2, b.y + b.h + 22, 16, '#ffffff', { weight: 700, stroke: 4 });
   }
 
-  return { RAINBOW, CONTESTED, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
+  return { RAINBOW, CONTESTED, VENUES, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();
