@@ -427,7 +427,7 @@ function checkStall(dt) {
 }
 
 // The CPU difficulty slider on the title: click or drag along it to pick a level.
-const LEVEL = { x: W / 2 - 150, y: 652, w: 300 };
+const LEVEL = { x: W / 2 - 150, y: 548, w: 300 };
 function levelClick(x, y) {
   if (Math.abs(y - LEVEL.y) > 22 || x < LEVEL.x - 14 || x > LEVEL.x + LEVEL.w + 14) return false;
   Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (x - LEVEL.x) / LEVEL.w)) * 4)); sfx.click();
@@ -622,28 +622,21 @@ const scenes = {
       const bob = Math.round(Math.sin(state.t * 2) * 4);
       ptext('FLOP', W / 2 - 18, 118 + bob, 14, '#ff9a3c', { align: 'right', outline: true, shadow: 10 });
       ptext('HOOPS', W / 2 + 18, 118 - bob, 14, '#1fc2b1', { align: 'left', outline: true, shadow: 10 });
-      ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 212, 3, '#fff1a8');
+      ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 196, 3, '#fff1a8');
+      // the controls, one slim panel: each team's name and its two keys
+      ctx.fillStyle = Render.INK; ctx.fillRect(W / 2 - 384, 232, 768, 94);
+      ctx.fillStyle = '#21183f'; ctx.fillRect(W / 2 - 380, 236, 760, 86);
       for (const team of [0, 1]) {
-        const x = W / 2 + (team ? 250 : -250);
-        ctx.fillStyle = '#0a0618'; ctx.fillRect(x - 154, 256, 320, 150);
-        ctx.fillStyle = Render.INK; ctx.fillRect(x - 164, 246, 328, 158);
-        ctx.fillStyle = '#21183f'; ctx.fillRect(x - 160, 250, 320, 150);
-        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 160, 250, 320, 8);
-        ptext(team ? 'PLAYER 2' : 'PLAYER 1', x, 280, 3, Render.TEAM_COLORS[team]);
-        ptext(Render.TEAM_NAMES[team], x, 310, 4, '#ffffff');
-        Render.keycap(ctx, x - 80, 352, team ? 'up' : 'W', 1);
-        ptext('JUMP/SHOOT', x - 80, 384, 2, '#c9c3e0', { shadow: 2 });
-        Render.keycap(ctx, x + 60, 352, team ? 'down' : 'S', 1);
-        ptext('BOUNCE/PASS', x + 60, 384, 2, '#c9c3e0', { shadow: 2 });
+        const x = W / 2 + (team ? 190 : -190);
+        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 190 + (team ? 4 : 0), 236, 186, 6);
+        ptext(Render.TEAM_NAMES[team].toUpperCase(), x, 258, 2, Render.TEAM_COLORS[team]);
+        Render.keycap(ctx, x - 80, 284, team ? 'up' : 'W', 0.6); ptext('JUMP / SHOOT', x - 80, 308, 1, '#c9c3e0');
+        Render.keycap(ctx, x + 80, 284, team ? 'down' : 'S', 0.6); ptext('BOUNCE / PASS', x + 80, 308, 1, '#c9c3e0');
       }
-      ctx.fillStyle = 'rgba(10,6,24,0.78)'; ctx.fillRect(W / 2 - 440, 420, 880, 66);   // a dark band so the help reads over the grid
-      ptext('HOP AS YOU SWING TO MOVE. CATCH WITH HAND OR BELLY.', W / 2, 432, 2, '#ffffff');
-      ptext('WITH THE BALL: HOLD JUMP, LET GO TO SHOOT (NEAR THE RIM: TAP TO DUNK).', W / 2, 452, 2, '#ffffff');
-      ptext('TAP BOUNCE TO DRIBBLE (TAP AGAIN AS IT RISES), HOLD IT TO PASS.', W / 2, 472, 2, '#ffffff');
       buttons = [];
-      btn('VS CPU', W / 2 - 339, 500, 210, 64, () => newMatch('cpu'), 'YOU VS COMPUTER', 3);
-      btn('2 PLAYERS', W / 2 - 105, 500, 210, 64, () => newMatch('2p'), 'ONE KEYBOARD', 3);
-      btn('WATCH CPU', W / 2 + 129, 500, 210, 64, () => newMatch('sim'), 'COMPUTER VS COMPUTER', 3);
+      btn('VS CPU', W / 2 - 420, 356, 260, 72, () => newMatch('cpu'), 'YOU VS COMPUTER', 4);
+      btn('2 PLAYERS', W / 2 - 130, 356, 260, 72, () => newMatch('2p'), 'ONE KEYBOARD', 4);
+      btn('WATCH CPU', W / 2 + 160, 356, 260, 72, () => newMatch('sim'), 'COMPUTER VS COMPUTER', 4);
       // CPU difficulty: a five-step slider with what the level does written under it
       const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];
       btn('<', LEVEL.x - 64, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv - 1), '', 4);
@@ -657,9 +650,10 @@ const scenes = {
         ctx.fillStyle = on ? '#ffffff' : n < lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - (on ? 8 : 4), LEVEL.y - (on ? 12 : 6), on ? 16 : 8, on ? 24 : 12);
       }
       ptext(L.does, W / 2, LEVEL.y + 32, 2, '#ffffff');
-      btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3);
-      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
-      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 14, 2, '#c9c3e0');
+      ptext('HOLD JUMP, LET GO TO SHOOT (TAP NEAR THE RIM TO DUNK)  ·  TAP BOUNCE TO DRIBBLE, HOLD IT TO PASS', W / 2, 616, 1, '#8f88ad');
+      btn('SETTINGS', 40, H - 84, 200, 50, openSettings, '', 3);
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 240, H - 84, 200, 50, () => setMuted(!muted), 'M', 3);
+      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 14, 1, '#8f88ad');
     },
   },
   settings: {
