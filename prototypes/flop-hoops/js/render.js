@@ -213,6 +213,29 @@ const Render = (() => {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * The bubble over an AI player's head showing what it is attempting: ball (dribbling), shot, shield (a block or
+   * a rim guard), screen (a wall), pass (an arrow), dunk (ball over a rim), steal (a hand), board (a rebound arrow).
+   * `color` is its team's colour; `t` bobs it.
+   */
+  function aiIcon(ctx, x, y, kind, color, t) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(1.45, 1.45); x = 0; y = 0;   // (drawn at 15 units, shown a bit bigger: it must read at a glance)
+    const by = y + Math.sin(t * 6) * 2.5, S = 15;
+    rr(ctx, x - S, by - S, S * 2, S * 2); ink(ctx, '#fff3d6', 4);
+    ctx.beginPath(); ctx.moveTo(x - 5, by + S); ctx.lineTo(x + 5, by + S); ctx.lineTo(x, by + S + 7); ctx.closePath(); ctx.fillStyle = '#fff3d6'; ctx.fill();   // the tail toward the head
+    const ball = (bx, byy, r) => { ctx.beginPath(); ctx.arc(bx, byy, r, 0, Math.PI * 2); ctx.fillStyle = '#e8591a'; ctx.fill(); ctx.lineWidth = 1.6; ctx.strokeStyle = INK; ctx.stroke(); ctx.beginPath(); ctx.moveTo(bx - r, byy); ctx.lineTo(bx + r, byy); ctx.stroke(); };
+    const px = (dx, dy, w, h, fill) => { ctx.fillStyle = fill; ctx.fillRect(x + dx, by + dy, w, h); };
+    if (kind === 'ball') ball(x, by, 8);
+    else if (kind === 'shot') { ball(x - 6, by + 6, 5); for (const [dx, dy] of [[-1, 0], [3, -4], [7, -7]]) px(dx, dy, 4, 4, INK); px(7, -11, 6, 3, INK); px(10, -11, 3, 6, INK); }   // a ball and its arc up to the hoop
+    else if (kind === 'shield') { ctx.beginPath(); ctx.moveTo(x - 8, by - 9); ctx.lineTo(x + 8, by - 9); ctx.lineTo(x + 8, by + 1); ctx.lineTo(x, by + 10); ctx.lineTo(x - 8, by + 1); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); px(-2, -6, 4, 11, '#ffffff'); px(-5, -3, 10, 4, '#ffffff'); }
+    else if (kind === 'screen') { for (const [dx, dy, w] of [[-10, -10, 9], [0, -10, 10], [-10, -3, 5], [-5, -3, 10], [6, -3, 4], [-10, 4, 9], [0, 4, 10]]) { px(dx, dy, w, 6, '#c0602a'); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.strokeRect(x + dx, by + dy, w, 6); } }   // a wall of bricks
+    else if (kind === 'pass') { px(-10, -2, 14, 4, INK); ctx.beginPath(); ctx.moveTo(x + 3, by - 8); ctx.lineTo(x + 11, by); ctx.lineTo(x + 3, by + 8); ctx.closePath(); ctx.fillStyle = INK; ctx.fill(); }
+    else if (kind === 'dunk') { ball(x, by - 5, 5); px(-9, 4, 18, 4, '#e8591a'); px(-9, 8, 18, 3, '#ffffff'); }
+    else if (kind === 'steal') { for (const [dx, dy, h] of [[-7, -9, 9], [-3, -11, 11], [1, -9, 9], [5, -6, 6]]) { px(dx, dy, 3, h, color); ctx.lineWidth = 1.2; ctx.strokeStyle = INK; ctx.strokeRect(x + dx, by + dy, 3, h); } px(-7, 0, 15, 9, color); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.strokeRect(x - 7, by, 15, 9); }
+    else if (kind === 'board') { ctx.beginPath(); ctx.moveTo(x, by - 10); ctx.lineTo(x + 9, by); ctx.lineTo(x + 3, by); ctx.lineTo(x + 3, by + 9); ctx.lineTo(x - 3, by + 9); ctx.lineTo(x - 3, by); ctx.lineTo(x - 9, by); ctx.closePath(); ctx.fillStyle = INK; ctx.fill(); }
+    ctx.restore();
+  }
+
   /** A cold-spark machine: a squat box with a nozzle; it glows while it fires. */
   function sparkMachine(ctx, x, f, on, t) {
     ctx.beginPath(); ctx.rect(x - 22, f - 30, 44, 30); ink(ctx, '#3a3f55', 5);
@@ -298,7 +321,7 @@ const Render = (() => {
       const s = team ? 1 : -1, bx = cx + s * 190;
       rr(ctx, bx - 100, y + 10, 200, h - 20, 14); ink(ctx, TEAM_COLORS[team], 4);
       text(ctx, TEAM_NAMES[team].toUpperCase(), bx - s * 28, y + 30, 17, '#ffffff', { stroke: 4 });
-      if (team === 1 && st.cpu) { text(ctx, 'CPU', bx - s * 28, y + (st.cpuStyle ? 58 : 62), 18, '#ffffff', { stroke: 4 }); if (st.cpuStyle) text(ctx, st.cpuStyle, bx - s * 28, y + 76, 12, '#ffffff', { stroke: 3 }); }   // the computer plays this side
+      if ((team === 1 && st.cpu) || (team === 0 && st.cpu0)) { const sty = team ? st.cpuStyle : st.cpuStyle0; text(ctx, 'CPU', bx - s * 28, y + (sty ? 58 : 62), 18, '#ffffff', { stroke: 4 }); if (sty) text(ctx, sty, bx - s * 28, y + 76, 12, '#ffffff', { stroke: 3 }); }   // the computer plays this side
       else { keycap(ctx, bx - s * 28 - 18, y + 62, team ? 'up' : 'W', 0.55); keycap(ctx, bx - s * 28 + 14, y + 62, team ? 'down' : 'S', 0.55); }
       const pop = st.pops[team];
       ctx.save(); ctx.translate(bx + s * 52, y + h / 2); ctx.scale(1 + pop * 0.6, 1 + pop * 0.6);
@@ -401,6 +424,6 @@ const Render = (() => {
 
 
 
-  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, setFont, pose, world, player, ball, hoopBack, hoopFront, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
+  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, setFont, pose, world, player, ball, hoopBack, hoopFront, aiIcon, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();

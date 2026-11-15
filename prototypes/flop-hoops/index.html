@@ -278,12 +278,13 @@ function buildRound(round) {
   state.stall = 0;
 }
 // mode: 'cpu' (Player 1 against the computer, which plays the Tealbacks) or '2p' (two people)
-let mode = 'cpu', cpu = null, matchNo = 0;
+let mode = 'cpu', cpu = null, cpuA = null, matchNo = 0;   // cpuA: the Tangerines' computer, only when the DEV setting has it play itself
 function newMatch(m) {
   if (m === 'cpu' || m === '2p') mode = m;
   reset(); state.mode = mode;
   seed += matchNo * 7919;   // each match of a session plays out differently; the first of a page load is the same every time
   cpu = mode === 'cpu' ? AI.create(1, rng, tune, matchNo) : null;
+  cpuA = mode === 'cpu' && tune.dev_ai_vs_ai > 0 ? AI.create(0, rng, tune, matchNo + 3) : null;   // DEV: the computer plays itself
   matchNo++;
   nextRound(); events.push({ type: 'match', mode });
 }
@@ -313,6 +314,8 @@ function teamKeys() {
   const j = heldKeys(), b = bounceKeys();
   if (cpu && scene === 'play') { AI.update(cpu, world, tune, STEP * tune.game_speed, { score: state.score }); j[1] = cpu.jump; b[1] = cpu.bounce; }
   else if (cpu) { j[1] = false; b[1] = false; }   // the CPU stands down during a basket's celebration
+  if (cpuA && scene === 'play') { AI.update(cpuA, world, tune, STEP * tune.game_speed, { score: state.score }); j[0] = cpuA.jump; b[0] = cpuA.bounce; }
+  else if (cpuA) { j[0] = false; b[0] = false; }
   return [j, b];
 }
 function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
@@ -503,6 +506,10 @@ function drawGame(opts = {}) {
     Render.world(c, world, courtAlpha(), state.t, W, H);
     for (const p of state.particles) { const k = p.max ? Math.max(0, p.life / p.max) : 1, sz = (p.size || 12) * (p.max ? 0.4 + 0.6 * k : 1); c.globalAlpha = p.max ? Math.min(1, k * 1.5) : 1; c.fillStyle = p.c; c.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz); }
     c.globalAlpha = 1;
+    if (scene === 'play') for (const ai of [cpuA, cpu]) {   // what each computer player is attempting, over the head of the player doing it
+      const m = ai && AI.marker(ai, world);
+      if (m) Render.aiIcon(c, m.who.head.position.x, m.who.head.position.y - 74, m.icon, Render.TEAM_COLORS[ai.team], state.t);
+    }
     if (state.aiDebug && cpu && scene === 'play' && cpu.dbg) {   // AI vision in court space: the ball path it expects and where it means to stand
       const d = cpu.dbg;
       if (d.path) { c.fillStyle = '#ffffff'; for (const q of d.path) c.fillRect(q.x - 3, q.y - 3, 6, 6); }
@@ -519,12 +526,13 @@ function drawGame(opts = {}) {
     text(f.text, f.x, f.y, 34, f.color, { weight: 900, stroke: 7 });
     ctx.globalAlpha = 1;
   }
+  const aiN = (cpuA ? 1 : 0) + (cpu ? 1 : 0);   // how many computer players are writing lines under the scoreboard
   if (opts.hud !== false) {
-    Render.scoreboard(ctx, W, { cpu: !!cpu, cpuStyle: cpu ? cpu.style.name : '', score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
-    if (cpu && scene === 'play' && cpu.intent) text(`CPU: ${cpu.intent}`, W / 2, 128, 15, Render.TEAM_COLORS[1], { stroke: 4 });   // what the computer is trying to do
+    Render.scoreboard(ctx, W, { cpu: !!cpu, cpuStyle: cpu ? cpu.style.name : '', cpu0: !!cpuA, cpuStyle0: cpuA ? cpuA.style.name : '', score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
+    if (scene === 'play') [cpuA, cpu].filter(Boolean).forEach((ai, i) => { if (ai.intent) text(`${cpuA ? Render.TEAM_NAMES[ai.team].toUpperCase() + ' CPU' : 'CPU'}: ${ai.intent}`, W / 2, 128 + i * 20, 15, Render.TEAM_COLORS[ai.team], { stroke: 4 }); });   // what each computer is trying to do
     if ((scene === 'play' || scene === 'scored') && world.hustle.some(Boolean)) {
       const t = world.hustle[0] ? 0 : 1;
-      text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, cpu ? 150 : 128, 16, Render.TEAM_COLORS[t], { stroke: 4 });
+      text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128 + aiN * 22, 16, Render.TEAM_COLORS[t], { stroke: 4 });
     }
     if (state.aiDebug && cpu && scene === 'play') {   // AI vision (I): its options with their scores, what it reads from you, what it has learned
       const d = cpu.dbg || {}, pf = cpu.profile, tn = AI.tendencies(pf), lines = [];
@@ -536,7 +544,7 @@ function drawGame(opts = {}) {
   }
   if (state.dribble && state.dribble.n > 1 && scene === 'play') { // the dribble chain: the more in a row, the shakier
     const d = state.dribble, shaky = d.sloppy >= 4;
-    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, state.aiDebug && cpu ? 250 : 174, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
+    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, (state.aiDebug && cpu ? 250 : 154) + aiN * 20, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
   }
   if (world && world.hold && world.hold.dunkReady && (scene === 'play')) {
     const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;
@@ -618,7 +626,7 @@ const scenes = {
       ptext('WITH THE BALL: HOLD JUMP, LET GO TO SHOOT (NEAR THE RIM: TAP TO DUNK).', W / 2, 452, 2, '#ffffff');
       ptext('TAP BOUNCE TO DRIBBLE (TAP AGAIN AS IT RISES), HOLD IT TO PASS.', W / 2, 472, 2, '#ffffff');
       buttons = [];
-      btn('VS CPU', W / 2 - 300, 500, 270, 64, () => newMatch('cpu'), 'PLAYER 1 VS COMPUTER', 4);
+      btn('VS CPU', W / 2 - 300, 500, 270, 64, () => newMatch('cpu'), tune.dev_ai_vs_ai > 0 ? 'COMPUTER VS COMPUTER (DEV)' : 'PLAYER 1 VS COMPUTER', 4);
       btn('2 PLAYERS', W / 2 + 30, 500, 270, 64, () => newMatch('2p'), 'ONE KEYBOARD', 4);
       // CPU difficulty: a five-step slider with what the level does written under it
       const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];

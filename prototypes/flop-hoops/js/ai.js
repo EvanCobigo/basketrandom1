@@ -86,7 +86,7 @@ const AI = (() => {
     const style = T && levelOf(T) >= 3 ? STYLES[(Math.floor(rng() * STYLES.length) + matchNo) % STYLES.length] : BALANCED;
     return {
       team, rng, style, w: Object.assign({}, DEFAULT_WEIGHTS, weights), jump: false, bounce: false, wait: 0, holdT: 0, bholdT: 0, dribs: 0, aim: null, rolls: {},
-      tick: 0, intent: '', intentAt: -99, plan: null, press: 0, err: 0, looseOn: false, qCache: null,
+      tick: 0, intent: '', intentAt: -99, intentSeen: -99, plan: null, press: 0, err: 0, looseOn: false, qCache: null,
       // tactical memory: what the opponent does, how they fare pressed or left open, and how my own plays fare
       profile: { shots: 0, longShots: 0, dunks: 0, passes: 0, dribbles: 0, shotDist: 0, drive: 0, side: 0, pressed: { att: 0, made: 0 }, open: { att: 0, made: 0 } },
       mine: { shot: { att: 0, made: 0 }, long: { att: 0, made: 0 }, fade: { att: 0, made: 0 }, dunk: { att: 0, made: 0 } },
@@ -128,6 +128,7 @@ const AI = (() => {
 
   /** Say what it is doing, but not flickering: a line stays on for about half a second. */
   function say(c, text, force) {
+    c.intentSeen = c.tick;                           // (still saying it: the icon over its head stays up)
     if (c.intent !== text && (force || c.tick - c.intentAt > 30)) { c.intent = text; c.intentAt = c.tick; }
   }
 
@@ -606,5 +607,35 @@ const AI = (() => {
     return chase(c, X);
   }
 
-  return { create, update, LEVELS, STYLES, levelOf, tendencies, DEFAULT_WEIGHTS };
+  /**
+   * The little picture over a player's head for what the AI is doing: ball (dribbling), shot (a jump shot,
+   * long shot, fadeaway, pump fake), shield (a block, a rim guard, standing in the way), screen (setting
+   * one), pass, dunk, steal, board (rebound), or null (just chasing).
+   */
+  function iconOf(text) {
+    if (!text) return null;
+    if (/SCREEN/.test(text)) return 'screen';
+    if (/STEAL/.test(text)) return 'steal';
+    if (/SWATTING|CONTESTING|PROTECTING THE RIM|GUARDING THE RIM|DEFENDING DEEP|STANDING BETWEEN|PRESSURING|READING THE DUNK|WATCHING THE PASS/.test(text)) return 'shield';
+    if (/PASS|ALLEY|FEEDING/.test(text)) return 'pass';
+    if (/DUNK|RIM PROTECTOR/.test(text)) return 'dunk';
+    if (/SHOT|FADING|PUMP FAKE/.test(text)) return 'shot';
+    if (/DRIBBL|DRIVING/.test(text)) return 'ball';
+    if (/BOARD/.test(text)) return 'board';
+    return null;
+  }
+  /** The icon to show now and which of its players it goes over (null when it has gone stale or means nothing). */
+  function marker(c, w) {
+    const icon = c.tick - c.intentSeen < 45 ? iconOf(c.intent) : null;
+    if (!icon) return null;
+    const mine = w.players.filter(q => q.team === c.team), lb = w.lastBouncer, hold = w.hold;
+    let who;
+    if (icon === 'screen') { const base = lb && lb.team === c.team ? lb : mine[0]; who = mine.find(q => q !== base) || base; }   // the teammate, not the dribbler
+    else if (hold && hold.p.team === c.team && icon !== 'shield' && icon !== 'steal' && icon !== 'board') who = hold.p;
+    else if (!hold && lb && lb.team === c.team && (icon === 'ball' || icon === 'shot')) who = lb;
+    else who = nearest(w, c.team, hold ? hold.p.torso.position.x : w.ball.position.x);
+    return who ? { icon, who } : null;
+  }
+
+  return { create, update, LEVELS, STYLES, levelOf, tendencies, DEFAULT_WEIGHTS, iconOf, marker };
 })();
