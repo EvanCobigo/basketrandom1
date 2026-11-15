@@ -11,6 +11,7 @@ window.CONFIG = {
   // ---- Match ----
   win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
   ai_level: { value: 3, min: 1, max: 6, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend, 6 Mythic (what each does is in js/ai.js)
+  ai_own_rim_zone: { value: 70, min: 0, max: 300, step: 10 },  // px either side of the rim it defends where the CPU never shoots (it passes out instead)
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   replay_clips: { value: 5, min: 0, max: 10, step: 1 },           // best moments shown in the replay after a match (0 = none)
@@ -132,6 +133,10 @@ window.CONFIG = {
   upright_damp: { value: 3.5, min: 0, max: 15, step: 0.5 },    // 1/s damping on torso spin
   leg_stiffness: { value: 0.22, min: 0, max: 1, step: 0.01 },  // how hard legs swing back under the hips
   leg_follow: { value: 0.3, min: 0, max: 1, step: 0.05 },      // 0 floppy legs, 1 rigid legs
+  fold_stiffness: { value: 1.35, min: 0.5, max: 3, step: 0.05 }, // how stiff the hips are: above 1 the body folds less and springs back less
+  hand_floor_px: { value: 3, min: 0, max: 20, step: 1 },        // px: a hand this close to the floor pushes off it
+  hand_push: { value: 0.08, min: 0, max: 0.3, step: 0.01 },     // rad/step: the push a hand on the floor gives, turning the wobble the other way
+  seat_margin: { value: 4, min: 0, max: 20, step: 1 },          // px: hips this close to the floor count as sitting (no dribbling)
   arm_up_angle: { value: 2.5, min: 0.5, max: 3.1, step: 0.05 },// rad the arm lifts while the key is held
   arm_cock_angle: { value: 2.95, min: 1.5, max: 3.1, step: 0.05 }, // rad the arm swings back while cocking a shot
   follow_time: { value: 0.45, min: 0, max: 1.2, step: 0.05 },     // s the shooting arm holds its follow-through

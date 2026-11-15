@@ -68,11 +68,107 @@ const Render = (() => {
     }
   }
 
+  /** A colour mixed toward black (k < 0) or white (k > 0) by |k|. */
+  function shade(hex, k) {
+    const n = parseInt(hex.slice(1), 16), to = k < 0 ? 0 : 255, a = Math.abs(k);
+    const ch = sh => Math.round(lerp((n >> sh) & 255, to, a));
+    return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  }
+  const hash = i => Math.abs(Math.sin(i * 12.9898 + 78.233) * 43758.5453) % 1;   // a fixed number 0..1 per index (no rng at draw time)
+
+  /**
+   * The backdrop behind the stands: each venue its own place, in flat square blocks of its own palette, kept darker
+   * and calmer than the court. Drawn between the side walls (w.L..w.R) above the crowd band (which starts at f - 150).
+   */
+  function backdrop(ctx, w, v, f) {
+    const L = w.L, R = w.R, top = f - 150, t = w.time || 0, kind = w.S.venue;
+    const box = (x, y, bw, bh, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(bw), Math.round(bh)); };
+    if (kind === 'gym') {
+      // the upper stand: rows of seats with a rail, a roof of trusses with hanging light rigs, banners, a video board, ad boards
+      for (let r = 0; r < 5; r++) box(L, top - 120 + r * 24, R - L, 14, shade(v.sky, r % 2 ? -0.18 : -0.1));
+      for (let x = L + 12; x < R; x += 24) for (let r = 0; r < 5; r++) if (hash(x * 3 + r) > 0.35) box(x, top - 128 + r * 24, 10, 8, shade(v.band, -0.05 - 0.1 * hash(x + r)));   // far fans
+      box(L, top - 132, R - L, 6, shade(v.line, -0.55));                                                                         // the rail
+      box(L, 60, R - L, 12, shade(v.sky, -0.4)); box(L, 132, R - L, 8, shade(v.sky, -0.4));                                     // roof chords
+      for (let x = L; x <= R; x += 72) { box(x, 60, 8, 80, shade(v.sky, -0.4)); for (let k = 0; k < 6; k++) box(x + 8 + k * 10, 72 + k * 10, 10, 6, shade(v.sky, -0.32)); }   // posts and stepped diagonals
+      for (let x = L + 108; x < R - 60; x += 216) {                                                                               // light rigs and their glow
+        box(x, 140, 6, 26, shade(v.sky, -0.45)); box(x - 22, 164, 50, 14, shade(v.sky, -0.5));
+        box(x - 18, 168, 42, 6, '#fff3c4');
+        ctx.globalAlpha = 0.07; box(x - 40, 178, 86, 120, '#fff3c4'); box(x - 70, 298, 146, 90, '#fff3c4'); ctx.globalAlpha = 1;
+      }
+      for (const [x, team] of [[L + 40, 0], [L + 96, 1], [R - 132, 0], [R - 76, 1]]) {                                           // banners
+        box(x, 144, 36, 70, shade(TEAM_DARK[team], -0.25)); box(x, 214, 14, 10, shade(TEAM_DARK[team], -0.25)); box(x + 22, 214, 14, 10, shade(TEAM_DARK[team], -0.25));
+        box(x + 8, 160, 20, 6, shade(v.line, -0.4)); box(x + 8, 172, 20, 6, shade(v.line, -0.4));
+      }
+      const cx = w.cx;                                                                                                          // the hanging video board
+      box(cx - 4, 140, 8, 40, shade(v.sky, -0.45)); box(cx - 74, 178, 148, 58, INK); box(cx - 68, 184, 136, 46, shade(v.sky, -0.55));
+      box(cx - 60, 192, 50, 30, shade(TEAM_COLORS[0], -0.45)); box(cx + 10, 192, 50, 30, shade(TEAM_COLORS[1], -0.45));
+    } else if (kind === 'rooftop') {
+      // the city at dusk: stars, a skyline with lit windows, a water tank, and a string of lights over the court
+      for (let i = 0; i < 40; i++) { const x = L + hash(i) * (R - L), y = 40 + hash(i + 99) * 160; if (Math.sin(t * 2 + i) > -0.6) box(x, y, 3, 3, shade(v.line, -0.3)); }
+      let x = L;
+      for (let i = 0; x < R; i++) {
+        const bw = 60 + hash(i * 7) * 70, bh = 110 + hash(i * 13) * 210, y0 = top - bh, c = shade(v.sky, -0.25 - 0.15 * hash(i));
+        box(x, y0, bw - 4, bh, c);
+        for (let wy = y0 + 14; wy < top - 14; wy += 20) for (let wx = x + 10; wx < x + bw - 18; wx += 16) if (hash(wx * 1.3 + wy * 7) > 0.62) box(wx, wy, 7, 9, shade('#ffd27a', -0.35));
+        if (i === 2) { box(x + 14, y0 - 46, 34, 30, shade(v.sky, -0.5)); box(x + 18, y0 - 16, 4, 16, shade(v.sky, -0.5)); box(x + 40, y0 - 16, 4, 16, shade(v.sky, -0.5)); }   // water tank
+        x += bw;
+      }
+      for (let i = 0; i <= 40; i++) {                                                                                          // string lights, sagging between two poles
+        const u = i / 40, sx = L + 20 + u * (R - L - 40), sy = 150 + Math.round(60 * 4 * u * (1 - u));
+        box(sx, sy, 3, 3, shade(v.sky, -0.5));
+        if (i % 2 === 0) box(sx - 2, sy + 3, 7, 7, Math.sin(t * 3 + i) > 0 ? '#ffd27a' : shade('#ffd27a', -0.3));
+      }
+    } else if (kind === 'beach') {
+      // sea to the horizon, blocky clouds, a pier on posts, a lifeguard tower, palms
+      for (let i = 0; i < 4; i++) { const cx = L + 80 + hash(i * 5) * (R - L - 200), cy = 70 + hash(i * 9) * 90; box(cx, cy, 90, 18, shade(v.sky, 0.25)); box(cx + 20, cy - 12, 50, 14, shade(v.sky, 0.25)); }
+      for (let r = 0; r < 6; r++) box(L, top - 96 + r * 16, R - L, 16, shade(v.band, -0.05 * r + (r % 2 ? 0.05 : 0)));
+      for (let r = 0; r < 6; r++) for (let x = L + ((r * 37) % 60); x < R; x += 90) box(x + Math.round(Math.sin(t + r + x) * 6), top - 92 + r * 16, 26, 3, shade(v.band, 0.3));   // glints
+      box(R - 300, top - 72, 300, 10, shade(v.side, -0.35));                                                                    // the pier
+      for (let x = R - 290; x < R; x += 40) box(x, top - 62, 6, 62, shade(v.side, -0.4));
+      const lx = L + 70;                                                                                                       // lifeguard tower
+      box(lx, top - 92, 54, 34, shade('#d1342c', -0.35)); box(lx - 6, top - 98, 66, 8, shade(v.side, -0.4));
+      box(lx + 4, top - 58, 6, 58, shade(v.side, -0.4)); box(lx + 44, top - 58, 6, 58, shade(v.side, -0.4)); box(lx + 4, top - 32, 46, 5, shade(v.side, -0.4));
+      for (const [px, h] of [[L + 190, 200], [R - 360, 170]]) {                                                                // palms: a stepped trunk and blocky fronds
+        for (let k = 0; k < h; k += 12) box(px + Math.round(k * 0.12), top - k, 12, 13, shade(v.side, -0.45));
+        const tx = px + Math.round(h * 0.12) + 6, ty = top - h;
+        for (const [dx, dy, fw] of [[-60, 6, 56], [6, 6, 56], [-40, -6, 40], [4, -6, 40], [-14, -12, 28]]) box(tx + dx, ty + dy, fw, 10, shade('#2e7d4f', -0.4));
+      }
+    } else {
+      // a night street: brick walls with lit windows, a chain-link fence, street lamps with their pools of light
+      let x = L;
+      for (let i = 0; x < R; i++) {
+        const bw = 150 + hash(i * 3) * 90, y0 = 90 + hash(i * 11) * 90, c = shade(v.sky, 0.03 + 0.03 * (i % 2));
+        box(x, y0, bw - 6, top - y0, c);
+        for (let by = y0 + 8; by < top; by += 12) for (let bx = x + ((by / 12) % 2 ? 0 : 12); bx < x + bw - 6; bx += 24) box(bx, by, 22, 2, shade(v.sky, -0.12));   // brick courses
+        for (let wy = y0 + 20; wy < top - 70; wy += 44) for (let wx = x + 16; wx < x + bw - 40; wx += 42) box(wx, wy, 22, 26, hash(wx + wy * 3) > 0.72 ? shade('#ffd27a', -0.55) : shade(v.sky, -0.22));
+        x += bw;
+      }
+      ctx.globalAlpha = 0.35;                                                                                                  // chain-link fence
+      for (let fx = L; fx < R; fx += 12) box(fx, top - 120, 2, 120, shade(v.line, -0.5));
+      for (let fy = top - 120; fy < top; fy += 12) box(L, fy, R - L, 2, shade(v.line, -0.5));
+      ctx.globalAlpha = 1;
+      box(L, top - 124, R - L, 5, shade(v.line, -0.45));
+      for (const lx of [L + 150, R - 160]) {                                                                                   // street lamps
+        box(lx, top - 260, 8, 260, shade(v.side, 0.1)); box(lx - 4, top - 266, 40, 8, shade(v.side, 0.1)); box(lx + 24, top - 260, 20, 10, '#fff3c4');
+        ctx.globalAlpha = 0.08; for (let k = 0; k < 4; k++) box(lx + 34 - 16 - k * 18, top - 250 + k * 60, 32 + k * 36, 60, '#fff3c4'); ctx.globalAlpha = 1;
+      }
+    }
+  }
+
   function venue(ctx, w, W, H) {
     const v = VENUES[w.S.venue], f = F();
     ctx.fillStyle = v.sky; ctx.fillRect(0, 0, W, f);
+    backdrop(ctx, w, v, f);
     ctx.fillStyle = v.band; ctx.fillRect(0, f - 150, W, 150);
     crowd(ctx, w, W, f, v);
+    // LED ad boards along the near edge of the stands, a slow scroll of team-coloured blocks
+    const t = w.time || 0, by = f - 26;
+    ctx.fillStyle = INK; ctx.fillRect(0, by - 3, W, 25);
+    for (let x = -((t * 30) % 64); x < W; x += 64) {
+      const k = Math.floor((x + t * 30) / 64 + 1000);
+      ctx.fillStyle = shade(k % 3 === 2 ? v.line : TEAM_COLORS[k % 2], -0.45); ctx.fillRect(Math.round(x) + 3, by, 58, 19);
+      ctx.fillStyle = shade(v.line, -0.2); for (let j = 0; j < 4; j++) if (hash(k * 5 + j) > 0.4) ctx.fillRect(Math.round(x) + 10 + j * 12, by + 7, 8, 5);
+    }
     ctx.fillStyle = v.floor; ctx.fillRect(0, f, W, H - f);
     ctx.fillStyle = v.line; ctx.fillRect(w.cx - 3, f, 6, H - f); ctx.fillRect(0, f, W, 4);
     ctx.fillStyle = v.side; ctx.fillRect(0, 0, w.L, H); ctx.fillRect(w.R, 0, W - w.R, H);
@@ -356,11 +452,20 @@ const Render = (() => {
       return;
     }
     ctx.save(); ctx.translate(cx, cy); ctx.scale(Math.max(0.01, sx), 1);
-    ctx.beginPath(); ctx.arc(0, 0, 175, 0, Math.PI * 2); ink(ctx, '#fff3d6', 7);
-    ctx.setLineDash([10, 9]); ctx.beginPath(); ctx.arc(0, 0, 155, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = '#e8591a'; ctx.stroke(); ctx.setLineDash([]);
-    text(ctx, 'ROUND', 0, -60, 30, '#e8591a', { weight: 900 });
-    text(ctx, String(S.round), 0, 10, 96, INK, { weight: 900 });
-    text(ctx, S.venueName, 0, 104, 16, '#8a83a8', { weight: 700 });
+    // a square panel in the scoreboard's dress: dark fill, ink outline, a hard drop shadow, the two team colours as a
+    // split stripe on top, pixel corner studs; ROUND in the HUD's yellow, the number white with an ink outline
+    const pw = 300, ph = 250, x0 = -pw / 2, y0 = -ph / 2 + 6;
+    ctx.fillStyle = INK; ctx.fillRect(x0 + 10, y0 + 10, pw, ph);                                  // drop shadow
+    rr(ctx, x0, y0, pw, ph); ink(ctx, '#262238', 7);
+    ctx.fillStyle = TEAM_COLORS[0]; ctx.fillRect(x0 + 4, y0 + 4, pw / 2 - 4, 22);
+    ctx.fillStyle = TEAM_COLORS[1]; ctx.fillRect(0, y0 + 4, pw / 2 - 4, 22);
+    ctx.fillStyle = INK; ctx.fillRect(x0 + 4, y0 + 26, pw - 8, 5);
+    rr(ctx, x0 + 18, y0 + 46, pw - 36, ph - 64); ink(ctx, '#1d1a2b', 4);                         // inner bezel
+    ctx.fillStyle = '#ffd23f';
+    for (const [sx2, sy2] of [[x0 + 10, y0 + ph - 18], [x0 + pw - 18, y0 + ph - 18]]) ctx.fillRect(sx2, sy2, 8, 8);   // corner studs
+    text(ctx, 'ROUND', 0, y0 + 76, 28, '#ffd23f', { weight: 900, stroke: 5 });
+    text(ctx, String(S.round), 0, y0 + 142, 92, '#ffffff', { weight: 900, stroke: 10 });
+    text(ctx, S.venueName.toUpperCase(), 0, y0 + 206, 15, '#c9c3e0', { weight: 700, stroke: 3 });
     ctx.restore();
   }
 

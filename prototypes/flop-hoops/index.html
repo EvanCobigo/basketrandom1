@@ -236,13 +236,20 @@ function reset() {
   prevVenue = '';
 }
 const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
-function callout(s, team) { state.toast = s; state.toastT = 1.1; state.toastTeam = team; }
+/**
+ * A play's call (LOB!, FADEAWAY!, STOLEN!, ...): small text that pops up where it happened and rises away. The
+ * big banner is kept for a made basket only (the scored scene's own). x, y default to the ball.
+ */
+function callout(s, team, x, y) {
+  if (x === undefined || y === undefined) { x = world.ball.position.x; y = world.ball.position.y; }
+  state.floats.push({ x: Math.max(80, Math.min(W - 80, x)), y: Math.max(160, y - 50), t: 0.9, max: 0.9, size: 18, text: s, color: team >= 0 ? Render.TEAM_COLORS[team] : '#ffd23f' });
+}
 function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); puff(ev.x, ev.y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 24 }); return; }
   if (ev.type === 'dribble') { sfx.bounce(0.2); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
   if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; puff(ev.x, ev.y, 6, { speed: 150, life: 0.3, colors: ['#ffffff', '#ffd23f', Render.TEAM_COLORS[ev.team]], size: 6, g: 200, drag: 0.85 }); events.push({ type: 'grab', team: ev.team }); return; }
   if (ev.type === 'lob') {   // an alley-oop lob off the board: gold sparks and a call, so the set-up reads
-    sfx.shoot(0.7); callout('LOB!', ev.team); world.hype = Math.max(world.hype || 0, 0.4);
+    sfx.shoot(0.7); callout('LOB!', ev.team, ev.x, ev.y); world.hype = Math.max(world.hype || 0, 0.4);
     puff(ev.x, ev.y, 12, { speed: 260, life: 0.5, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 8, g: 200, drag: 0.9 });
     events.push({ type: 'lob', team: ev.team }); return;
   }
@@ -250,21 +257,21 @@ function onPhysEvent(ev) {
     sfx.shoot(ev.charge); events.push({ type: ev.type, team: ev.team });
     puff(ev.x, ev.y, 4, { speed: 130, life: 0.3, colors: ['#ffffff', Render.TEAM_COLORS[ev.team]], size: 6, g: 100, drag: 0.88 });
     if (ev.perfect) puff(ev.x, ev.y, 10, { speed: 300, life: 0.55, colors: Render.RAINBOW, size: 7, g: 300, drag: 0.9 });
-    if (ev.perfect) { callout('PERFECT!', ev.team); sfx.perfect(); }
-    else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team);
+    if (ev.perfect) { callout('PERFECT!', ev.team, ev.x, ev.y); sfx.perfect(); }
+    else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team, ev.x, ev.y);
     return;
   }
   if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
   if (ev.type === 'dunkmiss') { sfx.rim(6); puff(ev.x, ev.y, 7, { speed: 220, life: 0.3, colors: ['#ffd23f', '#ffffff'], size: 6, g: 500 }); events.push({ type: 'dunkmiss', team: ev.team, reason: ev.reason, best: ev.best, grounded: ev.grounded, style: ev.style, t: ev.t }); return; }
   if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
-  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
+  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
   if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (ev.type === 'block') Replay.mark(world, ev.dunk ? 'DENIED' : 'BLOCK', ev.dunk ? 80 : 45, ev.team, state.round);
   if (ev.type === 'steal') Replay.mark(world, 'STEAL', 25, ev.team, state.round);
-  if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
+  if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team, ev.x, ev.y); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
   if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
-  if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
+  if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team, ev.x, ev.y); events.push({ type: ev.type, team: ev.team }); return; }
   if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
   if (ev.type !== 'hit' || ev.speed < 1.2) return;
   if (ev.on === 'floor' && ev.speed > 3) puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 14 });
@@ -426,7 +433,7 @@ function checkStall(dt) {
   const b = world.ball, v = b.velocity, r = b.r;
   const corner = (b.position.x < world.L + r + 40 || b.position.x > world.R - r - 40) && b.position.y > world.floorY - r * 2.5;
   state.stall = !world.hold && (Math.hypot(v.x, v.y) < 0.4 || corner) ? state.stall + dt : 0;
-  if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; state.toast = 'Re-drop!'; state.toastT = 1.1; state.toastTeam = -1; sfx.whistle(); }
+  if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; callout('RE-DROP!', -1); sfx.whistle(); }
 }
 
 // The CPU difficulty slider on the title: click or drag along it to pick a level.
@@ -539,15 +546,16 @@ function drawGame(opts = {}) {
     g.addColorStop(0, 'rgba(10,6,24,0)'); g.addColorStop(1, `rgba(10,6,24,${tune.vignette})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-  for (const f of state.floats) {   // points floating up off the rim
+  for (const f of state.floats) {   // points floating up off the rim, and the small call at a play (LOB!, STOLEN!, ...)
     ctx.globalAlpha = Math.min(1, f.t * 2.5);
-    text(f.text, f.x, f.y, 34, f.color, { weight: 900, stroke: 7 });
+    const sz = f.size || 34, pop = f.size ? 1 + Math.max(0, f.t - (f.max || 0.9) + 0.12) * 3 : 1;   // a small call pops in, then rises
+    text(f.text, f.x, f.y, Math.round(sz * pop), f.color, { weight: 900, stroke: Math.max(4, Math.round(sz / 5)) });
     ctx.globalAlpha = 1;
   }
-  const aiN = (cpuA ? 1 : 0) + (cpu ? 1 : 0);   // how many computer players are writing lines under the scoreboard
+  const aiN = cpuA || cpu ? 1 : 0;   // the computers' one-word lines share one row under the scoreboard
   if (opts.hud !== false) {
     Render.scoreboard(ctx, W, { cpu: !!cpu, cpuStyle: cpu ? cpu.style.name : '', cpu0: !!cpuA, cpuStyle0: cpuA ? cpuA.style.name : '', score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
-    if (scene === 'play') [cpuA, cpu].filter(Boolean).forEach((ai, i) => { if (ai.intent) text(`${cpuA ? Render.TEAM_NAMES[ai.team].toUpperCase() + ' CPU' : 'CPU'}: ${ai.intent}`, W / 2, 128 + i * 20, 15, Render.TEAM_COLORS[ai.team], { stroke: 4 }); });   // what each computer is trying to do
+    if (scene === 'play') [cpuA, cpu].filter(Boolean).forEach((ai, i) => { if (ai.intent) text(AI.brief(ai.intent), W / 2 + (ai.team ? 190 : -190), 128, 16, Render.TEAM_COLORS[ai.team], { stroke: 4 }); });   // what each computer is doing, in a word or two under its own side (the colour says whose)
     if ((scene === 'play' || scene === 'scored') && world.hustle.some(Boolean)) {
       const t = world.hustle[0] ? 0 : 1;
       text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128 + aiN * 22, 16, Render.TEAM_COLORS[t], { stroke: 4 });

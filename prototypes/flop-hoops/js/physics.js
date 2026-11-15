@@ -206,6 +206,14 @@ const Physics = (() => {
     return { x: p.arm.position.x - Math.sin(a) * h, y: p.arm.position.y + Math.cos(a) * h };
   }
   /**
+   * Sitting: the bottom edge of the torso (where the hips are) within T.seat_margin of the floor. A seated
+   * player cannot dribble (a pass still goes).
+   */
+  function seated(w, p, T) {
+    const t = p.torso, hh = p.dims.torsoH / 2;
+    return t.position.y + Math.cos(t.angle) * hh >= w.floorY - T.seat_margin - p.dims.torsoW * 0.5 * Math.abs(Math.sin(t.angle));
+  }
+  /**
    * Share of the ball inside a player's hand box: a square of side T.hand_box centred on the hand
    * and turned with the arm. Sampled on a 7x7 grid over the ball's disc.
    */
@@ -243,7 +251,17 @@ const Physics = (() => {
 
     // Feet on the floor: the whole body swings about its feet, evenly forwards and backwards at
     // a steady beat that never fades. The swing is the steering: hop as it tips one way to go that way.
-    const phase = w.time * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7;
+    const base = w.time * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7;
+    // a hand on the floor pushes off it: the wobble turns round at once, the other way (p.rockOff shifts the swing's beat)
+    p.handCD = (p.handCD || 0) - dt;
+    if (p.handCD <= 0 && handPos(p).y >= w.floorY - T.hand_floor_px && torso.angularVelocity * a > 0) {
+      const amp = Math.max(0.05, T.rock_angle * (p.dribRock ?? 1)), sn = Math.asin(clamp(a / amp, -1, 1));
+      p.rockOff = wrap((a > 0 ? Math.PI - sn : sn) - base);                  // the beat where the swing is here, heading back
+      Body.setAngularVelocity(torso, -Math.sign(a) * T.hand_push);         // and the push itself, swinging or not
+      p.handCD = 0.25;
+      w.onEvent({ type: 'handpush', team: p.team });
+    }
+    const phase = base + (p.rockOff || 0);
     const dribbling = p.dribbleT > 0;
     if (dribbling) p.dribbleT -= dt;
     // the swing only takes over once the body is fairly upright: a player who lands tilted is
@@ -284,8 +302,8 @@ const Physics = (() => {
 
     if (!swinging) p.legs.forEach((leg, i) => {
       const rest = (i ? 1 : -1) * 0.1;
-      const rel = wrap(leg.angle - torso.angle - rest);
-      Body.setAngularVelocity(leg, lerp(leg.angularVelocity, tav - rel * T.leg_stiffness, T.leg_follow));
+      const rel = wrap(leg.angle - torso.angle - rest), fold = T.fold_stiffness;   // the hip: fold_stiffness above 1 folds less and springs back less
+      Body.setAngularVelocity(leg, lerp(leg.angularVelocity, tav - rel * T.leg_stiffness * fold, Math.min(1, T.leg_follow * fold)));
     });
 
     // Arm: cocked back behind the head while charging a shot, raised while the key is held,
@@ -931,7 +949,11 @@ const Physics = (() => {
       const bk = bheld[p.team];
       if (!h.barmed) { if (!bk) h.barmed = true; }
       else if (bk) { h.bouncing = true; h.bcharge = Math.min(1, h.bcharge + dt / T.bounce_charge_time); }
-      if (h.bouncing && !bk) { bounce(w, T); return; }
+      if (h.bouncing && !bk) {
+        // no dribble from a seated player: the tap is lost and the ball stays in the hand (a pass still goes)
+        if (h.bcharge < T.dribble_threshold && seated(w, p, T)) { h.bouncing = false; h.bcharge = 0; w.onEvent({ type: 'seatedtap', team: p.team }); }
+        else { bounce(w, T); return; }
+      }
       const hoop = attackedHoop(w, p);
       h.dunkReady = !w.dunk && dunkReady(w, T, p, hoop, h.fromPass && h.t < T.oop_window);
       // near the rim: a tap of jump dunks. The prompt that was showing a step ago counts too, since the
@@ -959,7 +981,7 @@ const Physics = (() => {
       if (own || shareInHandBox(p, ball, T) > 0.5 || touchesAbdomen(p, ball, T)) {
         const again = p === w.lastBouncer && p.queued; p.queued = false;   // a queued dribble tap fires however the dribbler catches it
         grab(w, p, T, own ? 'dribble' : 'grab', held[p.team]);
-        if (again) { w.hold.bcharge = 0; bounce(w, T); }   // the queued tap: back down at once
+        if (again && !seated(w, p, T)) { w.hold.bcharge = 0; bounce(w, T); }   // (not from a seated catch: no dribbling sitting down)   // the queued tap: back down at once
         break;
       }
     }
@@ -1026,5 +1048,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady, previewShot, predictLine, ballPath, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
+  return { FLOOR_Y, CX, DELTA, seated, handPos, createWorld, step, dropBall, squircle, dunkReady, previewShot, predictLine, ballPath, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
 })();
