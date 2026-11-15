@@ -523,7 +523,7 @@ function drawGame(opts = {}) {
     c.globalAlpha = 1;
     if (scene === 'play') for (const ai of [cpuA, cpu]) {   // what each computer player is attempting, over the head of the player doing it
       const m = ai && AI.marker(ai, world);
-      if (m) Render.aiIcon(c, m.who.head.position.x, m.who.head.position.y - 74, m.icon, Render.TEAM_COLORS[ai.team], state.t);
+      if (m) Render.aiIcon(c, m.who.head.position.x, m.who.head.position.y - 74, m.icon, Render.TEAM_COLORS[ai.team], state.t, m.who.dir);
     }
     if (state.aiDebug && cpu && scene === 'play' && cpu.dbg) {   // AI vision in court space: the ball path it expects and where it means to stand
       const d = cpu.dbg;

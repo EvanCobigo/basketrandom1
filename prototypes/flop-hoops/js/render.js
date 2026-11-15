@@ -219,21 +219,26 @@ const Render = (() => {
    * a rim guard), screen (a wall), pass (an arrow), dunk (ball over a rim), steal (a hand), board (a rebound arrow).
    * `color` is its team's colour; `t` bobs it.
    */
-  function aiIcon(ctx, x, y, kind, color, t) {
+  function aiIcon(ctx, x, y, kind, color, t, dir = 1) {
     ctx.save(); ctx.translate(x, y); ctx.scale(1.45, 1.45); x = 0; y = 0;   // (drawn at 15 units, shown a bit bigger: it must read at a glance)
     const by = y + Math.sin(t * 6) * 2.5, S = 15;
     rr(ctx, x - S, by - S, S * 2, S * 2); ink(ctx, '#fff3d6', 4);
     ctx.beginPath(); ctx.moveTo(x - 5, by + S); ctx.lineTo(x + 5, by + S); ctx.lineTo(x, by + S + 7); ctx.closePath(); ctx.fillStyle = '#fff3d6'; ctx.fill();   // the tail toward the head
     const ball = (bx, byy, r) => { ctx.beginPath(); ctx.arc(bx, byy, r, 0, Math.PI * 2); ctx.fillStyle = '#e8591a'; ctx.fill(); ctx.lineWidth = 1.6; ctx.strokeStyle = INK; ctx.stroke(); ctx.beginPath(); ctx.moveTo(bx - r, byy); ctx.lineTo(bx + r, byy); ctx.stroke(); };
     const px = (dx, dy, w, h, fill) => { ctx.fillStyle = fill; ctx.fillRect(x + dx, by + dy, w, h); };
-    if (kind === 'ball') ball(x, by, 8);
-    else if (kind === 'shot') { ball(x - 6, by + 6, 5); for (const [dx, dy] of [[-1, 0], [3, -4], [7, -7]]) px(dx, dy, 4, 4, INK); px(7, -11, 6, 3, INK); px(10, -11, 3, 6, INK); }   // a ball and its arc up to the hoop
-    else if (kind === 'fake') { ball(x + 3, by + 8, 5); ctx.lineWidth = 3.5; ctx.lineJoin = 'miter'; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(x - 9, by + 1); ctx.lineTo(x + 8, by - 4); ctx.lineTo(x - 4, by - 9); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 11, by - 9); ctx.lineTo(x - 3, by - 14); ctx.lineTo(x - 3, by - 4); ctx.closePath(); ctx.fillStyle = '#d1342c'; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); }   // a zig-zag arrow that turns back on itself over a ball: the feint
-    else if (kind === 'shield') { ctx.beginPath(); ctx.moveTo(x - 8, by - 9); ctx.lineTo(x + 8, by - 9); ctx.lineTo(x + 8, by + 1); ctx.lineTo(x, by + 10); ctx.lineTo(x - 8, by + 1); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); px(-2, -6, 4, 11, '#ffffff'); px(-5, -3, 10, 4, '#ffffff'); }
+    if (kind === 'ball') {   // dribbling: an arrow forward, the way the team attacks
+      ctx.save(); ctx.translate(x, by); ctx.scale(dir, 1);
+      ctx.fillStyle = INK; ctx.fillRect(-11, -3, 13, 6);
+      ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(11, 0); ctx.lineTo(0, 10); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    else if (kind === 'shot') ball(x, by, 9);   // a shot: the ball
+    else if (kind === 'fake') { ctx.lineWidth = 4.5; ctx.lineJoin = 'miter'; ctx.lineCap = 'butt'; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(x - 7, by + 9); ctx.lineTo(x - 7, by - 3); ctx.lineTo(x - 3, by - 8); ctx.lineTo(x + 3, by - 8); ctx.lineTo(x + 7, by - 3); ctx.lineTo(x + 7, by + 1); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + 1, by + 1); ctx.lineTo(x + 13, by + 1); ctx.lineTo(x + 7, by + 11); ctx.closePath(); ctx.fillStyle = '#d1342c'; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); }   // a U-turn arrow: up, round, and back down
+    else if (kind === 'shield') { ctx.beginPath(); ctx.moveTo(x - 8, by - 9); ctx.lineTo(x + 8, by - 9); ctx.lineTo(x + 8, by + 1); ctx.lineTo(x, by + 10); ctx.lineTo(x - 8, by + 1); ctx.closePath(); ctx.fillStyle = '#2f6fe0'; ctx.fill(); ctx.lineJoin = 'miter'; ctx.lineWidth = 4.5; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 2.2; ctx.strokeStyle = '#d3d8e2'; ctx.stroke(); px(-2, -6, 4, 11, '#ffffff'); px(-5, -3, 10, 4, '#ffffff'); }   // a blue shield with a silver edge
     else if (kind === 'screen') { for (const [dx, dy, w] of [[-10, -10, 9], [0, -10, 10], [-10, -3, 5], [-5, -3, 10], [6, -3, 4], [-10, 4, 9], [0, 4, 10]]) { px(dx, dy, w, 6, '#c0602a'); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.strokeRect(x + dx, by + dy, w, 6); } }   // a wall of bricks
     else if (kind === 'lob') { ball(x - 7, by + 7, 5); for (const [dx, dy] of [[-3, 1], [0, -3], [3, -6]]) px(dx, dy, 4, 4, INK); px(7, -11, 4, 15, INK); px(2, -11, 6, 3, '#ffd23f'); }   // a ball arcing up to the board
-    else if (kind === 'pass') { px(-10, -2, 14, 4, INK); ctx.beginPath(); ctx.moveTo(x + 3, by - 8); ctx.lineTo(x + 11, by); ctx.lineTo(x + 3, by + 8); ctx.closePath(); ctx.fillStyle = INK; ctx.fill(); }
-    else if (kind === 'dunk') { ball(x, by - 5, 5); px(-9, 4, 18, 4, '#e8591a'); px(-9, 8, 18, 3, '#ffffff'); }
+    else if (kind === 'pass') { px(-3, -11, 6, 13, INK); ctx.beginPath(); ctx.moveTo(x - 10, by + 1); ctx.lineTo(x + 10, by + 1); ctx.lineTo(x, by + 11); ctx.closePath(); ctx.fillStyle = INK; ctx.fill(); }   // a down arrow
+    else if (kind === 'dunk') { px(7, -11, 4, 13, INK); px(-9, -3, 17, 3, '#e8591a'); ctx.lineWidth = 1.6; ctx.strokeStyle = INK; ctx.strokeRect(x - 9, by - 3, 17, 3); ctx.beginPath(); ctx.moveTo(x - 8, by); ctx.lineTo(x - 4, by + 10); ctx.lineTo(x + 4, by + 10); ctx.lineTo(x + 7, by); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 2, by); ctx.lineTo(x - 1, by + 10); ctx.moveTo(x + 3, by); ctx.lineTo(x + 2, by + 10); ctx.stroke(); }   // a hoop: rim, net and a backboard edge
     else if (kind === 'steal') { for (const [dx, dy, h] of [[-7, -9, 9], [-3, -11, 11], [1, -9, 9], [5, -6, 6]]) { px(dx, dy, 3, h, color); ctx.lineWidth = 1.2; ctx.strokeStyle = INK; ctx.strokeRect(x + dx, by + dy, 3, h); } px(-7, 0, 15, 9, color); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.strokeRect(x - 7, by, 15, 9); }
     else if (kind === 'board') { ctx.beginPath(); ctx.moveTo(x, by - 10); ctx.lineTo(x + 9, by); ctx.lineTo(x + 3, by); ctx.lineTo(x + 3, by + 9); ctx.lineTo(x - 3, by + 9); ctx.lineTo(x - 3, by); ctx.lineTo(x - 9, by); ctx.closePath(); ctx.fillStyle = INK; ctx.fill(); }
     ctx.restore();
