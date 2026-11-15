@@ -52,9 +52,9 @@ const ATTACKERS = {
         CONFIG.win_score.value = 99; CONFIG.game_speed.value = 1;
         const out = { allowed: 0, own: 0, faced: 0, madeShots: 0, dunkStarts: 0, dunks: 0, blocks: 0, swats: 0, steals: 0 };
         for (const sd of seeds) {
-          CONFIG.ai_level.value = lv; CONFIG.seed = sd; toMenu(); game.step(2, false); newMatch('cpu'); game.step(100, false);
+          Settings.set('ai_level', lv); CONFIG.seed = sd; toMenu(); game.step(2, false); newMatch('cpu'); game.step(100, false);
           Object.assign(cpu.w, weights);
-          const atkT = new Proxy(tune, { get: (t, k) => k === 'ai_level' ? 3 : t[k] });
+          const atkT = new Proxy(tune, { get: (t, k) => k === 'ai_level' ? 3 : k === 'ai_react' ? AI.LEVELS[2].react : k === 'ai_error' ? AI.LEVELS[2].error : t[k] });   // (the scripted attackers play as a Pro whatever the level under test)
           const atk = AI.create(0, rng, atkT, 0);
           atk.style = Object.assign({ name: '', attack: 1, range: 1, pass: 1, flash: 1, guard: 1, scav: 1, read: 1, risk: 0.5, wild: 1 }, tilt);
           const n0 = game.events.length; let lastShot = null, prev = game.scene;
@@ -85,7 +85,7 @@ const ATTACKERS = {
         const out = { own: 0, allowed: 0, shots: 0, madeShots: 0, fakes: 0, fakeShots: 0, fakeMade: 0, dunks: 0 };
         const neutral = { name: '', attack: 1, range: 1, pass: 1, flash: 1, guard: 1, scav: 1, read: 1, risk: 0.5, wild: 1 };
         for (const sd of seeds) {
-          CONFIG.ai_level.value = lv; CONFIG.seed = sd; toMenu(); game.step(2, false); newMatch('cpu'); game.step(100, false);
+          Settings.set('ai_level', lv); CONFIG.seed = sd; toMenu(); game.step(2, false); newMatch('cpu'); game.step(100, false);
           Object.assign(cpu.w, weights); cpu.style = neutral;
           const atkT = new Proxy(tune, { get: (t, k) => t[k] });
           const atk = AI.create(0, rng, atkT, 0); atk.style = neutral;

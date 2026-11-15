@@ -66,7 +66,12 @@ const Settings = (() => {
 
   /** "jump_tap_frac" -> "JUMP TAP FRAC"; the short list has its own plain names. */
   const label = (k, simple) => simple && simpleOf(k) ? simpleOf(k).label : k.replace(/_/g, ' ').toUpperCase();
-  const describe = k => simpleOf(k) ? simpleOf(k).desc : '';
+  const EXTRA_DESC = {
+    ai_level: 'WHICH BRAIN THE CPU PLAYS WITH. PICKING ONE SETS REACT AND ERROR TO ITS VALUES.',
+    ai_react: 'SECONDS THE CPU PAUSES BETWEEN DECISIONS. LOWER IS QUICKER. FOLLOWS THE LEVEL.',
+    ai_error: 'HOW FAR OFF THE RIM CENTRE THE CPU AIMS A SHOT. 0 IS DEAD CENTRE. FOLLOWS THE LEVEL.',
+  };
+  const describe = k => simpleOf(k) ? simpleOf(k).desc : EXTRA_DESC[k] || '';
   /** The value in plain words, for the short list. */
   const showSimple = k => simpleOf(k).fmt(CONFIG[k].value, k);
 
@@ -76,12 +81,23 @@ const Settings = (() => {
     return c.value.toFixed(dec);
   }
 
+  /**
+   * The CPU's reaction time and aim error belong to its level: the level's own entry in AI.LEVELS says what each should be.
+   * Picking a level sets both sliders to that (they can be nudged afterwards, which scales every level in proportion).
+   */
+  const levelEntry = () => typeof AI !== 'undefined' && AI.LEVELS ? AI.LEVELS[Math.min(AI.LEVELS.length, Math.max(1, Math.round(CONFIG.ai_level.value))) - 1] : null;
+  function fitLevel() {
+    const L = levelEntry();
+    if (L) { CONFIG.ai_react.value = L.react; CONFIG.ai_error.value = L.error; }
+  }
+
   /** Set a value, clamped to min..max and snapped to the step; saved and announced. */
   function set(k, v) {
     const c = CONFIG[k];
     v = Math.min(c.max, Math.max(c.min, v));
     v = Math.round((v - c.min) / c.step) * c.step + c.min;
     c.value = +v.toFixed(6);
+    if (k === 'ai_level') fitLevel();   // a new level brings its own reaction time and aim error
     save();
     dispatchEvent(new Event('tune'));
   }
@@ -91,7 +107,7 @@ const Settings = (() => {
   function save() {
     try {
       const out = {};
-      for (const k of Object.keys(defaults)) if (CONFIG[k].value !== defaults[k]) out[k] = CONFIG[k].value;
+      for (const k of Object.keys(defaults)) if (CONFIG[k].value !== defaults[k] || k === 'ai_react' || k === 'ai_error') out[k] = CONFIG[k].value;   // (react and error are always kept: what they mean depends on the level)
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch (e) { /* storage blocked: settings just last this visit */ }
   }
@@ -99,10 +115,17 @@ const Settings = (() => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
       for (const k of Object.keys(saved)) if (k in defaults && typeof saved[k] === 'number') CONFIG[k].value = Math.min(CONFIG[k].max, Math.max(CONFIG[k].min, saved[k]));
+      const L = levelEntry();   // a level saved before it set react and error (or never nudged them): they follow the level
+      if (L && typeof saved.ai_react !== 'number') CONFIG.ai_react.value = L.react;
+      if (L && typeof saved.ai_error !== 'number') CONFIG.ai_error.value = L.error;
     } catch (e) { /* nothing saved, or storage blocked */ }
   }
   function reset() { for (const k of Object.keys(defaults)) CONFIG[k].value = defaults[k]; save(); dispatchEvent(new Event('tune')); }
-  const changed = k => CONFIG[k].value !== defaults[k];
+  /** Whether a value differs from its default (react and error: from what the selected level sets them to). */
+  const changed = k => {
+    if (k === 'ai_react' || k === 'ai_error') { const L = levelEntry(); if (L) return CONFIG[k].value !== L[k.slice(3)]; }
+    return CONFIG[k].value !== defaults[k];
+  };
 
   return { rows, label, describe, showSimple, show, set, nudge, share, load, reset, changed };
 })();

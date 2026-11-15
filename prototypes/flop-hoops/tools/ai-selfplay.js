@@ -41,7 +41,7 @@ const gauss = () => Math.sqrt(-2 * Math.log(rand() + 1e-9)) * Math.cos(2 * Math.
 
   /** Points by the first weights minus points by the second, over both sides of each seed. */
   const duel = (a, b, seeds) => page.evaluate(([a, b, seeds, secs, level]) => {
-    CONFIG.win_score.value = 99; CONFIG.game_speed.value = 1; CONFIG.ai_level.value = level;
+    CONFIG.win_score.value = 99; CONFIG.game_speed.value = 1; Settings.set('ai_level', level);
     const neutral = { name: '', attack: 1, range: 1, pass: 1, flash: 1, guard: 1, scav: 1, read: 1, risk: 0.5, wild: 1 };
     let diff = 0, pa = 0, pb = 0;
     for (const sd of seeds) for (const aSide of [0, 1]) {

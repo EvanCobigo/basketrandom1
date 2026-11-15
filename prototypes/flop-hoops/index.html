@@ -700,7 +700,8 @@ const scenes = {
         const total = settingsRows.length, barH = SET.rowH * SET.show;
         ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8, 8, barH);
         ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8 + barH * settingsTop / total, 8, Math.max(16, barH * SET.show / total));
-        ptext('ORANGE NAMES ARE CHANGED FROM THE DEFAULT. SIZES OF BODIES AND COURT APPLY FROM THE NEXT ROUND.', W / 2, 600, 2, '#c9c3e0');
+        const sel = settingsRows[settingsSel], note = sel && sel.key ? Settings.describe(sel.key) : '';   // a setting with a plain line of its own says it here
+        ptext(note || 'ORANGE NAMES ARE CHANGED FROM THE DEFAULT. SIZES OF BODIES AND COURT APPLY FROM THE NEXT ROUND.', W / 2, 600, 2, note ? '#e6ddff' : '#c9c3e0');
       } else {                  // a plain line about the highlighted setting
         const row = settingsRows[settingsSel];
         if (row) ptext(Settings.describe(row.key), W / 2, 596, 2, '#e6ddff');

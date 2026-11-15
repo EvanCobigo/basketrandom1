@@ -11,8 +11,8 @@ window.CONFIG = {
   // ---- Match ----
   win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
   ai_level: { value: 3, min: 1, max: 6, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend, 6 Mythic (what each does is in js/ai.js)
-  ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at the middle level
-  ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at the lowest level
+  ai_react: { value: 0.19, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s it pauses between fresh decisions (picking a CPU level sets this to that level's value: Rookie 0.26 .. Mythic 0.11)
+  ai_error: { value: 0.6, min: 0, max: 1, step: 0.05 },           // CPU: how far off the rim's centre it aims a shot, 0 dead centre (picking a CPU level sets this: Rookie 1 .. Mythic 0.15)
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   replay_clips: { value: 5, min: 0, max: 10, step: 1 },           // best moments shown in the replay after a match (0 = none)
