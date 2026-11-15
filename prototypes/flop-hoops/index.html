@@ -503,6 +503,11 @@ function drawGame(opts = {}) {
     Render.world(c, world, courtAlpha(), state.t, W, H);
     for (const p of state.particles) { const k = p.max ? Math.max(0, p.life / p.max) : 1, sz = (p.size || 12) * (p.max ? 0.4 + 0.6 * k : 1); c.globalAlpha = p.max ? Math.min(1, k * 1.5) : 1; c.fillStyle = p.c; c.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz); }
     c.globalAlpha = 1;
+    if (state.aiDebug && cpu && scene === 'play' && cpu.dbg) {   // AI vision in court space: the ball path it expects and where it means to stand
+      const d = cpu.dbg;
+      if (d.path) { c.fillStyle = '#ffffff'; for (const q of d.path) c.fillRect(q.x - 3, q.y - 3, 6, 6); }
+      if (d.target !== null && d.target !== undefined) { c.fillStyle = '#ffd23f'; c.fillRect(d.target - 2, world.floorY - 60, 4, 60); c.fillRect(d.target - 10, world.floorY - 64, 20, 4); }
+    }
   });
   if (tune.vignette > 0) {   // darker corners draw the eye to the court
     const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95);
@@ -516,14 +521,22 @@ function drawGame(opts = {}) {
   }
   if (opts.hud !== false) {
     Render.scoreboard(ctx, W, { cpu: !!cpu, cpuStyle: cpu ? cpu.style.name : '', score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
+    if (cpu && scene === 'play' && cpu.intent) text(`CPU: ${cpu.intent}`, W / 2, 128, 15, Render.TEAM_COLORS[1], { stroke: 4 });   // what the computer is trying to do
     if ((scene === 'play' || scene === 'scored') && world.hustle.some(Boolean)) {
       const t = world.hustle[0] ? 0 : 1;
-      text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128, 16, Render.TEAM_COLORS[t], { stroke: 4 });
+      text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, cpu ? 150 : 128, 16, Render.TEAM_COLORS[t], { stroke: 4 });
+    }
+    if (state.aiDebug && cpu && scene === 'play') {   // AI vision (I): its options with their scores, what it reads from you, what it has learned
+      const d = cpu.dbg || {}, pf = cpu.profile, tn = AI.tendencies(pf), lines = [];
+      if (d.ops) lines.push('OPTIONS ' + d.ops.map(o => `${o[0]} ${o[1]}`).join('  '));
+      if (d.threat) lines.push(`READS  SHOT IN ${d.threat.shoot === null ? '-' : d.threat.shoot}  DUNK IN ${d.threat.dunk === null ? '-' : d.threat.dunk}  PASS ${Math.round(d.threat.pass * 100)}%`);
+      lines.push(`LEARNED  SHOTS ${pf.shots} (LONG ${Math.round(tn.longShare * 100)}%)  DUNKS ${pf.dunks}  PASSES ${pf.passes}  DRIBBLES ${pf.dribbles}  PRESSURE ${Math.round(cpu.press * 100)}%`);
+      lines.forEach((l, i) => text(l, W / 2, 172 + i * 18, 12, '#c9c3e0', { stroke: 3 }));
     }
   }
   if (state.dribble && state.dribble.n > 1 && scene === 'play') { // the dribble chain: the more in a row, the shakier
     const d = state.dribble, shaky = d.sloppy >= 4;
-    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, 154, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
+    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, state.aiDebug && cpu ? 250 : 174, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
   }
   if (world && world.hold && world.hold.dunkReady && (scene === 'play')) {
     const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;
@@ -764,6 +777,7 @@ const scenes = {
 // ---- Loop: fixed step, frame time clamped ---------------------------------------------
 function step() {
   if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
+  if (pressed('KeyI')) { state.aiDebug = !state.aiDebug; hit.delete('KeyI'); }   // AI vision: what the CPU thinks will happen
   if (scene !== menuScene) { menuScene = scene; menuFocus = scene === 'settings' ? -1 : 0; }   // in settings the list has the keys; buttons light on hover
   if (menuPress) { menuPress.t -= STEP; if (menuPress.t <= 0) { const a = menuPress.action; menuPress = null; a(); } }
   scenes[scene].update(STEP); hit.clear();

@@ -503,6 +503,24 @@ const Physics = (() => {
     return Object.assign(f, { err: f.crossX === null ? null : (f.crossX - hoop.cx) * p.dir, vx: v.vx, vy: v.vy });
   }
 
+  /**
+   * The free ball's next `n` steps, stepped as the engine steps it, bouncing off the floor and the side
+   * walls (the floor with its livelier bounce). Not a promise: players, the rim and the board are not in it.
+   * @returns {{x: number, y: number, vx: number, vy: number}[]} one entry per step, the first being the next step
+   */
+  function ballPath(w, T, n) {
+    const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir, floor = w.floorY - b.r, rest = Math.max(b.restitution, T.floor_bounce);
+    let x = b.position.x, y = b.position.y, vx = b.velocity.x, vy = b.velocity.y;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      vx *= keep; vy = vy * keep + g; x += vx; y += vy;
+      if (x < w.L + b.r) { x = w.L + b.r; vx = -vx * 0.6; } else if (x > w.R - b.r) { x = w.R - b.r; vx = -vx * 0.6; }
+      if (y >= floor && vy > 0) { y = floor; vy = Math.abs(vy) < 1.2 ? 0 : -vy * rest; }
+      out.push({ x, y, vx, vy });
+    }
+    return out;
+  }
+
   /** Where a free ball, flying as it is now, comes down to the floor (null if it is already there). */
   function landingX(w) {
     const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir, floor = w.floorY - b.r;
@@ -906,5 +924,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady, previewShot, landingX, shotVelocity };
+  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady, previewShot, predictLine, ballPath, landingX, shotVelocity };
 })();
