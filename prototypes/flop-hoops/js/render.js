@@ -68,6 +68,12 @@ const Render = (() => {
     }
   }
 
+  /** Two #rrggbb colours mixed, k = 0 the first .. 1 the second. */
+  function mix(c1, c2, k) {
+    const a = parseInt(c1.slice(1), 16), b = parseInt(c2.slice(1), 16), kk = Math.max(0, Math.min(1, k));
+    const ch = sh => Math.round(lerp((a >> sh) & 255, (b >> sh) & 255, kk));
+    return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  }
   /** A colour mixed toward black (k < 0) or white (k > 0) by |k|. */
   function shade(hex, k) {
     const n = parseInt(hex.slice(1), 16), to = k < 0 ? 0 : 255, a = Math.abs(k);
@@ -211,9 +217,25 @@ const Render = (() => {
     }
     ctx.moveTo(b1, h.rimY + depth); ctx.lineTo(b2, h.rimY + depth);
     ctx.stroke();
-    const dy = Math.sin(t * 40) * 2 * h.wobble;
-    ctx.beginPath(); ctx.ellipse(h.cx, h.rimY + dy, (h.x2 - h.x1) / 2, 6, 0, 0, Math.PI);
-    ctx.lineWidth = 9; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 5; ctx.strokeStyle = '#ef4b35'; ctx.stroke();
+    const dy = Math.sin(t * 40) * 2 * h.wobble, rx = (h.x2 - h.x1) / 2;
+    const heat = h.gleam !== undefined && h.gleam !== null ? 1 : h.heat || 0;
+    const rim = () => { ctx.beginPath(); ctx.ellipse(h.cx, h.rimY + dy, rx, 6, 0, 0, Math.PI); };
+    if (heat > 0.4) {   // a red-hot rim glows, pulsing faster the hotter it gets
+      const pulse = 0.5 + 0.5 * Math.sin(t * (8 + heat * 16));
+      ctx.globalAlpha = (heat - 0.4) / 0.6 * (0.25 + 0.25 * pulse);
+      rim(); ctx.lineWidth = 22; ctx.strokeStyle = '#ff5a1f'; ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    rim(); ctx.lineWidth = 9; ctx.strokeStyle = INK; ctx.stroke();
+    // its colour: the rim's red, through hot orange, to a crimson-white core
+    const col = heat < 0.5 ? mix('#ef4b35', '#ff7a1a', heat / 0.5) : mix('#ff7a1a', '#ffd8c4', (heat - 0.5) / 0.5);
+    rim(); ctx.lineWidth = 5; ctx.strokeStyle = col; ctx.stroke();
+    if (heat > 0.7) { rim(); ctx.lineWidth = 2; ctx.strokeStyle = mix('#c4143c', '#ffffff', (heat - 0.7) / 0.3); ctx.stroke(); }   // the crimson core line
+    if (h.gleam !== undefined && h.gleam !== null) {   // the gleam: a white flash sweeps along the rim and back, then the blast
+      const k = h.gleam / CONFIG.rim_gleam_time.value, u = k < 0.5 ? k * 2 : 2 - k * 2, gx = h.cx + (u * 2 - 1) * rx * 1.1;
+      ctx.save(); ctx.beginPath(); ctx.rect(gx - 12, h.rimY - 20, 24, 40); ctx.clip();
+      rim(); ctx.lineWidth = 11; ctx.strokeStyle = '#ffffff'; ctx.stroke(); ctx.restore();
+      ctx.globalAlpha = 0.35 + 0.35 * Math.sin(k * Math.PI * 6) ** 2; rim(); ctx.lineWidth = 30; ctx.strokeStyle = '#fff3c4'; ctx.stroke(); ctx.globalAlpha = 1;
+    }
   }
 
   // ---- Players --------------------------------------------------------------------------

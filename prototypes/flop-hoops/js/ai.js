@@ -401,18 +401,19 @@ const AI = (() => {
     const closeFoe = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - p.torso.position.x) < 110);
     if (!jumper && closeFoe && a.fakeRoll && !a.fake && !c.faked && hold.barmed && hold.charge > 0.35 && hold.charge < 0.6) { c.faked = true; a.fake = true; a.abort = 1; c.jump = true; c.fakeAt = c.tick; say(c, 'PUMP FAKE: MAKING ROOM', true); return c; }
     if (jumper && a.fakeRoll && !a.fake && hold.barmed && hold.charge > 0.2 && hold.charge < 0.85) { a.fake = true; a.abort = 1; c.jump = true; c.fakeAt = c.tick; say(c, 'PUMP FAKE: THE DEFENDER JUMPED', true); return c; }
-    if (level >= 5 && a.slip === undefined && !a.forced) {   // Legend: it lets go only on a line the preview calls perfect, and pumps out of one that never comes
+    if (a.perfectOnly && !a.forced) {   // a Mythic with a perfect line on offer prefers it: it lets go only on that line...
       if (pv.perfect && pv.err >= -2 && (!a.fade || fading || a.t > 1.1)) { c.aim = null; c.jump = false; c.wait = base * 0.3; return c; }
-      if ((hold.charge >= 0.995 || a.t > 2.4) && hold.barmed) { a.abort = 1; c.jump = true; return c; }
-      // what is left of this cock-back, swept every few steps: if no perfect line is left in it, it dribbles out now
-      // rather than hold a dead shot into a steal (twice in a row, since a fadeaway's drift can still bring one)
-      if (hold.barmed && hold.charge > 0.15 && c.tick % 4 === 0) {
+      // ...while one is still there: what is left of this cock-back is swept every few steps (twice in a row, since a
+      // fadeaway's drift can still bring one). Once none is left, or it has waited long enough, it takes a good line instead
+      let gone = hold.charge >= 0.995 || a.t > 1.6;
+      if (!gone && hold.barmed && hold.charge > 0.15 && c.tick % 4 === 0) {
         let any = false;
         for (let ch = hold.charge; ch <= 1.0001 && !any; ch += 0.04) if (Physics.previewShot(w, T, p, Math.min(1, ch), 1).perfect) any = true;
         a.noLine = any ? 0 : (a.noLine || 0) + 1;
-        if (a.noLine >= 2) { a.abort = 1; c.jump = true; say(c, 'NO PERFECT LINE: DRIBBLING OUT', true); return c; }
+        gone = a.noLine >= 2;
       }
-      c.jump = true; return c;
+      if (!gone) { c.jump = true; return c; }
+      a.perfectOnly = false; a.slip = 0; say(c, 'NO PERFECT LINE: TAKING A GOOD ONE', true);   // (falls through to the ordinary release)
     }
     const off = a.slip !== undefined ? a.slip : a.off;   // a slipping Legend aims off like anyone else
     let release = hold.charge >= 0.995 || a.t > 2.4;
@@ -455,7 +456,7 @@ const AI = (() => {
     const far = Physics.previewShot(w, T, p, 1);
     const inRange = far.err !== null && far.err >= -span * 0.9;
     const qi = inRange ? quality(c, w, T, p) : { q: 0, width: 0 }, q = qi.q;
-    const patience = L.patience || PATIENCE;                                        // (the Mythic decides sooner)
+    const patience = Math.min(L.patience || PATIENCE, T.ai_hold_limit - 0.7);       // (the hold limit decides sooner than any level would)
     const urg = clamp((hold.t - 1.0) / Math.max(0.5, patience - 1.0), 0, 1);     // urgency: the longer it holds, the more it must act (there is no shot clock any more: a person may hold forever)
     const pts = Math.min(ownHalf ? 2 : 1, sit.toWin);                               // a basket past the winning mark is worth no more
     const noise = L.noise * st.wild;
@@ -479,8 +480,7 @@ const AI = (() => {
     // under (or beyond) the basket it DEFENDS: it never shoots from there, it always passes the ball out
     const underOwn = underOwnRim(c, w, T, px);
     // a Legend or Mythic waits for a perfect line, but not for ever: after 1.5 s it takes a line that can go in
-    const settle = level >= 5 && q === 1 && hold.t > 1.5;
-    const takesShot = inRange && (level < 5 || q === 2 || settle) && !underOwn;
+    const takesShot = inRange && !underOwn;   // every level takes good shots; a Mythic still prefers a perfect line (perfectOnly)
     const anyTarget = inRange && q >= 1 && !underOwn;            // some line from here can go in (a Legend's may not be perfect)
     const startAim = (kind, txt, forced = false) => () => {
       const noiseOff = (c.rng() * 2 - 1) * span * 0.55 * L.error;
@@ -492,7 +492,7 @@ const AI = (() => {
       const fakeP = level >= 2 ? X.W.fake * clamp((L.fakeBase || FAKE_BASE[level - 1]) + 0.6 * rate * seen + 0.2 * (st.flash - 1) + 0.1 * (X.risk - 0.5) + fakeForm, 0, 0.85) : 0;
       c.aim = { t: 0, wait: 0, off: noiseOff + (slipped ? (c.rng() < 0.5 ? -1 : 1) * span * 0.4 : 0), fade: kind === 'fade', pressed: false, txt, fakeRoll: c.rng() < fakeP, forced };
       if (level >= 5 && slipped) c.aim.slip = (c.rng() < 0.5 ? -1 : 1) * 16;
-      else if (settle) c.aim.slip = 0;   // (aimed like the levels below: let go on the centre of the rim, perfect or not)
+      else if (level >= 6 && q === 2) c.aim.perfectOnly = true;   // a perfect line exists: the Mythic waits for it (see aimStep)
       c.dribs = 0;
       return aimStep(c, X);
     };
@@ -502,7 +502,7 @@ const AI = (() => {
         const bonus = 0.2 * (st.range - 1) + (sit.behind >= 2 ? 0.15 : 0) + form(c, 'long', X.K) * 0.3 * learnOf(X) + (foeClose ? -0.1 : 0);
         add('long', 0.1 + X.W.shot * pS * pts + bonus + 0.4 * urg + (role < 0 ? roleTilt : 0), startAim('long', 'TAKING A LONG SHOT FOR 2'), 'LONG');
       } else {
-        add('shot', 0.1 + X.W.shot * pS * pts + form(c, 'shot', X.K) * 0.3 * learnOf(X) + (screened ? 0.1 : 0) + (baited ? 0.35 : 0) + 0.4 * urg + (role < 0 ? roleTilt : 0) + (rimHome ? 0.05 : 0), startAim('shot', level >= 5 ? 'LINING UP A PERFECT SHOT' : 'GOING UP FOR A JUMP SHOT'), 'SHOT');
+        add('shot', 0.1 + X.W.shot * pS * pts + form(c, 'shot', X.K) * 0.3 * learnOf(X) + (screened ? 0.1 : 0) + (baited ? 0.35 : 0) + 0.4 * urg + (role < 0 ? roleTilt : 0) + (rimHome ? 0.05 : 0), startAim('shot', level >= 6 && q === 2 ? 'LINING UP A PERFECT SHOT' : 'GOING UP FOR A JUMP SHOT'), 'SHOT');
       }
       if (level >= 3 && foeClose && Xd < 700) {   // a fadeaway when a defender is on it: the lean takes the ball away from the hand
         const pF = pBase * (1 - 0.2 * press) * 0.92;
@@ -805,6 +805,30 @@ const AI = (() => {
     return c;
   }
 
+  /**
+   * Out of time with the ball (the hold limit): a dunk if one is ready, the cocked shot if it is legal, otherwise a
+   * pass (charged past the dribble threshold, so neither the seated rule nor the dribble cap can stop it). With the
+   * shot cocked the jump stays down while the bounce charges, and both go up together: the bounce goes first.
+   */
+  function outOfTime(c, X) {
+    const { w, T, hold, dt } = X;
+    let d = c.deadline;
+    if (!d) {
+      c.aim = null; c.wait = 0; c.holdT = 0; c.bholdT = 0; c.self = null;
+      const kind = hold.dunkReady ? 'dunk' : hold.cocking && !underOwnRim(c, w, T, w.ball.position.x) ? 'shoot' : 'pass';
+      d = c.deadline = { hold, kind, step: 0, n: Math.ceil(Math.max(T.dribble_threshold + 0.05, 0.3) * T.bounce_charge_time / dt) + 1, keepJump: hold.cocking };
+      say(c, kind === 'pass' ? 'OUT OF TIME: PASSING' : kind === 'shoot' ? 'OUT OF TIME: SHOOTING' : 'GOING UP FOR THE DUNK', true);
+    }
+    d.step++;
+    if (d.kind === 'dunk') { c.jump = d.step === 2; return c; }       // a fresh tap: up for a step, then down
+    if (d.kind === 'shoot') { c.jump = false; return c; }             // letting go of a cocked shot shoots it
+    if (!hold.barmed && !d.armed) { c.jump = d.keepJump; c.bounce = false; return c; }   // the bounce key must be up once first
+    d.armed = true;
+    const on = d.n-- > 0;
+    c.bounce = on; c.jump = on && d.keepJump;
+    return c;
+  }
+
   // ---------------------------------------------------------------- the self-pass
 
   /**
@@ -854,6 +878,11 @@ const AI = (() => {
     const ours = (hold && hold.p.team === c.team) || (!hold && ((lb0 && lb0.team === c.team && lb0.dribbleT > 0) || (w.pass && w.pass.team === c.team)));
     if (ours && !c.hadBall) { const [lo, hi] = BUDGETS[Math.min(level, BUDGETS.length) - 1]; c.budget = lo + Math.floor(c.rng() * (hi - lo + 1)); c.dribs = 0; c.faked = false; c.possN++; }
     c.hadBall = !!ours;
+    // THE HOLD LIMIT: the CPU never holds the ball longer than T.ai_hold_limit. Near it, whatever it was doing, it gets rid of it
+    if (hold && hold.p.team === c.team && !w.dunk) {
+      if (c.deadline && c.deadline.hold !== hold) c.deadline = null;
+      if (c.deadline || hold.t >= T.ai_hold_limit - 0.32) return outOfTime(c, X);
+    } else c.deadline = null;
     if (c.aim) return aimStep(c, X);
     if (c.self && c.self.thrown && hold && hold.p === c.self.from) selfStep(c, X);   // caught it: let go of the jump key now, not when its hop runs out
     // a key being held on purpose stays down until its time is up; letting go is the action
@@ -926,7 +955,7 @@ const AI = (() => {
    * First match wins, so the specific plays come before the general ones.
    */
   const BRIEF = [
-    [/PUMP FAKE/, 'PUMP FAKE'], [/SELF-PASS/, 'SELF-PASS'], [/OFF THE WALL/, 'WALL PASS'], [/OUTLET/, 'OUTLET PASS'],
+    [/OUT OF TIME/, 'OUT OF TIME'], [/TAKING A GOOD ONE/, 'JUMP SHOT'], [/PUMP FAKE/, 'PUMP FAKE'], [/SELF-PASS/, 'SELF-PASS'], [/OFF THE WALL/, 'WALL PASS'], [/OUTLET/, 'OUTLET PASS'],
     [/FAST BREAK/, 'FAST BREAK'], [/ALLEY-OOP: GOING UP/, 'ALLEY-OOP'], [/LOB/, 'LOB'], [/WATCHING THE PASS/, 'READING PASS'],
     [/MEETING THE PASS/, 'CATCHING'], [/PASS/, 'PASS'], [/SCREEN/, 'SCREEN'], [/STEAL/, 'STEAL'], [/SWATTING/, 'SWAT'],
     [/CONTESTING/, 'CONTEST'], [/READING THE DUNK|PROTECTING THE RIM|GUARDING THE RIM/, 'RIM GUARD'], [/DEFENDING DEEP/, 'DEEP D'],

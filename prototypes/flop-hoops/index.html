@@ -266,6 +266,12 @@ function onPhysEvent(ev) {
   if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
   if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
+  if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
+    sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
+    state.shake = Math.max(state.shake, tune.shake * 0.6);
+    puff(ev.x, ev.y, 26, { speed: 420, life: 0.6, colors: ['#ff5a1f', '#ffd23f', '#c4143c', '#ffffff'], size: 9, g: 400, drag: 0.9 });
+    callout('OVERHEAT!', -1, ev.x, ev.y); events.push({ type: 'rimblast', n: ev.n }); return;
+  }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (ev.type === 'block') Replay.mark(world, ev.dunk ? 'DENIED' : 'BLOCK', ev.dunk ? 80 : 45, ev.team, state.round);
   if (ev.type === 'steal') Replay.mark(world, 'STEAL', 25, ev.team, state.round);
@@ -398,6 +404,9 @@ function puff(x, y, n, o) {
 function sparkShow() { if (world) { world.sparkT = tune.spark_time; world.hype = Math.max(world.hype || 0, 1); } sfx.sparks(); }
 function updateJuice(dt) {
   state.fxTick = (state.fxTick || 0) + 1;
+  if (world && state.fxTick % 4 === 0) for (const h of world.hoops) if ((h.heat || 0) > 0.5 || (h.gleam !== undefined && h.gleam !== null)) {   // a hot rim gives off sparks
+    puff(h.x1 + rng() * (h.x2 - h.x1), h.rimY - 4, 1, { speed: 60, angle: -Math.PI / 2, cone: 1, life: 0.5, colors: ['#ff7a1a', '#ffd23f', '#c4143c'], size: 5, g: -60, drag: 0.92 });
+  }
   if (world && state.fxTick % 2 === 0) {
     const b = world.ball, tr = world.trail;
     if (tr && b.shot && b.shot === tr.shot && !world.hold) {   // a sparkle trail behind a shot, in the trail's colour

@@ -252,13 +252,15 @@ const Physics = (() => {
     // Feet on the floor: the whole body swings about its feet, evenly forwards and backwards at
     // a steady beat that never fades. The swing is the steering: hop as it tips one way to go that way.
     const base = w.time * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7;
-    // a hand on the floor pushes off it: the wobble turns round at once, the other way (p.rockOff shifts the swing's beat)
-    p.handCD = (p.handCD || 0) - dt;
-    if (p.handCD <= 0 && handPos(p).y >= w.floorY - T.hand_floor_px && torso.angularVelocity * a > 0) {
+    // A HARD RULE: a hand on the floor always pushes off it. Every step the hand touches, unless the body is already
+    // turning away fast enough, the wobble is turned round the other way (p.rockOff shifts the swing's beat), so a body
+    // can never rest propped on its hand at an angle waiting for a jump
+    const awaySpeed = -Math.sign(a || 1) * torso.angularVelocity;
+    if (handPos(p).y >= w.floorY - T.hand_floor_px && awaySpeed < T.hand_push * 0.5) {
       const amp = Math.max(0.05, T.rock_angle * (p.dribRock ?? 1)), sn = Math.asin(clamp(a / amp, -1, 1));
       p.rockOff = wrap((a > 0 ? Math.PI - sn : sn) - base);                  // the beat where the swing is here, heading back
-      Body.setAngularVelocity(torso, -Math.sign(a) * T.hand_push);         // and the push itself, swinging or not
-      p.handCD = 0.25;
+      Body.setAngularVelocity(torso, -Math.sign(a || 1) * T.hand_push);    // and the push itself, swinging or not
+      if (Math.abs(a) > 1.3) Body.setVelocity(torso, { x: torso.velocity.x, y: Math.min(torso.velocity.y, -1) });   // lying flat: lift a little so it can turn off the floor
       w.onEvent({ type: 'handpush', team: p.team });
     }
     const phase = base + (p.rockOff || 0);
@@ -888,6 +890,32 @@ const Physics = (() => {
     if (d.hangT >= hangFor) endDunk(w);
   }
 
+  /**
+   * A rim that someone stays on overheats: heat builds while a player (off the floor) is on or in it, over
+   * T.rim_heat_time, and cools when it is left. Full heat starts the gleam (T.rim_gleam_time); at its end the rim
+   * blows: everyone on it is sent down (T.rim_blast px/step, not hard) and a little away from the board, and a hang
+   * is let go. Longer than a hanging dunk (dunk_rim_hang), so an ordinary hang never blows.
+   */
+  function rimHeat(w, T, dt) {
+    for (const h of w.hoops) {
+      // (off the floor: both feet clear of it. Not sinceGround: the rim and board count as ground for that)
+      const on = w.players.filter(p => p.legs.every(l => l.position.y < w.floorY - 40) && p.parts.some(b => b.position.x > h.x1 - 14 && b.position.x < h.x2 + 14 && b.position.y > h.rimY - 50 && b.position.y < h.rimY + 60));
+      h.heat = h.heat || 0;
+      if (h.gleam !== undefined && h.gleam !== null) {
+        h.gleam += dt;
+        if (h.gleam >= T.rim_gleam_time) {
+          if (w.dunk && w.dunk.hoop === h) endDunk(w);
+          for (const p of on) for (const b of p.parts) Body.setVelocity(b, { x: b.velocity.x * 0.3 - h.side * 2, y: Math.max(b.velocity.y, 0) + T.rim_blast });
+          w.onEvent({ type: 'rimblast', team: on.length ? on[0].team : -1, x: h.cx, y: h.rimY, n: on.length });
+          h.gleam = null; h.heat = 0; h.wobble = 2;
+        }
+        continue;
+      }
+      h.heat = clamp(h.heat + (on.length ? dt / T.rim_heat_time : -dt / T.rim_cool_time), 0, 1);
+      if (h.heat >= 1) h.gleam = 0;
+    }
+  }
+
   function possession(w, held, bheld, T, dt) {
     const ball = w.ball;
     if (w.dunk) { stepDunk(w, T, dt); if (w.dunk && !w.dunk.slammed) return; }   // a dunk in progress: the ball is in the dunker's hand until the slam
@@ -1020,6 +1048,7 @@ const Physics = (() => {
     }
 
     possession(w, held, bheld, T, dt);
+    rimHeat(w, T, dt);
     const ball = w.ball;
     if (w.trail) {
       w.trail.t += dt;

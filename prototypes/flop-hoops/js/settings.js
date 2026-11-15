@@ -21,7 +21,7 @@ const Settings = (() => {
     ['DUNKS', k => k.startsWith('dunk_')],
     ['PASSING AND DRIBBLING', k => k.startsWith('bounce_') || k.startsWith('pass_') || k.startsWith('dribble_')],
     ['TRAILS', k => k.startsWith('perfect_') || k.startsWith('trail_') || k === 'soft_touch'],
-    ['RAGDOLL', k => k.startsWith('upright') || k.startsWith('rock_') || k.startsWith('leg_') && k !== 'leg_length' && k !== 'leg_closer_px' || k.startsWith('arm_') && k !== 'arm_length' && k !== 'arm_width' || k.startsWith('fold_') || k.startsWith('hand_') || k === 'seat_margin' || ['gravity', 'player_max_speed', 'getup_time', 'getup_pop'].includes(k)],
+    ['RAGDOLL', k => k.startsWith('upright') || k.startsWith('rock_') || k.startsWith('leg_') && k !== 'leg_length' && k !== 'leg_closer_px' || k.startsWith('arm_') && k !== 'arm_length' && k !== 'arm_width' || k.startsWith('fold_') || k.startsWith('hand_') || k === 'seat_margin' || k.startsWith('rim_') && !['rim_height', 'rim_span_min', 'rim_ball_ratio'].includes(k) || ['gravity', 'player_max_speed', 'getup_time', 'getup_pop'].includes(k)],
     ['BODY (NEXT ROUND)', ['body_width', 'limb_width', 'arm_width', 'head_size', 'head_shape', 'head_extra_px', 'leg_closer_px', 'arm_length', 'torso_length', 'leg_length']],
     ['BALL', k => k.startsWith('ball_') || ['floor_bounce', 'drop_height'].includes(k)],
     ['COURT (NEXT ROUND)', ['court_width', 'rim_height', 'rim_span_min', 'rim_ball_ratio', 'board_height', 'board_inset']],
