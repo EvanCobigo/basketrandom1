@@ -286,13 +286,16 @@ function buildRound(round) {
   state.stall = 0;
 }
 // mode: 'cpu' (Player 1 against the computer, which plays the Tealbacks), '2p' (two people) or 'sim' (the computer plays both teams)
+let watchLv = [4, 4], simLv = null;   // WATCH CPU: the level of each computer
 let mode = 'cpu', cpu = null, cpuA = null, matchNo = 0;   // cpuA: the Tangerines' computer, only in 'sim'
-function newMatch(m) {
+function newMatch(m, levels) {   // levels: for 'sim', the CPU level of each team [Tangerines, Tealbacks]
   if (m === 'cpu' || m === '2p' || m === 'sim') mode = m;
   reset(); Replay.reset(); state.mode = mode;
   seed += matchNo * 7919;   // each match of a session plays out differently; the first of a page load is the same every time
-  cpu = mode !== '2p' ? AI.create(1, rng, tune, matchNo) : null;
-  cpuA = mode === 'sim' ? AI.create(0, rng, tune, matchNo + 3) : null;   // watch mode: the computer plays itself
+  if (mode === 'sim' && levels) simLv = levels;   // (a restart keeps them)
+  const lv = mode === 'sim' && simLv ? simLv : [0, 0];
+  cpu = mode !== '2p' ? AI.create(1, rng, tune, matchNo, null, lv[1]) : null;
+  cpuA = mode === 'sim' ? AI.create(0, rng, tune, matchNo + 3, null, lv[0]) : null;   // watch mode: the computer plays itself
   matchNo++;
   nextRound(); events.push({ type: 'match', mode });
 }
@@ -637,7 +640,7 @@ const scenes = {
       buttons = [];
       btn('VS CPU', W / 2 - 420, 356, 260, 72, () => newMatch('cpu'), 'YOU VS COMPUTER', 4);
       btn('2 PLAYERS', W / 2 - 130, 356, 260, 72, () => newMatch('2p'), 'ONE KEYBOARD', 4);
-      btn('WATCH CPU', W / 2 + 160, 356, 260, 72, () => newMatch('sim'), 'COMPUTER VS COMPUTER', 4);
+      btn('WATCH CPU', W / 2 + 160, 356, 260, 72, () => { scene = 'watch'; }, 'COMPUTER VS COMPUTER', 4);
       // CPU difficulty: a six-step slider with what the level does written under it
       const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];
       btn('<', LEVEL.x - 64, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv - 1), '', 4);
@@ -750,6 +753,30 @@ const scenes = {
       text(`${state.score[0]} - ${state.score[1]}`, 0, 116, 36, '#ffffff', { weight: 900, stroke: 7 });
       ctx.restore();
       buttons = [];
+    },
+  },
+  watch: { // WATCH CPU: pick how strong each computer is, then start
+    update(dt) { state.t += dt; menuKeys(); if (pressed('Escape')) scene = 'title'; },
+    draw() {
+      drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
+      ptext('WATCH CPU', W / 2, 110, 9, '#ffd23f', { outline: true, shadow: 6 });
+      ptext('PICK HOW STRONG EACH COMPUTER IS', W / 2, 180, 3, '#ffffff');
+      buttons = [];
+      for (const team of [0, 1]) {
+        const x = W / 2 + (team ? 250 : -250), y = 300, lv = watchLv[team], L = AI.LEVELS[lv - 1];
+        ctx.fillStyle = Render.INK; ctx.fillRect(x - 220, y - 70, 440, 270);
+        ctx.fillStyle = '#21183f'; ctx.fillRect(x - 216, y - 66, 432, 262);
+        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 216, y - 66, 432, 8);
+        ptext(Render.TEAM_NAMES[team].toUpperCase(), x, y - 36, 3, Render.TEAM_COLORS[team]);
+        ptext(`LEVEL ${lv}: ${L.name}`, x, y + 20, 3, '#ffd23f');
+        btn('<', x - 200, y + 50, 50, 50, () => { watchLv[team] = Math.max(1, lv - 1); }, '', 4);
+        btn('>', x + 150, y + 50, 50, 50, () => { watchLv[team] = Math.min(AI.LEVELS.length, lv + 1); }, '', 4);
+        for (let n = 1; n <= AI.LEVELS.length; n++) { ctx.fillStyle = n <= lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - 100 + (n - 1) * 36, y + 66, 28, 18); }
+        const cut = L.does.lastIndexOf(' ', 38) > 0 ? L.does.lastIndexOf(' ', 38) : 38;   // wrap at a word
+        ptext(L.does.slice(0, cut), x, y + 130, 1, '#c9c3e0'); ptext(L.does.slice(cut).trim(), x, y + 148, 1, '#c9c3e0');
+      }
+      btn('START', W / 2 - 150, 548, 300, 70, () => newMatch('sim', watchLv.slice()), 'ENTER', 5);
+      btn('BACK', 40, H - 84, 200, 50, () => { scene = 'title'; }, 'ESC', 3);
     },
   },
   pause: {
