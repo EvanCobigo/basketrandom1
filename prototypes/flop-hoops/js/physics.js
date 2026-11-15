@@ -255,13 +255,15 @@ const Physics = (() => {
     // A HARD RULE: a hand on the floor always pushes off it. Every step the hand touches, unless the body is already
     // turning away fast enough, the wobble is turned round the other way (p.rockOff shifts the swing's beat), so a body
     // can never rest propped on its hand at an angle waiting for a jump
+    // (the ball in hand is an extension of the hand: the carrier's ball on the floor counts as the hand on the floor)
     const awaySpeed = -Math.sign(a || 1) * torso.angularVelocity;
-    if (handPos(p).y >= w.floorY - T.hand_floor_px && awaySpeed < T.hand_push * 0.5) {
+    const ballLow = (h || (w.dunk && w.dunk.p === p && !w.dunk.slammed)) && w.ball.position.y + w.ball.r >= w.floorY - T.hand_floor_px;
+    if ((handPos(p).y >= w.floorY - T.hand_floor_px || ballLow) && awaySpeed < T.hand_push * 0.5) {
       const amp = Math.max(0.05, T.rock_angle * (p.dribRock ?? 1)), sn = Math.asin(clamp(a / amp, -1, 1));
       p.rockOff = wrap((a > 0 ? Math.PI - sn : sn) - base);                  // the beat where the swing is here, heading back
       Body.setAngularVelocity(torso, -Math.sign(a || 1) * T.hand_push);    // and the push itself, swinging or not
       if (Math.abs(a) > 1.3) Body.setVelocity(torso, { x: torso.velocity.x, y: Math.min(torso.velocity.y, -1) });   // lying flat: lift a little so it can turn off the floor
-      w.onEvent({ type: 'handpush', team: p.team });
+      w.onEvent({ type: 'handpush', team: p.team, ball: !!ballLow });
     }
     const phase = base + (p.rockOff || 0);
     const dribbling = p.dribbleT > 0;
@@ -612,9 +614,10 @@ const Physics = (() => {
    * walls (the floor with its livelier bounce). Not a promise: players, the rim and the board are not in it.
    * @returns {{x: number, y: number, vx: number, vy: number}[]} one entry per step, the first being the next step
    */
-  function ballPath(w, T, n) {
+  function ballPath(w, T, n) { const b = w.ball; return pathFrom(w, T, b.position.x, b.position.y, b.velocity.x, b.velocity.y, n); }
+  /** ballPath from a given state (where a throw not yet made would go): the same stepping, floor and side walls only. */
+  function pathFrom(w, T, x, y, vx, vy, n) {
     const g = gravityPx(w), b = w.ball, keep = 1 - b.frictionAir, floor = w.floorY - b.r, rest = Math.max(b.restitution, T.floor_bounce);
-    let x = b.position.x, y = b.position.y, vx = b.velocity.x, vy = b.velocity.y;
     const out = [];
     for (let i = 0; i < n; i++) {
       vx *= keep; vy = vy * keep + g; x += vx; y += vy;
@@ -905,8 +908,33 @@ const Physics = (() => {
         h.gleam += dt;
         if (h.gleam >= T.rim_gleam_time) {
           if (w.dunk && w.dunk.hoop === h) endDunk(w);
-          for (const p of on) for (const b of p.parts) Body.setVelocity(b, { x: b.velocity.x * 0.3 - h.side * 2, y: Math.max(b.velocity.y, 0) + T.rim_blast });
-          w.onEvent({ type: 'rimblast', team: on.length ? on[0].team : -1, x: h.cx, y: h.rimY, n: on.length });
+          // the blast: everything within rim_blast_radius is thrown outward from the rim, hardest at the centre
+          const R = T.rim_blast_radius, push = (b, k) => {
+            const dx = b.position.x - h.cx, dy = b.position.y - h.rimY, d = Math.hypot(dx, dy);
+            if (d > R) return false;
+            const f = T.rim_blast * k * (1 - d / R) + T.rim_blast * 0.15, ux = d > 1 ? dx / d : -h.side, uy = d > 1 ? dy / d : 0;
+            Body.setVelocity(b, { x: b.velocity.x * 0.3 + ux * f, y: b.velocity.y * 0.3 + uy * f });
+            return true;
+          };
+          let n = 0;
+          for (const p of w.players) {
+            const d = Math.hypot(p.torso.position.x - h.cx, p.torso.position.y - h.rimY);
+            if (d > R && !on.includes(p)) continue;
+            n++;
+            // the whole body moves as one (the torso's direction), so it is thrown, not torn apart
+            const dx = p.torso.position.x - h.cx, dy = p.torso.position.y - h.rimY, dd = Math.max(1, Math.hypot(dx, dy));
+            const f = T.rim_blast * (1 - Math.min(d, R) / R) + T.rim_blast * 0.15, ux = dx / dd, uy = dy / dd;
+            for (const b of p.parts) Body.setVelocity(b, { x: b.velocity.x * 0.3 + ux * f, y: b.velocity.y * 0.3 + uy * f + (on.includes(p) ? T.rim_blast * 0.25 : 0) });
+            Body.setAngularVelocity(p.torso, p.torso.angularVelocity + (ux >= 0 ? 1 : -1) * 0.12);
+            p.sinceGround = 99; p.sinceFoot = 99;
+          }
+          const ball = w.ball, bd = Math.hypot(ball.position.x - h.cx, ball.position.y - h.rimY);
+          if (bd <= R) {
+            if (w.hold) release(w, T, 0.25);
+            ball.shot = null; w.pass = null; w.lobPlay = null;
+            push(ball, 1.2);
+          }
+          w.onEvent({ type: 'rimblast', team: on.length ? on[0].team : -1, x: h.cx, y: h.rimY, n, radius: R, ball: bd <= R });
           h.gleam = null; h.heat = 0; h.wobble = 2;
         }
         continue;
@@ -1077,5 +1105,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, seated, handPos, createWorld, step, dropBall, squircle, dunkReady, previewShot, predictLine, ballPath, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
+  return { FLOOR_Y, CX, DELTA, seated, handPos, createWorld, step, dropBall, squircle, dunkReady, previewShot, predictLine, ballPath, pathFrom, riseOf, gravityPx, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
 })();

@@ -1,0 +1,9 @@
+# iteration 39 build (7d9cd12), 12 seeds x 90 s per level vs tools/ai-ref.js; per move tries:ok/bad (tools/ai-moves.js)
+L3 pts 67-60 own 0 carried 3 clears 0 | mine {"shot":[26,6],"long":[24,9],"fade":[39,18],"dunk":[17,4]} self {"tries":0,"caught":0,"dunks":0} fk {"fakes":11,"shots":2,"made":0}
+   lob 0:0/0  screen 15:9/6  fake 12:0/8  fade 98:13/56  long 44:10/24  jump 9:3/6  self 0:0/0  fastbreak 1:0/1  outlet 81:28/36  waitout 0:0/0  swat 8:2/2  rimread 3:1/2  timed 0:0/0  swipe 6:2/0  crash 32:11/17  contest 3:3/0
+L4 pts 59-70 own 3 carried 2 clears 0 | mine {"shot":[24,4],"long":[23,7],"fade":[28,15],"dunk":[15,3]} self {"tries":0,"caught":0,"dunks":0} fk {"fakes":9,"shots":7,"made":2}
+   lob 6:0/5  screen 12:7/4  fake 9:2/5  fade 69:14/36  long 37:7/23  jump 4:3/0  self 0:0/0  fastbreak 3:0/3  outlet 55:20/30  waitout 4:0/4  swat 5:2/2  rimread 4:2/1  timed 16:4/6  swipe 37:10/0  crash 47:20/21  contest 18:6/5
+L5 pts 64-44 own 1 carried 2 clears 0 | mine {"shot":[14,4],"long":[16,5],"fade":[30,13],"dunk":[21,15]} self {"tries":41,"caught":1,"dunks":0} fk {"fakes":14,"shots":3,"made":2}
+   lob 5:0/3  screen 14:9/5  fake 14:2/8  fade 79:17/47  long 22:2/17  jump 6:3/3  self 41:0/27  fastbreak 2:1/0  outlet 42:17/22  waitout 2:0/2  swat 12:4/4  rimread 34:20/4  timed 63:21/26  swipe 122:33/0  crash 12:3/7  contest 42:12/17
+L6 pts 55-41 own 1 carried 2 clears 0 | mine {"shot":[19,1],"long":[19,7],"fade":[27,9],"dunk":[22,16]} self {"tries":46,"caught":2,"dunks":1} fk {"fakes":20,"shots":5,"made":0}
+   lob 5:0/4  screen 17:13/4  fake 21:1/16  fade 85:10/49  long 30:9/12  jump 9:1/6  self 45:3/33  fastbreak 3:1/2  outlet 41:14/21  waitout 8:4/3  swat 17:7/3  rimread 49:22/8  timed 83:27/26  swipe 149:36/4  crash 17:2/14  contest 53:26/15

@@ -13,6 +13,8 @@ window.CONFIG = {
   ai_level: { value: 3, min: 1, max: 6, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend, 6 Mythic (what each does is in js/ai.js)
   ai_hold_limit: { value: 2.5, min: 1, max: 5, step: 0.1 },    // s the CPU may hold the ball before it must shoot, dunk or pass (people have no limit)
   ai_own_rim_zone: { value: 70, min: 0, max: 300, step: 10 },  // px either side of the rim it defends where the CPU never shoots (it passes out instead)
+  ai_fade_room: { value: 260, min: 0, max: 600, step: 10 },     // px the CPU needs between it and the rim it defends to fade away (the fade drifts back)
+  ai_lob_guard: { value: 150, min: 0, max: 400, step: 10 },     // px: a defender this near the board stops a CPU alley-oop lob (levels 4+)
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   replay_clips: { value: 5, min: 0, max: 10, step: 1 },           // best moments shown in the replay after a match (0 = none)
@@ -141,7 +143,8 @@ window.CONFIG = {
   rim_heat_time: { value: 2, min: 0.5, max: 6, step: 0.1 },     // s a player can stay on a rim before it is red hot
   rim_cool_time: { value: 1, min: 0.2, max: 5, step: 0.1 },     // s for a red-hot rim nobody is on to cool right down
   rim_gleam_time: { value: 0.45, min: 0.1, max: 1.5, step: 0.05 }, // s of the white gleam before the rim blows
-  rim_blast: { value: 6, min: 0, max: 20, step: 0.5 },          // px/step the blast sends a player on the rim downward          // px: hips this close to the floor count as sitting (no dribbling)
+  rim_blast: { value: 16, min: 0, max: 30, step: 0.5 },         // px/step the blast throws everything at its centre outward (less further out)
+  rim_blast_radius: { value: 300, min: 50, max: 700, step: 10 }, // px from the rim the blast reaches: players and the ball inside it are knocked away
   arm_up_angle: { value: 2.5, min: 0.5, max: 3.1, step: 0.05 },// rad the arm lifts while the key is held
   arm_cock_angle: { value: 2.95, min: 1.5, max: 3.1, step: 0.05 }, // rad the arm swings back while cocking a shot
   follow_time: { value: 0.45, min: 0, max: 1.2, step: 0.05 },     // s the shooting arm holds its follow-through

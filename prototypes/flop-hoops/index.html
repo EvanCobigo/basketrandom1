@@ -232,7 +232,7 @@ let scene, state, world = null, pauseFrom = 'play', prevVenue = '';
 function reset() {
   seed = Number(params.get('seed')) || CONFIG.seed;
   state = { t: 0, score: [0, 0], round: 0, venue: '', settings: null, cardT: 0, scoredT: 0,
-    dribble: null, fire: null, floats: [], hitstop: 0, scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
+    dribble: null, fire: null, floats: [], rings: [], blastFlash: 0, hitstop: 0, scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
   prevVenue = '';
 }
 const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
@@ -268,9 +268,15 @@ function onPhysEvent(ev) {
   if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
     sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
-    state.shake = Math.max(state.shake, tune.shake * 0.6);
-    puff(ev.x, ev.y, 26, { speed: 420, life: 0.6, colors: ['#ff5a1f', '#ffd23f', '#c4143c', '#ffffff'], size: 9, g: 400, drag: 0.9 });
-    callout('OVERHEAT!', -1, ev.x, ev.y); events.push({ type: 'rimblast', n: ev.n }); return;
+    state.shake = Math.max(state.shake, tune.shake * 1.5); state.hitstop = Math.max(state.hitstop, 0.06);
+    // a big one: a fireball, a ring of smoke, embers thrown out to the blast's edge, a shockwave ring and a white flash
+    puff(ev.x, ev.y, 70, { speed: 900, life: 0.8, colors: ['#ff5a1f', '#ffd23f', '#c4143c', '#ffffff', '#ff9a1f'], size: 11, g: 300, drag: 0.9 });
+    puff(ev.x, ev.y, 30, { speed: 380, life: 1.1, colors: ['#3a2a3a', '#5a4048', '#2a1e2a'], size: 14, g: -80, drag: 0.9 });
+    puff(ev.x, ev.y, 24, { speed: 1300, life: 0.45, colors: ['#ffffff', '#ffe23b'], size: 6, g: 600, drag: 0.94 });
+    state.rings = (state.rings || []).concat([{ x: ev.x, y: ev.y, r: 10, max: ev.radius || tune.rim_blast_radius, t: 0, life: 0.5 }, { x: ev.x, y: ev.y, r: 4, max: (ev.radius || tune.rim_blast_radius) * 0.6, t: 0, life: 0.35 }]);
+    state.blastFlash = 0.22;
+    state.floats.push({ x: Math.max(120, Math.min(W - 120, ev.x)), y: Math.max(170, ev.y - 70), t: 1.2, max: 1.2, size: 32, text: 'OVERHEAT!', color: '#ff7a1a' });
+    events.push({ type: 'rimblast', n: ev.n, ball: !!ev.ball }); return;
   }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (ev.type === 'block') Replay.mark(world, ev.dunk ? 'DENIED' : 'BLOCK', ev.dunk ? 80 : 45, ev.team, state.round);
@@ -431,6 +437,8 @@ function updateJuice(dt) {
   state.shake = Math.max(0, state.shake - dt * tune.shake * 2.2);
   state.toastT = Math.max(0, state.toastT - dt);
   for (const f of state.floats) { f.t -= dt; f.y -= 46 * dt; }
+  if (state.rings) { for (const r of state.rings) { r.t += dt; r.r = r.max * (1 - Math.pow(1 - Math.min(1, r.t / r.life), 3)); } state.rings = state.rings.filter(r => r.t < r.life); }
+  if (state.blastFlash > 0) state.blastFlash = Math.max(0, state.blastFlash - dt);
   state.floats = state.floats.filter(f => f.t > 0);
   if (state.dribble) { state.dribble.t -= dt; if (state.dribble.t <= 0) state.dribble = null; }
   if (world && world.flash) world.flash.t = Math.max(0, world.flash.t - dt);
@@ -555,6 +563,14 @@ function drawGame(opts = {}) {
     g.addColorStop(0, 'rgba(10,6,24,0)'); g.addColorStop(1, `rgba(10,6,24,${tune.vignette})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+  for (const r of state.rings || []) {   // a rim blast's shockwave: a ring racing out to the blast's reach, fading as it goes
+    const k = 1 - r.t / r.life;
+    ctx.globalAlpha = Math.max(0, k);
+    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 4 + 14 * k; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 + 4 * k; ctx.beginPath(); ctx.arc(r.x, r.y, r.r * 0.94, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (state.blastFlash > 0) { ctx.globalAlpha = Math.min(0.75, state.blastFlash * 3.4); ctx.fillStyle = '#fff4dc'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
   for (const f of state.floats) {   // points floating up off the rim, and the small call at a play (LOB!, STOLEN!, ...)
     ctx.globalAlpha = Math.min(1, f.t * 2.5);
     const sz = f.size || 34, pop = f.size ? 1 + Math.max(0, f.t - (f.max || 0.9) + 0.12) * 3 : 1;   // a small call pops in, then rises
