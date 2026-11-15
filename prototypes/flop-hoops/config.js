@@ -15,6 +15,8 @@ window.CONFIG = {
   ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at the lowest level
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
+  replay_clips: { value: 5, min: 0, max: 10, step: 1 },           // best moments shown in the replay after a match (0 = none)
+  replay_slow: { value: 0.35, min: 0.1, max: 1, step: 0.05 },      // replay speed around the big moment (1 = normal)
   score_time: { value: 1.4, min: 0.8, max: 4, step: 0.1 },     // s of celebration after a basket
   stall_time: { value: 3.5, min: 2, max: 10, step: 0.5 },      // s a still ball waits before a re-drop
 

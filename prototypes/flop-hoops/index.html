@@ -24,6 +24,7 @@
 <script src="js/physics.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/pixelfont.js"></script>
+<script src="js/replay.js"></script>
 <script src="js/render.js"></script>
 <script>
 'use strict';
@@ -257,8 +258,10 @@ function onPhysEvent(ev) {
   if (ev.type === 'dunkmiss') { sfx.rim(6); puff(ev.x, ev.y, 7, { speed: 220, life: 0.3, colors: ['#ffd23f', '#ffffff'], size: 6, g: 500 }); events.push({ type: 'dunkmiss', team: ev.team, reason: ev.reason, best: ev.best, grounded: ev.grounded, style: ev.style, t: ev.t }); return; }
   if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
-  if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
+  if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
+  if (ev.type === 'block') Replay.mark(world, ev.dunk ? 'DENIED' : 'BLOCK', ev.dunk ? 80 : 45, ev.team, state.round);
+  if (ev.type === 'steal') Replay.mark(world, 'STEAL', 25, ev.team, state.round);
   if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
   if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
   if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team); events.push({ type: ev.type, team: ev.team }); return; }
@@ -286,7 +289,7 @@ function buildRound(round) {
 let mode = 'cpu', cpu = null, cpuA = null, matchNo = 0;   // cpuA: the Tangerines' computer, only in 'sim'
 function newMatch(m) {
   if (m === 'cpu' || m === '2p' || m === 'sim') mode = m;
-  reset(); state.mode = mode;
+  reset(); Replay.reset(); state.mode = mode;
   seed += matchNo * 7919;   // each match of a session plays out differently; the first of a page load is the same every time
   cpu = mode !== '2p' ? AI.create(1, rng, tune, matchNo) : null;
   cpuA = mode === 'sim' ? AI.create(0, rng, tune, matchNo + 3) : null;   // watch mode: the computer plays itself
@@ -308,6 +311,7 @@ function physStep(held, bheld = [false, false]) {
     const now = pending.map((p, i) => held[i] || (p && !physStepSaw[i]));
     const nowB = pendingB.map((p, i) => bheld[i] || (p && !physStepSawB[i]));
     Physics.step(world, now, tune, STEP, nowB);
+    if (scene === 'play' || scene === 'scored') Replay.record(world, state.round);   // every step goes into the replay buffer
     physStepSaw = now.slice(); physStepSawB = nowB.slice(); pending = [false, false]; pendingB = [false, false]; physAcc -= 1;
   }
   return { prev, cur: { x: b.position.x, y: b.position.y } };
@@ -343,6 +347,12 @@ function score(hoop) {
   if (own && shot.kind === 'dunk' && DUNK_NAMES[shot.style]) state.scoreKind = (shot.oop ? 'ALLEY-OOP ' : '') + DUNK_NAMES[shot.style];
   state.floats.push({ x: hoop.cx, y: hoop.rimY - 30, t: 1.1, text: '+' + pts, color: pts === 2 ? '#ff9a3c' : '#ffffff' });   // the points float up off the rim
   state.points = pts;
+  if (shot && shot.kind !== 'dunk' && own) {   // moments worth a replay
+    if (pts === 2) Replay.mark(world, shot.perfect ? 'PERFECT LONG SHOT' : 'LONG SHOT', shot.perfect ? 85 : 55, team, state.round);
+    else if (shot.perfect) Replay.mark(world, 'PERFECT SHOT', 70, team, state.round);
+    else if (shot.kind === 'fade') Replay.mark(world, 'FADEAWAY', 65, team, state.round);
+    else if (shot.lob) Replay.mark(world, 'LOB OFF THE BOARD', 50, team, state.round);
+  }
   state.toastT = 0; // the score banner names the shot; no callout on top of it
   state.score[team] += pts; state.pops[team] = pts === 2 ? 1.6 : 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
   hoop.sway = 1.5;
@@ -731,7 +741,7 @@ const scenes = {
       state.scoredT += dt; state.t += dt; updateJuice(dt);
       if (state.scoredT < 0.6 ? Math.round(state.scoredT * 60) % 2 === 0 : true) physStep(...teamKeys());
       if (state.scoredT >= tune.score_time) {
-        if (state.winner >= 0) { scene = 'results'; state.resultsT = 0; state.gained = `${Render.TEAM_NAMES[state.winner]} win`; sfx.win(); events.push({ type: 'win', team: state.winner }); }
+        if (state.winner >= 0) { startReel('results'); state.resultsT = 0; state.gained = `${Render.TEAM_NAMES[state.winner]} win`; sfx.win(); events.push({ type: 'win', team: state.winner }); }
         else nextRound();
       }
     },
@@ -765,6 +775,31 @@ const scenes = {
       btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
     },
   },
+  replay: { // the best moments of the match, in slow motion around the big moment
+    update(dt) {
+      state.t += dt;
+      const R = reelState, c = R.clips[R.i];
+      if (!R.cheered && R.f >= c.focus) { R.cheered = true; sfx.cheer(0.7); }
+      R.f += Math.abs(R.f - c.focus) < 40 ? tune.replay_slow : 1;   // slow around the moment itself
+      if (pressed('Escape') || pressed('KeyQ')) { endReel(); return; }
+      if (R.f >= c.len - 1 || pressed('Enter') || pressed('Space') || pressed('KeyE')) { R.i++; R.f = 0; R.cheered = false; if (R.i >= R.clips.length) endReel(); }
+    },
+    draw() {
+      const R = reelState, c = R.clips[Math.min(R.i, R.clips.length - 1)];
+      let view = null;
+      drawCourt(cx => { view = Replay.apply(c, R.f, tune.trail_length); Render.world(cx, view, 1, state.t, W, H); });
+      const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 0.95); vg.addColorStop(0, 'rgba(10,6,24,0)'); vg.addColorStop(1, 'rgba(10,6,24,0.55)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(10,6,24,0.85)'; ctx.fillRect(0, 0, W, 70); ctx.fillRect(0, H - 70, W, 70);   // letterbox
+      if (Math.floor(state.t * 2) % 2) { ctx.fillStyle = '#ff3b3b'; ctx.fillRect(40, 26, 18, 18); }
+      ptext('REPLAY', 120, 35, 3, '#ffffff'); ptext(`${R.i + 1} / ${R.clips.length}`, W - 110, 35, 3, '#c9c3e0');
+      const near = Math.abs(R.f - c.focus) < 50;
+      ptext(c.label, W / 2, H - 38, near ? 5 : 4, Render.TEAM_COLORS[c.team], { outline: true });
+      ptext(`${Render.TEAM_NAMES[c.team].toUpperCase()} · ROUND ${c.round}`, W / 2, 35, 2, '#c9c3e0');
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(0, H - 6, W * R.f / (c.len - 1), 6);
+      ptext('ENTER: NEXT   ESC: SKIP', W - 200, H - 38, 2, '#c9c3e0');
+      buttons = [];
+    },
+  },
   results: { // the winners keep bouncing; the losers stand there
     update(dt) {
       state.resultsT += dt; state.t += dt; updateJuice(dt);
@@ -772,6 +807,7 @@ const scenes = {
       if (state.resultsT > 0.6) {
         if (menuKeys()) return;
         if (pressed('KeyQ') || pressed('Escape')) toMenu();
+        else if (pressed('KeyH') && Replay.count() > 0) startReel('results');
       }
     },
     draw() {
@@ -784,9 +820,20 @@ const scenes = {
       buttons = [];
       btn('REMATCH', W / 2 - 300, 430, 270, 74, newMatch, 'ENTER OR SPACE', 4);
       btn('MAIN MENU', W / 2 + 30, 430, 270, 74, toMenu, 'Q OR ESC', 4);
+      if (Replay.count() > 0 && tune.replay_clips > 0) btn('HIGHLIGHTS', W / 2 - 135, 565, 270, 56, () => startReel('results'), 'H', 3);
     },
   },
 };
+
+// ---- The replay reel: the best moments of the match, shown before the results
+let reelState = null;
+function startReel(then) {
+  const clips = tune.replay_clips > 0 ? Replay.reel(tune.replay_clips) : [];
+  if (!clips.length) { scene = then; return false; }
+  reelState = { clips, i: 0, f: 0, then, cheered: false };
+  Replay.borrow(world); scene = 'replay'; return true;
+}
+function endReel() { Replay.giveBack(); scene = reelState.then; reelState = null; }
 
 // ---- Loop: fixed step, frame time clamped ---------------------------------------------
 function step() {
