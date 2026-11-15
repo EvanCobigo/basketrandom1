@@ -60,8 +60,10 @@ const AI = (() => {
    * look: how many steps ahead it can read the opponent (0: none). learn: how fast it adapts to them.
    * slip: the chance a play goes wrong on its own (a misread, a rushed shot). noise: how much its
    * choices wobble. Nobody is infallible: even a Legend slips, just rarely and mildly.
-   * react: s it pauses between fresh decisions (and after an action), shorter at every step up by a wider margin. error: how far off the rim's
-   *   centre it aims a shot (1 is a Rookie's scatter, 0 dead centre), close to none at the top. Both belong to the level; there is no setting.
+   * react: s it pauses between fresh decisions (and after an action), shorter at every step up by a wider margin. aimSpread: how far off the rim's
+   *   centre it may aim a shot, in rim spans (a Rookie's 2.5 misses most of the time, the top levels' is almost none). releaseLag: up to
+   *   this many steps late it lets go (its hands; the preview cannot see it). shotTrust: how much it believes in its own shot when choosing.
+   *   All belong to the level; there is no setting.
    * rimLead: steps before a predicted dunk that its rim defender is already up (0: waits for the dunk to be ready).
    * sagWithin: a dunk predicted within this many steps makes it drop back to the rim (the Mythic does not sag for one far off).
    * lobGuard: px from the rim within which a defender stops it lobbing (unset: T.ai_lob_guard from level 4). patience: s it holds before it must act.
@@ -72,12 +74,12 @@ const AI = (() => {
    *   who only stands in front of him; the rim is what has to be defended).
    */
   const LEVELS = [
-    { name: 'ROOKIE', skill: 0.15, react: 0.26, error: 1, defense: 1 / 16, look: 0, learn: 0, slip: 0.5, noise: 0.5, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'CHASES THE BALL, MISSES A LOT, REACTS SLOWLY. DRIBBLES A LITTLE.' },
-    { name: 'AMATEUR', skill: 0.35, react: 0.24, error: 0.8, defense: 1 / 8, look: 4, learn: 0, slip: 0.3, noise: 0.35, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'KNOWS BASIC SHOOTING AND BLOCKING, AND DRIBBLES UPCOURT.' },
-    { name: 'PRO', skill: 0.55, react: 0.21, error: 0.5, defense: 1 / 4, look: 10, learn: 0.25, slip: 0.2, noise: 0.22, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'DRIBBLES, PASSES AND DUNKS, SPOTS OPEN CHANCES, HAS A PERSONALITY.' },
-    { name: 'ALL-STAR', skill: 0.75, react: 0.17, error: 0.2, defense: 1 / 2, look: 22, learn: 0.7, slip: 0.12, noise: 0.12, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'PREDICTS FLIGHTS, TIMES STEALS, ADAPTS TO HOW YOU PLAY.' },
-    { name: 'LEGEND', skill: 0.95, react: 0.10, error: 0.03, defense: 1, look: 40, learn: 1, slip: 0.06, noise: 0.06, rimLead: 6, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'CLEAN LINES, FAST BREAKS, READS YOUR PLAYS. STILL MAKES MISTAKES.' },
-    { name: 'MYTHIC', skill: 1, react: 0.02, error: 0.005, defense: 2, look: 60, learn: 1.6, slip: 0.025, noise: 0.03, rimLead: 12, sagWithin: 30, rimGuard: 520, guardFrac: 0.62, patience: 3, tame: true, swipeCap: 1, selfPass: true, fakeBase: 0.12, screenP: 0.9, screenR: 220, does: 'SELF-PASS FAST BREAKS, BLOCKS MORE, LEARNS QUICKLY. RARELY SLIPS.' },
+    { name: 'ROOKIE', skill: 0.15, react: 0.26, aimSpread: 2.5, releaseLag: 6, shotTrust: 0.45, defense: 1 / 16, look: 0, learn: 0, slip: 0.5, noise: 0.5, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'CHASES THE BALL, MISSES A LOT, REACTS SLOWLY. DRIBBLES A LITTLE.' },
+    { name: 'AMATEUR', skill: 0.35, react: 0.24, aimSpread: 1.7, releaseLag: 4, shotTrust: 0.6, defense: 1 / 8, look: 4, learn: 0, slip: 0.3, noise: 0.35, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'KNOWS BASIC SHOOTING AND BLOCKING, AND DRIBBLES UPCOURT.' },
+    { name: 'PRO', skill: 0.55, react: 0.21, aimSpread: 1.2, releaseLag: 3, shotTrust: 0.72, defense: 1 / 4, look: 10, learn: 0.25, slip: 0.2, noise: 0.22, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'DRIBBLES, PASSES AND DUNKS, SPOTS OPEN CHANCES, HAS A PERSONALITY.' },
+    { name: 'ALL-STAR', skill: 0.75, react: 0.17, aimSpread: 0.8, releaseLag: 2, shotTrust: 0.85, defense: 1 / 2, look: 22, learn: 0.7, slip: 0.12, noise: 0.12, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'PREDICTS FLIGHTS, TIMES STEALS, ADAPTS TO HOW YOU PLAY.' },
+    { name: 'LEGEND', skill: 0.95, react: 0.10, aimSpread: 0.0165, releaseLag: 0, shotTrust: 1, defense: 1, look: 40, learn: 1, slip: 0.06, noise: 0.06, rimLead: 6, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'CLEAN LINES, FAST BREAKS, READS YOUR PLAYS. STILL MAKES MISTAKES.' },
+    { name: 'MYTHIC', skill: 1, react: 0.02, aimSpread: 0.00275, releaseLag: 0, shotTrust: 1, defense: 2, look: 60, learn: 1.6, slip: 0.025, noise: 0.03, rimLead: 12, sagWithin: 30, rimGuard: 520, guardFrac: 0.62, patience: 3, tame: true, swipeCap: 1, selfPass: true, fakeBase: 0.12, screenP: 0.9, screenR: 220, does: 'SELF-PASS FAST BREAKS, BLOCKS MORE, LEARNS QUICKLY. RARELY SLIPS.' },
   ];
   /**
    * Personalities (level 3+). Each weight is 1 for an even taste: attack (drives, dunks), range (long
@@ -471,6 +473,8 @@ const AI = (() => {
       else release = true;
     }
     if (!release && past && level >= 4 && !a.fake && canPump(c, X, p)) { a.abort = 1; c.jump = true; say(c, 'LINE GONE LONG: PUMPING OUT', true); return c; }
+    // the level's hands: a lower level lets go up to releaseLag steps after the moment it picked (the cock-back keeps charging, so it goes long)
+    if (release && X.L.releaseLag && hold.charge < 0.995) { if (a.lag === undefined) a.lag = Math.floor(c.rng() * (X.L.releaseLag + 1)); if (a.lag-- > 0) { c.jump = true; return c; } }
     if (release) { c.aim = null; c.jump = false; c.wait = react * 0.5; return c; }
     c.jump = true; return c;
   }
@@ -528,7 +532,7 @@ const AI = (() => {
 
     // ---- the shots
     const forgive = clamp(0.85 + qi.width * 2.5, 0.85, 1.15);   // a wide on-target window is an easier shot
-    const pBase = (q === 2 ? lerp(0.5, 0.93, skill) : q === 1 ? lerp(0.25, 0.55, skill) : 0.05) * (ownHalf ? 0.8 : 1) * (q ? forgive : 1);
+    const pBase = (L.shotTrust || 1) * (q === 2 ? lerp(0.5, 0.93, skill) : q === 1 ? lerp(0.25, 0.55, skill) : 0.05) * (ownHalf ? 0.8 : 1) * (q ? forgive : 1);
     // roles (a tilt, never a rule): the man nearer the rim is the front man and leans to the drive; the one
     // behind his teammate leans to the shot from out there. (Both men move on the one key, so this is a taste.)
     const mateGap0 = mate ? (atk.cx - mate.torso.position.x) * dir : 1e9;
@@ -542,7 +546,7 @@ const AI = (() => {
     const anyTarget = inRange && q >= 1 && !underOwn;            // some line from here can go in
     const urgS = level >= 4 && q === 0 ? 0 : 0.4 * urg;   // (from level 4 the clock pushes it to pass or drive, never into a shot with no line)
     const startAim = (kind, txt, forced = false) => () => {
-      const noiseOff = (c.rng() * 2 - 1) * span * 0.55 * L.error;
+      const noiseOff = (c.rng() * 2 - 1) * span * L.aimSpread;   // the level's own aim: up to aimSpread rim spans off
       const slipped = slip(c, X, 0.5);            // a rushed or misread shot: aimed well off, whoever it is
       c.foeReact.cocks++;
       // how likely a pump is: only from level 4; more against a defender who has jumped at its shots before; a showman likes it
@@ -946,6 +950,7 @@ const AI = (() => {
     }
     d.step++;
     if (d.kind === 'dunk') { c.jump = d.step === 2; return c; }       // a fresh tap: up for a step, then down
+    if (d.kind === 'shoot' && underOwnRim(c, w, T, w.ball.position.x)) d.kind = 'pass';   // (drifted under its own rim since: it passes instead)
     if (d.kind === 'shoot') { c.jump = false; return c; }             // letting go of a cocked shot shoots it
     if (!hold.barmed && !d.armed) { c.jump = d.keepJump; c.bounce = false; return c; }   // the bounce key must be up once first
     d.armed = true;
