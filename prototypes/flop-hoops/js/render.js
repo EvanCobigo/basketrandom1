@@ -204,7 +204,8 @@ const Render = (() => {
   function trail(ctx, tr, r, t) {
     const n = tr.pts.length;
     for (let i = 0; i < n; i++) {
-      const q = tr.pts[i], k = (i + 1) / n, sz = Math.max(6, r * CONFIG.trail_width.value * k);
+      // the newest blocks sit under the ball: keep their corners inside its outline so no white pixels poke out of its sides
+      const q = tr.pts[i], k = (i + 1) / n, sz = Math.min(r * 1.25, Math.max(6, r * CONFIG.trail_width.value * k));
       ctx.fillStyle = tr.mode === 'rainbow' ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : tr.mode === 'green' ? CONTESTED : tr.mode === 'blue' ? FADE_BLUE : '#ffffff';
       ctx.globalAlpha = 0.35 + 0.6 * k;
       ctx.fillRect(q.x - sz / 2, q.y - sz / 2, sz, sz);
