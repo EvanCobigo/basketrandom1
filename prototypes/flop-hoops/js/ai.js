@@ -63,6 +63,15 @@ const AI = (() => {
   const BALANCED = { name: '', attack: 1, range: 1, pass: 1, flash: 1, guard: 1, scav: 1, read: 1, risk: 0.5, wild: 1 };
   const levelOf = T => clamp(Math.round(T.ai_level), 1, LEVELS.length);
   const conf = n => n / (n + 4);   // how much to trust a tendency seen n times
+  /**
+   * The weights the AI's own judgement is tuned by (what self-play adjusts: tools/ai-selfplay.js). 1 is
+   * neutral except where noted. dribble: the standing taste for dribbling (0.48). shot, pass: scale the
+   * value of shooting and passing. risk: scales the penalty for steal and block risk. press: scales how
+   * often defence swings at pressure. stand: how far from the carrier toward the rim it stands (0.28).
+   * fake: scales how often it pumps against a defender who jumps early. Each controller has its own
+   * copy (c.w), so two controllers can play each other with different weights.
+   */
+  const DEFAULT_WEIGHTS = { dribble: 0.48, shot: 1, pass: 1, risk: 1, press: 1, stand: 0.28, fake: 1 };
   const maxDribsOf = level => 2 + Math.round(level * 1.4);
 
   /**
@@ -71,15 +80,18 @@ const AI = (() => {
    * @param {() => number} rng seeded random, so a replay of the same match is the same
    * @param {object} T tuning values: the level decides whether it has a personality
    * @param {number} [matchNo] which match of the session this is: successive matches cycle through the personalities
+   * @param {object} [weights] overrides of DEFAULT_WEIGHTS
    */
-  function create(team, rng, T, matchNo = 0) {
+  function create(team, rng, T, matchNo = 0, weights = null) {
     const style = T && levelOf(T) >= 3 ? STYLES[(Math.floor(rng() * STYLES.length) + matchNo) % STYLES.length] : BALANCED;
     return {
-      team, rng, style, jump: false, bounce: false, wait: 0, holdT: 0, bholdT: 0, dribs: 0, aim: null, rolls: {},
+      team, rng, style, w: Object.assign({}, DEFAULT_WEIGHTS, weights), jump: false, bounce: false, wait: 0, holdT: 0, bholdT: 0, dribs: 0, aim: null, rolls: {},
       tick: 0, intent: '', intentAt: -99, plan: null, press: 0, err: 0, looseOn: false, qCache: null,
       // tactical memory: what the opponent does, how they fare pressed or left open, and how my own plays fare
       profile: { shots: 0, longShots: 0, dunks: 0, passes: 0, dribbles: 0, shotDist: 0, drive: 0, side: 0, pressed: { att: 0, made: 0 }, open: { att: 0, made: 0 } },
       mine: { shot: { att: 0, made: 0 }, long: { att: 0, made: 0 }, fade: { att: 0, made: 0 }, dunk: { att: 0, made: 0 } },
+      // how the opponent answers a cocked shot (how often a defender jumps at it early) and how its own fakes fare
+      foeReact: { cocks: 0, jumps: 0 }, fakes: { fakes: 0, shots: 0, made: 0 }, afterFake: -999,
       seen: {}, pending: null, myPending: null, myDunk: null, dbg: {}, threat: null,
     };
   }
@@ -143,7 +155,7 @@ const AI = (() => {
     const protect = sit.behind <= -3 && sit.late;       // ahead near the end: play it safe
     const chase = sit.behind >= 3 && sit.late;          // behind near the end: gamble
     return {
-      c, w, T, dt, info, level, L, st, sit, skill: L.skill, hold: w.hold, ball: w.ball, prof: c.profile,
+      c, w, T, dt, info, level, L, st, sit, W: c.w, skill: L.skill, hold: w.hold, ball: w.ball, prof: c.profile,
       def: clamp(L.defense * (sit.foeToWin <= 2 ? 1.25 : 1), 0, 1),
       lag: 0.32 * (1 - L.defense),
       react: T.ai_react * (1.6 - L.skill),
@@ -191,14 +203,15 @@ const AI = (() => {
     }
     // my own plays
     if (c.myPending && ball.shot !== c.myPending.shot) {
-      const mp = c.myPending, rec = c.mine[mp.kind];
-      rec.att++; if (score[c.team] > mp.score) rec.made++;
+      const mp = c.myPending, rec = c.mine[mp.kind], gotIt = score[c.team] > mp.score;
+      rec.att++; if (gotIt) rec.made++;
+      if (mp.bait) { c.fakes.shots++; if (gotIt) c.fakes.made++; }
       c.myPending = null;
     }
     if (sh && sh.team === c.team && sh.kind !== 'dunk' && sh !== s.myShot) {
       s.myShot = sh;
       const kind = sh.kind === 'fade' ? 'fade' : (sh.fromX - w.cx) * sh.dir < 0 ? 'long' : 'shot';
-      c.myPending = { shot: sh, kind, score: score[c.team] };
+      c.myPending = { shot: sh, kind, score: score[c.team], bait: c.tick - c.afterFake < 150 };   // a shot soon after a pump fake
     }
     if (w.dunk && w.dunk.p.team === c.team && w.dunk !== s.myDunk) { s.myDunk = w.dunk; c.myDunk = { score: score[c.team], d: w.dunk }; }
     if (c.myDunk && w.dunk !== c.myDunk.d) { c.mine.dunk.att++; if (score[c.team] > c.myDunk.score) c.mine.dunk.made++; c.myDunk = null; }
@@ -237,11 +250,18 @@ const AI = (() => {
     const pv = Physics.previewShot(w, T, p, hold.charge, level >= 5 ? 1 : 0);   // a Legend reads the line from where the ball will be when it leaves
     const fading = p.sinceGround > 0.1 && (p.torso.velocity.x * dir < -T.fade_speed || wrap(p.torso.angle) * dir < -T.fade_lean);
     c.dbg.shot = { err: pv.err, perfect: pv.perfect, charge: hold.charge };
+    if (a.abort) {    // pumping out of a shot: bounce key down for a step, then both up, which dribbles the ball instead of shooting it
+      if (a.abort === 1) { a.abort = 2; c.jump = true; c.bounce = true; return c; }
+      c.aim = null; c.jump = false; c.bounce = false;
+      c.wait = a.fake ? 0.3 + c.rng() * 0.15 : T.ai_react * 0.5;   // a fake waits for the defender to come back down
+      if (a.fake) { c.afterFake = c.tick; c.fakes.fakes++; }
+      return c;
+    }
+    // the bait: a defender near has jumped at a shot not yet let go. Pump (a dribble tap), let him land, then shoot.
+    const jumper = w.players.some(q => q.team !== c.team && q.sinceGround > 0.12 && Math.abs(q.torso.position.x - p.torso.position.x) < 190);
+    if (jumper && !a.sawJump) { a.sawJump = true; c.foeReact.jumps++; }
+    if (jumper && a.fakeRoll && !a.fake && hold.barmed && hold.charge > 0.2 && hold.charge < 0.85) { a.fake = true; a.abort = 1; c.jump = true; say(c, 'PUMP FAKE: THE DEFENDER JUMPED', true); return c; }
     if (level >= 5 && a.slip === undefined) {   // Legend: it lets go only on a line the preview calls perfect, and pumps out of one that never comes
-      if (a.abort) {    // the pump: bounce key down for a step, then both up, which dribbles the ball instead of shooting it
-        if (a.abort === 1) { a.abort = 2; c.jump = true; c.bounce = true; return c; }
-        c.aim = null; c.jump = false; c.bounce = false; c.wait = T.ai_react * 0.5; return c;
-      }
       if (pv.perfect && pv.err >= -2 && (!a.fade || fading || a.t > 1.1)) { c.aim = null; c.jump = false; c.wait = T.ai_react * 0.3; return c; }
       if ((hold.charge >= 0.995 || a.t > 2.4) && hold.barmed) { a.abort = 1; c.jump = true; return c; }
       c.jump = true; return c;
@@ -280,7 +300,9 @@ const AI = (() => {
     // a screen: the teammate stands between the carrier and the nearest defender ahead, so the defender is slowed
     const ahead = foes.filter(f => (f.torso.position.x - px) * dir > 0).sort((a, b) => Math.abs(a.torso.position.x - px) - Math.abs(b.torso.position.x - px))[0];
     const screened = !!(mate && ahead && (mate.torso.position.x - px) * dir > 10 && (ahead.torso.position.x - mate.torso.position.x) * dir > 0 && Math.abs(mate.torso.position.x - px) < 120);
-    const press = pressure * (screened ? 0.4 : 1);
+    // a defender baited by a pump fake is out of the play for a moment
+    const baited = c.tick - c.afterFake < 90;
+    const press = pressure * (screened ? 0.4 : 1) * (baited ? 0.35 : 1);
     const ownHalf = (ball.position.x - w.cx) * dir < 0;
     const far = Physics.previewShot(w, T, p, 1);
     const inRange = far.err !== null && far.err >= -span * 0.9;
@@ -301,7 +323,11 @@ const AI = (() => {
     const startAim = (kind, txt) => () => {
       const noiseOff = (c.rng() * 2 - 1) * span * 0.55 * (1.15 - skill) * (T.ai_error / 0.35);
       const slipped = c.rng() < L.slip * 0.5;     // a rushed or misread shot: aimed well off, whoever it is
-      c.aim = { t: 0, wait: 0, off: noiseOff + (slipped ? (c.rng() < 0.5 ? -1 : 1) * span * 0.4 : 0), fade: kind === 'fade', pressed: false, txt };
+      c.foeReact.cocks++;
+      // how likely a pump is: only from level 4; more against a defender who has jumped at its shots before; a showman likes it
+      const rate = c.foeReact.jumps / Math.max(1, c.foeReact.cocks), seen = conf(c.foeReact.cocks);
+      const fakeP = level >= 4 ? X.W.fake * clamp(0.12 + 0.6 * rate * seen + 0.2 * (st.flash - 1) + 0.1 * (X.risk - 0.5), 0, 0.8) : 0;
+      c.aim = { t: 0, wait: 0, off: noiseOff + (slipped ? (c.rng() < 0.5 ? -1 : 1) * span * 0.4 : 0), fade: kind === 'fade', pressed: false, txt, fakeRoll: c.rng() < fakeP };
       if (level >= 5 && slipped) c.aim.slip = (c.rng() < 0.5 ? -1 : 1) * 16;
       c.dribs = 0;
       return aimStep(c, X);
@@ -310,13 +336,13 @@ const AI = (() => {
       const pS = pBase * (1 - 0.5 * press);
       if (ownHalf) {
         const bonus = 0.2 * (st.range - 1) + (sit.behind >= 2 ? 0.15 : 0) + form(c, 'long') * 0.3 + (foeClose ? -0.1 : 0);
-        add('long', pS * pts + bonus + 0.4 * urg, startAim('long', 'TAKING A LONG SHOT FOR 2'), 'LONG');
+        add('long', X.W.shot * pS * pts + bonus + 0.4 * urg, startAim('long', 'TAKING A LONG SHOT FOR 2'), 'LONG');
       } else {
-        add('shot', pS * pts + form(c, 'shot') * 0.3 + (screened ? 0.1 : 0) + 0.4 * urg, startAim('shot', level >= 5 ? 'LINING UP A PERFECT SHOT' : 'GOING UP FOR A JUMP SHOT'), 'SHOT');
+        add('shot', X.W.shot * pS * pts + form(c, 'shot') * 0.3 + (screened ? 0.1 : 0) + (baited ? 0.35 : 0) + 0.4 * urg, startAim('shot', level >= 5 ? 'LINING UP A PERFECT SHOT' : 'GOING UP FOR A JUMP SHOT'), 'SHOT');
       }
       if (level >= 4 && foeClose && Xd < 700) {   // a fadeaway when a defender is on it: the lean takes the ball away from the hand
         const pF = pBase * (1 - 0.2 * press) * 0.92;
-        add('fade', pF * pts + 0.18 * (st.flash - 1) + 0.1 + form(c, 'fade') * 0.3 + 0.4 * urg, startAim('fade', 'FADING AWAY FROM THE DEFENDER'), 'FADE');
+        add('fade', X.W.shot * pF * pts + 0.18 * (st.flash - 1) + 0.1 + (baited ? 0.35 : 0) + form(c, 'fade') * 0.3 + 0.4 * urg, startAim('fade', 'FADING AWAY FROM THE DEFENDER'), 'FADE');
       }
     }
 
@@ -326,8 +352,8 @@ const AI = (() => {
     if (c.dribs < maxDribs && gap > zone + 40) {
       const progress = clamp((gap - zone) / 500, 0, 1);
       const reach = foeNear ? 0.3 : foeClose ? 0.6 : 0.85;
-      let u = 0.48 + 0.5 * clamp(st.attack * 0.62, 0, 1) * reach * (0.4 + 0.6 * progress);   // 0.48: the standing taste for it
-      u -= (1 - X.risk) * 0.35 * (foeNear ? 1 : foeClose ? 0.4 : 0);                           // a steal risk, dearer to a careful player
+      let u = X.W.dribble + 0.5 * clamp(st.attack * 0.62, 0, 1) * reach * (0.4 + 0.6 * progress);   // the standing taste for it is W.dribble
+      u -= (1 - X.risk) * 0.35 * X.W.risk * (foeNear ? 1 : foeClose ? 0.4 : 0);                           // a steal risk, dearer to a careful player
       u -= 0.015 * c.dribs + 0.5 * urg;
       if (X.risk < st.risk) u += 0.1;                                                           // ahead near the end: run the clock
       add('dribble', u, () => { c.bounce = true; c.bholdT = tap; c.dribs++; say(c, gap > zone + 160 ? 'DRIBBLING UPCOURT FOR A DUNK' : 'DRIVING TO THE RIM'); return c; }, 'DRIB', 24);
@@ -347,7 +373,8 @@ const AI = (() => {
         say(c, txt, true); return c;
       };
       if (Math.abs(mx - px) < 800) {
-        let u = 0.18 + 0.42 * open * Math.max(0, adv) + 0.28 * pressure * open * (mateAhead ? 1 : 0.3) + 0.2 * (st.pass - 1) - (1 - X.risk) * 0.3 * (1 - open) + 0.4 * urg;
+        let u = 0.18 + 0.42 * open * Math.max(0, adv) + 0.28 * pressure * open * (mateAhead ? 1 : 0.3) + 0.2 * (st.pass - 1) - (1 - X.risk) * 0.3 * X.W.risk * (1 - open) + 0.4 * urg;
+        u *= X.W.pass;
         let txt = 'PASSING TO THE OPEN TEAMMATE';
         if (runner && hold.t < 2.5) { u += 0.3 * st.scav; txt = 'FAST BREAK: FEEDING THE RUNNER'; }
         add('pass', u, passTo(txt), 'PASS');
@@ -404,7 +431,7 @@ const AI = (() => {
   /** Where it wants to stand: between the carrier and its rim, nearer the rim the more they dunk, nearer them the more they shoot long. */
   function stanceTarget(c, X, foe, th) {
     const { prof, dfn, L } = X, tn = tendencies(prof), adapt = adaptOf(X);
-    let frac = 0.28;
+    let frac = X.W.stand;
     frac += adapt * (tn.cDunk * tn.dunkShare * 0.4 - tn.cShot * tn.longShare * 0.3);
     if (th && th.dunk !== null) frac = Math.max(frac, 0.6);                      // a dunk is coming: sag back to the rim
     // a carrier running at the rim from a way off: get under it early, the swing is slow (they cannot be caught after)
@@ -422,7 +449,7 @@ const AI = (() => {
     const mine = w.players.filter(q => q.team === c.team);
     const gap = Math.min(...mine.map(q => Math.abs(q.torso.position.x - foe.torso.position.x)));
     const th = threat(c, X, foe); c.threat = th; c.dbg.threat = th;
-    const press = 1 + c.press * 0.8;                       // pressure that is working makes it likelier to swing
+    const press = (1 + c.press * 0.8) * X.W.press;         // pressure that is working makes it likelier to swing
     const jumpUp = (len, txt) => { c.jump = true; c.holdT = len; say(c, txt, true); return true; };
     const lead = Math.min(L.look, 14);                      // the jump takes about this long to get a hand up
     c.dribs = 0;
@@ -579,5 +606,5 @@ const AI = (() => {
     return chase(c, X);
   }
 
-  return { create, update, LEVELS, STYLES, levelOf, tendencies };
+  return { create, update, LEVELS, STYLES, levelOf, tendencies, DEFAULT_WEIGHTS };
 })();
