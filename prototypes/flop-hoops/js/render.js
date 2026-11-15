@@ -198,6 +198,7 @@ const Render = (() => {
 
   const RAINBOW = ['#ff3b3b', '#ff9a1f', '#ffe23b', '#3bd66b', '#3ba7ff', '#9b5bff'];
   const CONTESTED = '#7ee08a'; // the trail of a shot that scored after a real touch of rim or backboard
+  const LOB_GOLD = '#ffd23f'; // the trail of an alley-oop lob
   const FADE_BLUE = '#5aa8ff'; // the trail of a fadeaway that is going in
   const ICE = ['#ffd2a0', '#ff8a3a', '#ff4a2a']; // the spark machines' sparks: warm reds and oranges
   /** The fired ball's trail: blocks that shrink toward the tail; white, rainbow on a perfect line, green when contested. */
@@ -206,7 +207,7 @@ const Render = (() => {
     for (let i = 0; i < n; i++) {
       // the newest blocks sit under the ball: keep their corners inside its outline so no white pixels poke out of its sides
       const q = tr.pts[i], k = (i + 1) / n, sz = Math.min(r * 1.25, Math.max(6, r * CONFIG.trail_width.value * k));
-      ctx.fillStyle = tr.mode === 'rainbow' ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : tr.mode === 'green' ? CONTESTED : tr.mode === 'blue' ? FADE_BLUE : '#ffffff';
+      ctx.fillStyle = tr.mode === 'rainbow' ? RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length] : tr.mode === 'green' ? CONTESTED : tr.mode === 'blue' ? FADE_BLUE : tr.mode === 'lob' ? LOB_GOLD : '#ffffff';
       ctx.globalAlpha = 0.35 + 0.6 * k;
       ctx.fillRect(q.x - sz / 2, q.y - sz / 2, sz, sz);
     }
@@ -229,6 +230,7 @@ const Render = (() => {
     else if (kind === 'shot') { ball(x - 6, by + 6, 5); for (const [dx, dy] of [[-1, 0], [3, -4], [7, -7]]) px(dx, dy, 4, 4, INK); px(7, -11, 6, 3, INK); px(10, -11, 3, 6, INK); }   // a ball and its arc up to the hoop
     else if (kind === 'shield') { ctx.beginPath(); ctx.moveTo(x - 8, by - 9); ctx.lineTo(x + 8, by - 9); ctx.lineTo(x + 8, by + 1); ctx.lineTo(x, by + 10); ctx.lineTo(x - 8, by + 1); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); px(-2, -6, 4, 11, '#ffffff'); px(-5, -3, 10, 4, '#ffffff'); }
     else if (kind === 'screen') { for (const [dx, dy, w] of [[-10, -10, 9], [0, -10, 10], [-10, -3, 5], [-5, -3, 10], [6, -3, 4], [-10, 4, 9], [0, 4, 10]]) { px(dx, dy, w, 6, '#c0602a'); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.strokeRect(x + dx, by + dy, w, 6); } }   // a wall of bricks
+    else if (kind === 'lob') { ball(x - 7, by + 7, 5); for (const [dx, dy] of [[-3, 1], [0, -3], [3, -6]]) px(dx, dy, 4, 4, INK); px(7, -11, 4, 15, INK); px(2, -11, 6, 3, '#ffd23f'); }   // a ball arcing up to the board
     else if (kind === 'pass') { px(-10, -2, 14, 4, INK); ctx.beginPath(); ctx.moveTo(x + 3, by - 8); ctx.lineTo(x + 11, by); ctx.lineTo(x + 3, by + 8); ctx.closePath(); ctx.fillStyle = INK; ctx.fill(); }
     else if (kind === 'dunk') { ball(x, by - 5, 5); px(-9, 4, 18, 4, '#e8591a'); px(-9, 8, 18, 3, '#ffffff'); }
     else if (kind === 'steal') { for (const [dx, dy, h] of [[-7, -9, 9], [-3, -11, 11], [1, -9, 9], [5, -6, 6]]) { px(dx, dy, 3, h, color); ctx.lineWidth = 1.2; ctx.strokeStyle = INK; ctx.strokeRect(x + dx, by + dy, 3, h); } px(-7, 0, 15, 9, color); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.strokeRect(x - 7, by, 15, 9); }

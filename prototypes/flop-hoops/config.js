@@ -10,7 +10,6 @@ window.CONFIG = {
 
   // ---- Match ----
   win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
-  dev_ai_vs_ai: { value: 0, min: 0, max: 1, step: 1 },              // DEV: 1 = VS CPU plays the computer against itself (both teams), to watch it play
   ai_level: { value: 3, min: 1, max: 5, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend (what each does is in js/ai.js)
   ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at the middle level
   ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at the lowest level
@@ -46,6 +45,7 @@ window.CONFIG = {
   shot_vy_min: { value: 11, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
   shot_vy_max: { value: 13, min: 4, max: 22, step: 0.5 },       // px/step upward speed fully cocked (barely more)
   aim_bias: { value: 5, min: -10, max: 15, step: 1 },              // px toward the backboard that the aim help aims past the rim's centre (a swish needs room at the front rim)
+  lob_height: { value: 85, min: 30, max: 200, step: 5 },           // px above the rim where an alley-oop lob touches the board (the teammate takes it from the air there)
   shot_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },     // pull toward the speed that drops the ball on the rim's centre (1 = always)
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
@@ -66,7 +66,9 @@ window.CONFIG = {
   dunk_min_gap: { value: 24, min: 0, max: 80, step: 2 },          // px a dunker must be from the rim, on the court side (under or behind it never dunks)
   dunk_ground_x: { value: 70, min: 20, max: 160, step: 2 },       // px from the rim a standing carrier may start a dunk
   dunk_reach_x: { value: 110, min: 40, max: 220, step: 5 },       // px from the rim a jump may top out and still dunk
-  dunk_fall_limit: { value: 4, min: 0, max: 12, step: 0.5 },      // px/step downward speed above which a falling dunker is too late
+  dunk_fall_limit: { value: 9, min: 0, max: 14, step: 0.5 },      // px/step downward speed above which a falling dunker is too late
+  dunk_air_assist: { value: 0.7, min: 0, max: 1, step: 0.05 },    // how strongly a dunk started in the air steers the body over the rim and holds it up (falling dunkers need it)
+  dunk_air_slack: { value: 60, min: 0, max: 120, step: 5 },       // px lower than the rim a falling carrier's hand may be and still get the prompt (scaled by the assist)
   oop_bonus: { value: 1.3, min: 1, max: 2, step: 0.05 },          // an alley-oop catch gets this much more dunk reach
   dunk_hang: { value: 0.18, min: 0, max: 0.6, step: 0.02 },      // s the dunker hangs on the rim after the slam
   dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk or windmill ends hanging on the rim

@@ -400,8 +400,8 @@ const Physics = (() => {
    * Returns the x where it crosses (or null if it never does), and whether on the way it came
    * within the ball's radius of the front rim or the backboard, beyond a slight graze.
    */
-  function flightTo(w, T, hoop, x, y, vx, vy) {
-    const g = gravityPx(w), keep = 1 - w.ball.frictionAir, r = w.ball.r;
+  function flightTo(w, T, hoop, x, y, vx, vy, plane) {
+    const g = gravityPx(w), keep = 1 - w.ball.frictionAir, r = w.ball.r, py = plane === undefined ? hoop.rimY : plane;   // the height it is judged at: the rim, or a lob's target
     let touched = false;
     for (let i = 0; i < 400; i++) {
       vx *= keep; vy = vy * keep + g;
@@ -411,7 +411,7 @@ const Physics = (() => {
       if (Math.hypot(nx - hoop.frontX, ny - hoop.rimY) < r + CONTACT - T.perfect_graze) touched = true;   // front rim
       if (Math.abs(nx - hoop.boardX) < r + CONTACT - T.perfect_graze && ny > hoop.boardTop - r && ny < hoop.boardBot + r) touched = true;   // backboard
       if (nx > w.R - r || nx < w.L + r || ny < -400) touched = true;   // a side wall or the ceiling: the flight past it is not real
-      if (vy > 0 && y < hoop.rimY && ny >= hoop.rimY) return { crossX: x + (nx - x) * (hoop.rimY - y) / (ny - y), touched };
+      if (vy > 0 && y < py && ny >= py) return { crossX: x + (nx - x) * (py - y) / (ny - y), touched, steps: i + 1 };
       x = nx; y = ny;
       if (y > w.floorY) break;
     }
@@ -423,8 +423,8 @@ const Physics = (() => {
    * `target`: found by bisection on the exact flight, so drag and the shot's real height are
    * accounted for. `dir` is +1 for a hoop on the right. Returns null if no speed can do it.
    */
-  function solveVx(w, T, hoop, x, y, vy, dir, target) {
-    const at = vx => { const f = flightTo(w, T, hoop, x, y, vx * dir, -vy); return f.crossX === null ? null : (f.crossX - target) * dir; };
+  function solveVx(w, T, hoop, x, y, vy, dir, target, plane) {
+    const at = vx => { const f = flightTo(w, T, hoop, x, y, vx * dir, -vy, plane); return f.crossX === null ? null : (f.crossX - target) * dir; };
     let lo = 0, hi = 40, flo = at(lo), fhi = at(hi);
     if (fhi === null || fhi < 0) return null;                  // even the hardest throw falls short
     if (flo !== null && flo >= 0) return 0;                     // even a drop already carries past it
@@ -440,10 +440,14 @@ const Physics = (() => {
    * for that cock-back, with the aim help pulling the forward speed toward the exact solution.
    * Lean, drift and momentum change nothing: one arc for a given cock-back and spot.
    */
-  function shotVelocity(w, T, p, charge, from) {
+  function shotVelocity(w, T, p, charge, from, lob) {
     const hoop = attackedHoop(w, p);
     let vx = lerp(T.shot_vx_min, T.shot_vx_max, charge);
     const vy = lerp(T.shot_vy_min, T.shot_vy_max, charge);
+    if (lob) {   // an alley-oop lob: thrown to touch the board above the rim, where the teammate waits to take it out of the air
+      const sol = solveVx(w, T, hoop, from.x, from.y, vy, p.dir, lobTarget(w, T, p, hoop).x, hoop.rimY - T.lob_height);
+      if (sol !== null) return { vx: sol, vy };
+    }
     if (T.shot_assist > 0 && (hoop.cx - from.x) * p.dir > 30) {
       // a ball dropped on the exact centre clips the front rim on a shallow arc, so the help aims a little toward the board
       const sol = solveVx(w, T, hoop, from.x, from.y, vy, p.dir, hoop.cx + p.dir * T.aim_bias);
@@ -453,25 +457,105 @@ const Physics = (() => {
   }
 
   /**
+   * The lob a cock-back would throw, from `lift` px higher than the ball is now (the jump): its forward speed and
+   * how many steps it flies before it reaches the board's height; null when no speed gets it there.
+   */
+  function lobPlan(w, T, p, charge, lift = 0) {
+    const hoop = attackedHoop(w, p), b = w.ball, vy = lerp(T.shot_vy_min, T.shot_vy_max, charge), y = b.position.y - lift;
+    const tx = lobTarget(w, T, p, hoop).x, plane = hoop.rimY - T.lob_height;
+    const vx = solveVx(w, T, hoop, b.position.x, y, vy, p.dir, tx, plane);
+    if (vx === null) return null;
+    const f = flightTo(w, T, hoop, b.position.x, y, vx * p.dir, -vy, plane);
+    return { vx, steps: f.steps || 0 };
+  }
+  const lobPossible = (w, T, p, charge, lift = 0) => lobPlan(w, T, p, charge, lift) !== null;
+
+  /** The angle the planted swing would have `secs` seconds from now (the swing is a steady beat, so it can be foreseen). */
+  function swingAt(w, T, p, secs) {
+    return Math.sin((w.time + secs) * T.rock_rate * Math.PI * 2 + p.idx * 1.9 + p.team * 0.7) * T.rock_angle;
+  }
+
+  /** Where an alley-oop lob is aimed: the ball just touching the board's face, T.lob_height above the rim. */
+  function lobTarget(w, T, p, hoop) { return { x: hoop.backX - p.dir * (w.ball.r + 2), y: hoop.rimY - T.lob_height }; }
+
+  /**
+   * The teammate who takes an alley-oop lob: standing on the court side of the rim, and able to jump (a planned
+   * jump, like a dunk's) so that his hand is at the ball where it touches the board. Returns the jump, or null.
+   * `from` is the shooter (for his direction and hoop).
+   */
+  function lobReceiver(w, T, from) {
+    const hoop = attackedHoop(w, from), dir = from.dir, q = w.players.find(o => o.team === from.team && o !== from);
+    if (!q || (w.hold && w.hold.p === q) || w.dunk) return null;
+    const gapQ = (hoop.cx - q.torso.position.x) * dir;
+    if (gapQ < T.dunk_min_gap || gapQ > 260 || q.sinceGround > 0.15) return null;
+    const tgt = lobTarget(w, T, from, hoop), r = w.ball.r, t = q.torso, g = gravityPx(w), keep = 1 - t.frictionAir;
+    const L = q.dims.armL - 5 + r * T.palm_offset, sOff = -q.dims.torsoH / 2 + 10, dx = T.dunk_arm_dx * L;
+    const dy = Math.sqrt(Math.max(1, (T.dunk_arm_ext * L) ** 2 - dx * dx));
+    const apexX = tgt.x - dir * dx, apexY = tgt.y + dy - sOff, rise = t.position.y - apexY;
+    if (rise < 6 || rise > T.jump_height * w.S.jump) return null;
+    let lo = 1, hi = 22; for (let k = 0; k < 24; k++) { const mid = (lo + hi) / 2; if (riseOf(mid, g, keep).rise < rise) lo = mid; else hi = mid; }
+    const v = (lo + hi) / 2, n = riseOf(v, g, keep).steps, S = (1 - Math.pow(keep, n)) / (1 - keep), vx = (apexX - t.position.x) / S;
+    if (Math.abs(vx) > T.dunk_vx_max) return null;
+    return { q, apexX, apexY, v, vx, n };
+  }
+
+  /** The lob's receiver, one step: take off in time for the ball to come to his hand, steer the jump, reach for the ball. */
+  function stepLob(w, T) {
+    const L = w.lobPlay; if (!L) return;
+    const q = L.q, t = q.torso, ball = w.ball, g = gravityPx(w), keep = 1 - t.frictionAir;
+    const done = () => { if (!w.dunk) { q.slam = false; q.slamRel = null; } w.lobPlay = null; };
+    L.steps++;
+    if (w.hold || w.dunk || L.steps > 300) { done(); return; }          // the ball is held by someone (or already dunked): the play is over
+    if (!L.launched) {
+      if (L.steps >= L.startIn && q.sinceGround <= 0.15) {              // time to go: the jump tops out as the ball arrives
+        for (const part of q.parts) Body.setVelocity(part, { x: L.vx, y: -L.v });
+        q.sinceGround = 99; q.sinceFoot = 99; q.cd = T.jump_cooldown; q.sinceJump = 0; L.launched = true; L.age = 0;
+        w.onEvent({ type: 'jump', team: q.team, x: t.position.x, y: w.floorY });
+      }
+      return;
+    }
+    L.age++;
+    q.slam = true; q.slamRel = armToward(q, ball.position.x, ball.position.y);   // the hand goes to the ball
+    if (t.velocity.y < 0) {                                              // keep the rest of the rise on its line
+      const rise = t.position.y - L.apexY;
+      if (rise > 2) {
+        let lo = 1, hi = 22; for (let k = 0; k < 18; k++) { const mid = (lo + hi) / 2; if (riseOf(mid, g, keep).rise < rise) lo = mid; else hi = mid; }
+        const v = (lo + hi) / 2, n = riseOf(v, g, keep).steps, S = (1 - Math.pow(keep, n)) / (1 - keep), vx = clamp((L.apexX - t.position.x) / S, -T.dunk_vx_max, T.dunk_vx_max);
+        for (const part of [t, q.head, ...q.legs]) Body.setVelocity(part, { x: lerp(part.velocity.x, vx, 0.9), y: lerp(part.velocity.y, -v, 0.6) });
+      }
+    }
+    if (L.age > L.n + 30) done();
+  }
+
+  /**
    * Fire the held ball. A fadeaway (drifting or leaning away from the hoop in the air) is only
    * a name for a shot taken that way: the arc is the same.
    */
   function shoot(w, T) {
     const h = w.hold, p = h.p, ball = w.ball, hoop = attackedHoop(w, p);
     const airborne = p.sinceGround > 0.1, a = wrap(p.torso.angle);
-    const fade = airborne && (p.torso.velocity.x * p.dir < -T.fade_speed || a * p.dir < -T.fade_lean);
-    const { vx, vy } = shotVelocity(w, T, p, h.charge, ball.position);
+    const lob = !!h.lob && !w.dunk;
+    const fade = !lob && airborne && (p.torso.velocity.x * p.dir < -T.fade_speed || a * p.dir < -T.fade_lean);
+    const { vx, vy } = shotVelocity(w, T, p, h.charge, ball.position, lob);
     release(w, T, 0.2);
     p.followT = T.follow_time;   // classic form: shooting arm trails forward, wrist bent, palm down
     Body.setVelocity(ball, { x: vx * p.dir, y: -vy });
     Body.setAngularVelocity(ball, -p.dir * 0.2);
-    const line = predictLine(w, T, hoop);
+    const line = lob ? { perfect: false, onTarget: false, crossX: null, touched: true } : predictLine(w, T, hoop);
+    if (lob) {
+      w.pass = { team: p.team, from: p, until: w.time + 2.2 + T.pass_catch_window, lob: true };   // the teammate takes it like a pass: a dunk off it is an alley-oop
+      const rcv = lobReceiver(w, T, p);
+      if (rcv) {   // the teammate's jump is timed to the ball: it reaches the board's height after `steps`, and his jump takes rcv.n to top out
+        const f = flightTo(w, T, hoop, ball.position.x, ball.position.y, vx * p.dir, -vy, hoop.rimY - T.lob_height);
+        w.lobPlay = { ...rcv, startIn: Math.max(0, (f.steps || 0) - rcv.n), steps: 0, launched: false, age: 0 };
+      }
+    }
     w.prevBallX = ball.position.x; w.prevBallY = ball.position.y;
     ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect: line.perfect, onTarget: line.onTarget, clean: true,
-      crossX: line.crossX, freeFlight: !line.touched, fromX: ball.position.x };   // where it was released: past the centre line, it is worth two
+      crossX: line.crossX, freeFlight: !line.touched, lob, fromX: ball.position.x };   // where it was released: past the centre line, it is worth two
     // white by default; rainbow on a clean perfect line; blue for a fadeaway heading in; settled again at the basket
-    w.trail = { pts: [], mode: line.perfect ? 'rainbow' : fade && line.onTarget ? 'blue' : 'white', t: 0, shot: ball.shot };
-    w.onEvent({ type: fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge, perfect: line.perfect });
+    w.trail = { pts: [], mode: lob ? 'lob' : line.perfect ? 'rainbow' : fade && line.onTarget ? 'blue' : 'white', t: 0, shot: ball.shot };
+    w.onEvent({ type: lob ? 'lob' : fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge, perfect: line.perfect, x: ball.position.x, y: ball.position.y });
   }
 
   /**
@@ -618,6 +702,13 @@ const Physics = (() => {
     return { vx, vy: -v, n, apexX, apexY, slot, L, sOff };
   }
 
+  /** Where the dunker's torso should be while the arm puts the ball just over the rim: the same spot planDunk jumps to. */
+  function dunkAnchor(w, T, p, hoop) {
+    const dir = p.dir, r = w.ball.r, L = p.dims.armL - 5 + r * T.palm_offset, sOff = -p.dims.torsoH / 2 + 10;
+    const slotY = hoop.rimY - r - T.dunk_slot, dx = T.dunk_arm_dx * L, dy = Math.sqrt(Math.max(1, (T.dunk_arm_ext * L) ** 2 - dx * dx));
+    return { x: hoop.cx - dir * dx, y: slotY + dy - sOff };
+  }
+
   /**
    * Whether the carrier can start a dunk now. Dunks are close-range and one-sided:
    *  - the body must be on the court side of the rim, at least T.dunk_min_gap from it (under or
@@ -626,7 +717,8 @@ const Physics = (() => {
    *    where the arm can put the ball over the rim;
    *  - in the air: only while moving toward the rim and not leaning back (a player falling backwards
    *    gets no dunk), the real flight topping out within T.dunk_reach_x of the rim with the hand
-   *    above it, and not already dropping faster than T.dunk_fall_limit;
+   *    above it (a falling one may be a little below: the dunk holds him up, see T.dunk_air_assist),
+   *    and not already dropping faster than T.dunk_fall_limit;
    *  - a catch straight off a teammate's pass (alley-oop) gets T.oop_bonus times the reach.
    */
   function dunkReady(w, T, p, hoop, fromPass) {
@@ -640,7 +732,8 @@ const Physics = (() => {
     const top = apexOf(t.position.x, t.position.y, t.velocity.x, t.velocity.y, gravityPx(w), t.frictionAir);
     const apexGap = (hoop.cx - top.x) * dir;
     const handTop = top.y - p.dims.torsoH / 2 + 10 - p.dims.armL;
-    return apexGap >= T.dunk_min_gap && apexGap <= T.dunk_reach_x * bonus && handTop <= hoop.rimY - w.ball.r * 0.4;
+    const slack = t.velocity.y > 0 ? T.dunk_air_slack * T.dunk_air_assist : 0;   // falling: the assist will lift him, so the hand may start lower
+    return apexGap >= T.dunk_min_gap && apexGap <= T.dunk_reach_x * bonus && handTop <= hoop.rimY - w.ball.r * 0.4 + slack;
   }
 
   const DUNK_STYLES = ['tomahawk', 'windmill', 'elbow'];
@@ -671,7 +764,7 @@ const Physics = (() => {
     w.dunk = { p, hoop, style, hang, oop, plan, grounded, t: 0, slammed: false, y0: p.torso.position.y, done: false, hangT: 0, con: null, turn: null, steps: 0 };
     p.slam = true; p.windSpin = null;
     if (plan) { for (const part of p.parts) Body.setVelocity(part, { x: plan.vx, y: plan.vy }); p.sinceGround = 99; p.sinceFoot = 99; p.cd = T.jump_cooldown; }
-    w.onEvent({ type: 'dunkstart', team: p.team, style, oop });
+    w.onEvent({ type: 'dunkstart', team: p.team, style, oop, x: w.ball.position.x, y: w.ball.position.y });
     return true;
   }
 
@@ -715,6 +808,14 @@ const Physics = (() => {
           for (const part of [t, p.head, ...p.legs]) Body.setVelocity(part, { x: lerp(part.velocity.x, vx, 0.9), y: lerp(part.velocity.y, -v, 0.6) });   // (the arm's swing pushes the body; this pushes back)
         }
       }
+      // from the air (no planned jump): steer him over the rim and hold him up, so a dunker already falling still gets there
+      if (!d.plan && !d.grounded && T.dunk_air_assist > 0) {
+        const A = d.air || (d.air = dunkAnchor(w, T, p, h)), k = T.dunk_air_assist;
+        const vx = clamp((A.x - t.position.x) / 9, -T.dunk_vx_max, T.dunk_vx_max);
+        const below = t.position.y - A.y;                                  // positive: lower than where the arm needs him
+        const vyT = below > 3 ? -Math.min(9, below * 0.3) : Math.min(t.velocity.y, 1);
+        for (const part of [t, p.head, ...p.legs]) Body.setVelocity(part, { x: lerp(part.velocity.x, vx, 0.6 * k), y: lerp(part.velocity.y, vyT, 0.7 * k) });
+      }
       // the arm: where the ball has to go, by style
       const aim = armToward(p, slot.x, slot.y);
       const u = d.plan ? clamp((d.y0 - t.position.y) / Math.max(1, d.y0 - d.plan.apexY), 0, 1) : clamp(d.t / 0.3, 0, 1);
@@ -748,7 +849,7 @@ const Physics = (() => {
           d.con = Constraint.create({ bodyA: p.arm, pointA: { x: -Math.sin(aa) * tip, y: Math.cos(aa) * tip }, pointB: hp, length: 0, stiffness: 0.9, damping: 0.08 });
           Composite.add(w.engine.world, d.con);
         }
-        w.onEvent({ type: 'dunk', team: p.team, x: h.cx, y: h.rimY, style: d.style, hang: d.hang });
+        w.onEvent({ type: 'dunk', team: p.team, x: h.cx, y: h.rimY, style: d.style, hang: d.hang, oop: d.oop });
         return;
       }
       // a miss: the arm never got the ball over the rim: the ball pops out of the hand (it has hit the rim or board),
@@ -885,6 +986,7 @@ const Physics = (() => {
     for (const b of w.dynamic) { b._px = b.position.x; b._py = b.position.y; b._pa = b.angle; }
     // while a team has the ball, its key belongs to the carrier: the teammate stays planted
     const busy = q => (w.hold && w.hold.p.team === q.team && w.hold.p !== q) || (w.dunk && w.dunk.p.team === q.team && w.dunk.p !== q);
+    stepLob(w, T);
     for (const p of w.players) drive(w, p, busy(p) ? false : held[p.team], T, dt);
     spread(w, T);
     w.kicks.length = 0;
@@ -924,5 +1026,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady, previewShot, predictLine, ballPath, landingX, shotVelocity };
+  return { FLOOR_Y, CX, DELTA, createWorld, step, dropBall, handPos, squircle, dunkReady, previewShot, predictLine, ballPath, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
 })();

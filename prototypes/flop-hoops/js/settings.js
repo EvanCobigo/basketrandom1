@@ -14,7 +14,6 @@ const Settings = (() => {
   // added to config.js always shows up somewhere.
   const SECTIONS = [
     ['MATCH', ['volume', 'win_score', 'game_speed', 'card_time', 'score_time', 'stall_time']],
-    ['DEV (WATCH THE CPU)', k => k.startsWith('dev_')],
     ['CPU OPPONENT', k => k.startsWith('ai_')],
     ['JUMPING AND MOVING', k => k.startsWith('jump_') || ['hop_reach', 'coyote_time', 'spread_distance', 'spread_push', 'hustle_gap', 'hustle_jump'].includes(k)],
     ['CATCHING', ['regrab_delay', 'palm_offset', 'belly_margin', 'hand_box', 'steal_guard', 'strip_speed', 'block_window', 'block_pop']],

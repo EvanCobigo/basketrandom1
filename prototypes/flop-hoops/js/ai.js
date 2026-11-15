@@ -68,10 +68,11 @@ const AI = (() => {
    * neutral except where noted. dribble: the standing taste for dribbling (0.48). shot, pass: scale the
    * value of shooting and passing. risk: scales the penalty for steal and block risk. press: scales how
    * often defence swings at pressure. stand: how far from the carrier toward the rim it stands (0.28).
-   * fake: scales how often it pumps against a defender who jumps early. Each controller has its own
+   * fake: scales how often it pumps against a defender who jumps early. lob: scales how much it likes
+   * the alley-oop lob when a teammate waits at the rim. Each controller has its own
    * copy (c.w), so two controllers can play each other with different weights.
    */
-  const DEFAULT_WEIGHTS = { dribble: 0.48, shot: 1, pass: 1, risk: 1, press: 1, stand: 0.28, fake: 1 };
+  const DEFAULT_WEIGHTS = { dribble: 0.48, shot: 1, pass: 1, risk: 1, press: 1, stand: 0.28, fake: 1, lob: 1 };
   const maxDribsOf = level => 2 + Math.round(level * 1.4);
 
   /**
@@ -124,6 +125,16 @@ const AI = (() => {
     }
     c.qCache = { tick: c.tick, q };
     return q;
+  }
+
+  /**
+   * x kept on the court side of both rims. Behind a basket nothing can be done (no dunk, no shot, nobody to pass to),
+   * so the AI never walks there on purpose: its targets stop `margin` px short of either rim.
+   */
+  function courtSide(w, x, margin = 40) {
+    let lo = -1e9, hi = 1e9;
+    for (const h of w.hoops) { if (h.side < 0) lo = h.cx + margin; else hi = h.cx - margin; }
+    return clamp(x, lo, hi);
   }
 
   /** Say what it is doing, but not flickering: a line stays on for about half a second. */
@@ -248,6 +259,12 @@ const AI = (() => {
       if (a.fade && !a.pressed && wrap(p.torso.angle) * dir > -0.25 && a.wait < 1.6) { a.wait += dt; c.jump = false; return c; }
       a.pressed = true; c.jump = true; return c;
     }
+    if (a.lob) {      // the alley-oop lob: the physics aims it at the board above the rim (hold.lob); it only has to be let go once up
+      hold.lob = true; c.dbg.shot = { lob: true, charge: hold.charge };
+      // let go once the board is within reach of this arc (the higher the hand, the easier), or at full charge
+      if ((hold.charge >= 0.3 && Physics.lobPossible(w, T, p, hold.charge)) || hold.charge >= 0.995 || a.t > 1.6) { c.aim = null; c.jump = false; c.wait = T.ai_react * 0.4; return c; }
+      c.jump = true; return c;
+    }
     const pv = Physics.previewShot(w, T, p, hold.charge, level >= 5 ? 1 : 0);   // a Legend reads the line from where the ball will be when it leaves
     const fading = p.sinceGround > 0.1 && (p.torso.velocity.x * dir < -T.fade_speed || wrap(p.torso.angle) * dir < -T.fade_lean);
     c.dbg.shot = { err: pv.err, perfect: pv.perfect, charge: hold.charge };
@@ -347,10 +364,12 @@ const AI = (() => {
       }
     }
 
+    // ---- under or behind the basket: nothing works from there (no dunk, no shot), so it gets the ball out to the teammate
+    const behind = gap < T.dunk_min_gap + 10;
     // ---- the dribble: it likes it. It brings the ball upcourt toward a dunk and keeps defenders guessing
     const maxDribs = maxDribsOf(level);
     const zone = T.dunk_ground_x;
-    if (c.dribs < maxDribs && gap > zone + 40) {
+    if (c.dribs < maxDribs && gap > zone + 40 && !behind) {
       const progress = clamp((gap - zone) / 500, 0, 1);
       const reach = foeNear ? 0.3 : foeClose ? 0.6 : 0.85;
       let u = X.W.dribble + 0.5 * clamp(st.attack * 0.62, 0, 1) * reach * (0.4 + 0.6 * progress);   // the standing taste for it is W.dribble
@@ -374,19 +393,26 @@ const AI = (() => {
         say(c, txt, true); return c;
       };
       if (Math.abs(mx - px) < 800) {
-        let u = 0.18 + 0.42 * open * Math.max(0, adv) + 0.28 * pressure * open * (mateAhead ? 1 : 0.3) + 0.2 * (st.pass - 1) - (1 - X.risk) * 0.3 * X.W.risk * (1 - open) + 0.4 * urg;
+        let u = (behind ? 0.7 : 0.18) + 0.42 * open * Math.max(0, adv) + 0.28 * pressure * open * (mateAhead ? 1 : 0.3) + 0.2 * (st.pass - 1) - (1 - X.risk) * 0.3 * X.W.risk * (1 - open) + 0.4 * urg;
         u *= X.W.pass;
         let txt = 'PASSING TO THE OPEN TEAMMATE';
         if (runner && hold.t < 2.5) { u += 0.3 * st.scav; txt = 'FAST BREAK: FEEDING THE RUNNER'; }
         add('pass', u, passTo(txt), 'PASS');
-        if (level >= 4 && mateAtRim && mateAhead) add('oop', 0.55 + 0.35 * open + 0.25 * (st.pass - 1) + 0.3 * (L.skill - 0.5), passTo('SETTING UP AN ALLEY-OOP'), 'OOP');
+        // the alley-oop: a teammate waits near the rim, so the ball is lobbed up onto the backboard above it for him to take out of the air
+        // the alley-oop: the carrier goes up and lobs it onto the backboard above the rim; the teammate's jump is timed to it
+        // (the physics plans his take-off, as it does a dunk's), and he dunks it out of the air
+        if (level >= 4 && mateAhead && gap > 160 && Physics.lobPlan(w, T, p, 1, 110) && Physics.lobReceiver(w, T, p)) {
+          add('lob', X.W.lob * (0.78 + 0.35 * open + 0.25 * (st.pass - 1) + 0.25 * (st.flash - 1) + 0.3 * (L.skill - 0.5) + (runner ? 0.15 : 0)),
+            () => { c.aim = { t: 0, wait: 0, off: 0, fade: false, pressed: false, lob: true, txt: 'ALLEY-OOP: LOBBING IT OFF THE BOARD' }; c.dribs = 0; return aimStep(c, X); }, 'LOB');
+        }
       }
     }
 
     // ---- waiting: near or under the rim and not yet dunk-ready no shot works, so the swing carries it into the zone
-    const inZone = gap < zone + 60 && hold.t < 2.4 && !(far.err !== null && gap > zone + 20 && level < 3);
+    const inZone = !behind && gap < zone + 60 && hold.t < 2.4 && !(far.err !== null && gap > zone + 20 && level < 3);
     add('wait', inZone ? 0.78 - 0.5 * urg : 0.14 - 0.3 * urg, () => { c.wait = react * 0.5; say(c, inZone ? 'WAITING FOR THE DUNK' : 'LOOKING FOR AN OPENING'); return c; }, 'WAIT', 12);
 
+    if (behind) say(c, 'BEHIND THE BASKET: GETTING OUT OF IT');
     ops.sort((a, b) => b.u - a.u);
     c.dbg.ops = ops.map(o => [o.txt, +o.u.toFixed(2)]);
     const best = ops[0];
@@ -530,9 +556,14 @@ const AI = (() => {
       }
       c.dbg.target = target;
     }
+    target = courtSide(w, target);                      // (never to the far side of a basket)
     say(c, txt);
-    const p = nearest(w, c.team, target);
+    let p = nearest(w, c.team, target);
     if (!p) return c;
+    // a player stranded behind a basket is brought back before anything else that is not urgent (the swing only moves the one it follows)
+    const behindRim = q => w.hoops.some(h => (q.torso.position.x - h.cx) * (-h.side) < -10);
+    const stray = w.players.find(q => q.team === c.team && behindRim(q));
+    if (stray && stray !== p && (hold ? Math.abs(target - p.torso.position.x) < dead + 30 : Math.abs(ball.position.x - stray.torso.position.x) > 320)) { p = stray; target = courtSide(w, p.torso.position.x < w.cx ? w.L : w.R, 90); say(c, 'GETTING BACK FROM BEHIND THE BASKET'); }
     const s = Math.sign(target - p.torso.position.x) || 1, a = wrap(p.torso.angle);
     // a high ball: from level 4 the leap is timed to where the path puts it within reach
     if (!hold) {
@@ -579,6 +610,11 @@ const AI = (() => {
     // ---- our own pass is in the air: send the receiver up to meet it
     if (!hold && w.pass && w.pass.team === c.team && w.time < w.pass.until) {
       const mate = w.players.find(q => q.team === c.team && q !== w.pass.from);
+      if (w.pass.lob) {   // an alley-oop lob in the air: the physics takes the teammate up for it; this just says so, and shows the ball path
+        c.dbg.path = Physics.ballPath(w, T, 70).filter((_, i) => i % 3 === 0);
+        say(c, w.lobPlay ? 'ALLEY-OOP: GOING UP TO DUNK IT' : 'ALLEY-OOP: WAITING UNDER THE LOB', true);
+        return c;
+      }
       if (mate && Math.abs(ball.position.x - mate.torso.position.x) < 190 && Math.abs(ball.position.y - mate.torso.position.y) < 160 && ball.velocity.x * mate.dir >= -1) {
         c.jump = true; c.holdT = 0.3; say(c, 'MEETING THE PASS'); return c;
       }
@@ -617,6 +653,8 @@ const AI = (() => {
     if (/SCREEN/.test(text)) return 'screen';
     if (/STEAL/.test(text)) return 'steal';
     if (/SWATTING|CONTESTING|PROTECTING THE RIM|GUARDING THE RIM|DEFENDING DEEP|STANDING BETWEEN|PRESSURING|READING THE DUNK|WATCHING THE PASS/.test(text)) return 'shield';
+    if (/GOING UP TO DUNK/.test(text)) return 'dunk';
+    if (/LOB/.test(text)) return 'lob';
     if (/PASS|ALLEY|FEEDING/.test(text)) return 'pass';
     if (/DUNK|RIM PROTECTOR/.test(text)) return 'dunk';
     if (/SHOT|FADING|PUMP FAKE/.test(text)) return 'shot';
@@ -632,6 +670,7 @@ const AI = (() => {
     let who;
     if (icon === 'screen') { const base = lb && lb.team === c.team ? lb : mine[0]; who = mine.find(q => q !== base) || base; }   // the teammate, not the dribbler
     else if (hold && hold.p.team === c.team && icon !== 'shield' && icon !== 'steal' && icon !== 'board') who = hold.p;
+    else if (!hold && icon === 'lob' && w.pass && w.pass.team === c.team) who = w.pass.lob && /UNDER/.test(c.intent) ? nearest(w, c.team, w.ball.position.x) : w.pass.from;
     else if (!hold && lb && lb.team === c.team && (icon === 'ball' || icon === 'shot')) who = lb;
     else who = nearest(w, c.team, hold ? hold.p.torso.position.x : w.ball.position.x);
     return who ? { icon, who } : null;

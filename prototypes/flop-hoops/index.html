@@ -240,6 +240,11 @@ function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); puff(ev.x, ev.y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 24 }); return; }
   if (ev.type === 'dribble') { sfx.bounce(0.2); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
   if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; puff(ev.x, ev.y, 6, { speed: 150, life: 0.3, colors: ['#ffffff', '#ffd23f', Render.TEAM_COLORS[ev.team]], size: 6, g: 200, drag: 0.85 }); events.push({ type: 'grab', team: ev.team }); return; }
+  if (ev.type === 'lob') {   // an alley-oop lob off the board: gold sparks and a call, so the set-up reads
+    sfx.shoot(0.7); callout('LOB!', ev.team); world.hype = Math.max(world.hype || 0, 0.4);
+    puff(ev.x, ev.y, 12, { speed: 260, life: 0.5, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 8, g: 200, drag: 0.9 });
+    events.push({ type: 'lob', team: ev.team }); return;
+  }
   if (ev.type === 'shoot' || ev.type === 'fadeaway') {
     sfx.shoot(ev.charge); events.push({ type: ev.type, team: ev.team });
     puff(ev.x, ev.y, 4, { speed: 130, life: 0.3, colors: ['#ffffff', Render.TEAM_COLORS[ev.team]], size: 6, g: 100, drag: 0.88 });
@@ -251,8 +256,8 @@ function onPhysEvent(ev) {
   if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
   if (ev.type === 'dunkmiss') { sfx.rim(6); puff(ev.x, ev.y, 7, { speed: 220, life: 0.3, colors: ['#ffd23f', '#ffffff'], size: 6, g: 500 }); events.push({ type: 'dunkmiss', team: ev.team, reason: ev.reason, best: ev.best, grounded: ev.grounded, style: ev.style, t: ev.t }); return; }
   if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
-  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team); world.hype = Math.max(world.hype || 0, 0.7); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
-  if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * 0.6; state.hitstop = tune.dunk_hitstop; events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
+  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
+  if (ev.type === 'dunk') { state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'steal') world.flash.t = 0.25;
   if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
   if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
@@ -277,14 +282,14 @@ function buildRound(round) {
   buildPalette(S);
   state.stall = 0;
 }
-// mode: 'cpu' (Player 1 against the computer, which plays the Tealbacks) or '2p' (two people)
-let mode = 'cpu', cpu = null, cpuA = null, matchNo = 0;   // cpuA: the Tangerines' computer, only when the DEV setting has it play itself
+// mode: 'cpu' (Player 1 against the computer, which plays the Tealbacks), '2p' (two people) or 'sim' (the computer plays both teams)
+let mode = 'cpu', cpu = null, cpuA = null, matchNo = 0;   // cpuA: the Tangerines' computer, only in 'sim'
 function newMatch(m) {
-  if (m === 'cpu' || m === '2p') mode = m;
+  if (m === 'cpu' || m === '2p' || m === 'sim') mode = m;
   reset(); state.mode = mode;
   seed += matchNo * 7919;   // each match of a session plays out differently; the first of a page load is the same every time
-  cpu = mode === 'cpu' ? AI.create(1, rng, tune, matchNo) : null;
-  cpuA = mode === 'cpu' && tune.dev_ai_vs_ai > 0 ? AI.create(0, rng, tune, matchNo + 3) : null;   // DEV: the computer plays itself
+  cpu = mode !== '2p' ? AI.create(1, rng, tune, matchNo) : null;
+  cpuA = mode === 'sim' ? AI.create(0, rng, tune, matchNo + 3) : null;   // watch mode: the computer plays itself
   matchNo++;
   nextRound(); events.push({ type: 'match', mode });
 }
@@ -546,7 +551,7 @@ function drawGame(opts = {}) {
     const d = state.dribble, shaky = d.sloppy >= 4;
     text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, (state.aiDebug && cpu ? 250 : 154) + aiN * 20, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
   }
-  if (world && world.hold && world.hold.dunkReady && (scene === 'play')) {
+  if (world && world.hold && world.hold.dunkReady && (scene === 'play') && !(world.hold.p.team === 1 && cpu) && !(world.hold.p.team === 0 && cpuA)) {   // (a person's prompt: the computer does not need one)
     const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;
     text(`TAP ${p.team ? 'UP' : 'W'} TO DUNK`, h.cx, h.boardTop - 30, 18, on ? '#ffd23f' : '#ffffff', { weight: 900, stroke: 5 });
   }
@@ -626,8 +631,9 @@ const scenes = {
       ptext('WITH THE BALL: HOLD JUMP, LET GO TO SHOOT (NEAR THE RIM: TAP TO DUNK).', W / 2, 452, 2, '#ffffff');
       ptext('TAP BOUNCE TO DRIBBLE (TAP AGAIN AS IT RISES), HOLD IT TO PASS.', W / 2, 472, 2, '#ffffff');
       buttons = [];
-      btn('VS CPU', W / 2 - 300, 500, 270, 64, () => newMatch('cpu'), tune.dev_ai_vs_ai > 0 ? 'COMPUTER VS COMPUTER (DEV)' : 'PLAYER 1 VS COMPUTER', 4);
-      btn('2 PLAYERS', W / 2 + 30, 500, 270, 64, () => newMatch('2p'), 'ONE KEYBOARD', 4);
+      btn('VS CPU', W / 2 - 339, 500, 210, 64, () => newMatch('cpu'), 'YOU VS COMPUTER', 3);
+      btn('2 PLAYERS', W / 2 - 105, 500, 210, 64, () => newMatch('2p'), 'ONE KEYBOARD', 3);
+      btn('WATCH CPU', W / 2 + 129, 500, 210, 64, () => newMatch('sim'), 'COMPUTER VS COMPUTER', 3);
       // CPU difficulty: a five-step slider with what the level does written under it
       const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];
       btn('<', LEVEL.x - 64, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv - 1), '', 4);
