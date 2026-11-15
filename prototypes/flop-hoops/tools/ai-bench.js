@@ -54,7 +54,7 @@ const ATTACKERS = {
         for (const sd of seeds) {
           Settings.set('ai_level', lv); CONFIG.seed = sd; toMenu(); game.step(2, false); newMatch('cpu'); game.step(100, false);
           Object.assign(cpu.w, weights);
-          const atkT = new Proxy(tune, { get: (t, k) => k === 'ai_level' ? 3 : k === 'ai_react' ? AI.LEVELS[2].react : k === 'ai_error' ? AI.LEVELS[2].error : t[k] });   // (the scripted attackers play as a Pro whatever the level under test)
+          const atkT = new Proxy(tune, { get: (t, k) => k === 'ai_level' ? 3 : t[k] });   // (the scripted attackers play as a Pro whatever the level under test)
           const atk = AI.create(0, rng, atkT, 0);
           atk.style = Object.assign({ name: '', attack: 1, range: 1, pass: 1, flash: 1, guard: 1, scav: 1, read: 1, risk: 0.5, wild: 1 }, tilt);
           const n0 = game.events.length; let lastShot = null, prev = game.scene;

@@ -33,7 +33,6 @@
  * only on a line the preview calls perfect, and pumps out of a shot that never lines up.
  */
 const AI = (() => {
-  const REACT_BASE = 0.18;   // s: the pause the short waits after an action are measured in, before the level and the REACT setting scale it
   const PATIENCE = 4;   // s the CPU holds the ball before it feels pushed to act (it has no shot clock to run out)
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -44,9 +43,8 @@ const AI = (() => {
    * look: how many steps ahead it can read the opponent (0: none). learn: how fast it adapts to them.
    * slip: the chance a play goes wrong on its own (a misread, a rushed shot). noise: how much its
    * choices wobble. Nobody is infallible: even a Legend slips, just rarely and mildly.
-   * react: s it pauses between fresh decisions. error: how far off the rim's centre it aims a shot (1 is a Rookie's scatter, 0 dead centre).
-   *   These two are what the settings REACT and ERROR show for the level: picking a level sets them (js/settings.js), and nudging the
-   *   settings afterwards scales every level in proportion (frame: rr, errK).
+   * react: s it pauses between fresh decisions (and after an action), shorter at every step up by a wider margin. error: how far off the rim's
+   *   centre it aims a shot (1 is a Rookie's scatter, 0 dead centre), close to none at the top. Both belong to the level; there is no setting.
    * rimLead: steps before a predicted dunk that its rim defender is already up (0: waits for the dunk to be ready).
    * sagWithin: a dunk predicted within this many steps makes it drop back to the rim (the Mythic does not sag for one far off).
    * lobGuard: px from the rim within which a defender stops it lobbing (0: lobs regardless). patience: s it holds before it must act.
@@ -58,11 +56,11 @@ const AI = (() => {
    */
   const LEVELS = [
     { name: 'ROOKIE', skill: 0.15, react: 0.26, error: 1, defense: 1 / 16, look: 0, learn: 0, slip: 0.5, noise: 0.5, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'CHASES THE BALL, MISSES A LOT, REACTS SLOWLY. DRIBBLES A LITTLE.' },
-    { name: 'AMATEUR', skill: 0.35, react: 0.23, error: 0.8, defense: 1 / 8, look: 4, learn: 0, slip: 0.3, noise: 0.35, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'KNOWS BASIC SHOOTING AND BLOCKING, AND DRIBBLES UPCOURT.' },
-    { name: 'PRO', skill: 0.55, react: 0.19, error: 0.6, defense: 1 / 4, look: 10, learn: 0.25, slip: 0.2, noise: 0.22, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'DRIBBLES, PASSES AND DUNKS, SPOTS OPEN CHANCES, HAS A PERSONALITY.' },
-    { name: 'ALL-STAR', skill: 0.75, react: 0.15, error: 0.4, defense: 1 / 2, look: 22, learn: 0.7, slip: 0.12, noise: 0.12, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'PREDICTS FLIGHTS, TIMES STEALS, ADAPTS TO HOW YOU PLAY.' },
-    { name: 'LEGEND', skill: 0.95, react: 0.12, error: 0.2, defense: 1, look: 40, learn: 1, slip: 0.06, noise: 0.06, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'PERFECT LINES, FAST BREAKS, READS YOUR PLAYS. STILL MAKES MISTAKES.' },
-    { name: 'MYTHIC', skill: 1, react: 0.11, error: 0.15, defense: 2, look: 60, learn: 1.6, slip: 0.025, noise: 0.03, rimLead: 12, sagWithin: 30, rimGuard: 520, guardFrac: 0.62, lobGuard: 0, patience: 3, tame: true, swipeCap: 1, selfPass: true, fakeBase: 0.12, screenP: 0.9, screenR: 220, does: 'SELF-PASS FAST BREAKS, BLOCKS MORE, LEARNS QUICKLY. RARELY SLIPS.' },
+    { name: 'AMATEUR', skill: 0.35, react: 0.24, error: 0.8, defense: 1 / 8, look: 4, learn: 0, slip: 0.3, noise: 0.35, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'KNOWS BASIC SHOOTING AND BLOCKING, AND DRIBBLES UPCOURT.' },
+    { name: 'PRO', skill: 0.55, react: 0.21, error: 0.5, defense: 1 / 4, look: 10, learn: 0.25, slip: 0.2, noise: 0.22, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'DRIBBLES, PASSES AND DUNKS, SPOTS OPEN CHANCES, HAS A PERSONALITY.' },
+    { name: 'ALL-STAR', skill: 0.75, react: 0.17, error: 0.2, defense: 1 / 2, look: 22, learn: 0.7, slip: 0.12, noise: 0.12, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'PREDICTS FLIGHTS, TIMES STEALS, ADAPTS TO HOW YOU PLAY.' },
+    { name: 'LEGEND', skill: 0.95, react: 0.10, error: 0.03, defense: 1, look: 40, learn: 1, slip: 0.06, noise: 0.06, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'PERFECT LINES, FAST BREAKS, READS YOUR PLAYS. STILL MAKES MISTAKES.' },
+    { name: 'MYTHIC', skill: 1, react: 0.02, error: 0.005, defense: 2, look: 60, learn: 1.6, slip: 0.025, noise: 0.03, rimLead: 12, sagWithin: 30, rimGuard: 520, guardFrac: 0.62, lobGuard: 0, patience: 3, tame: true, swipeCap: 1, selfPass: true, fakeBase: 0.12, screenP: 0.9, screenR: 220, does: 'SELF-PASS FAST BREAKS, BLOCKS MORE, LEARNS QUICKLY. RARELY SLIPS.' },
   ];
   /**
    * Personalities (level 3+). Each weight is 1 for an even taste: attack (drives, dunks), range (long
@@ -194,7 +192,7 @@ const AI = (() => {
   // ---------------------------------------------------------------- the frame: what every part reads
 
   function frame(c, w, T, dt, info) {
-    const level = c.lv || levelOf(T), L = LEVELS[level - 1], m6 = level >= MYTHIC, nom = LEVELS[levelOf(T) - 1], rr = T.ai_react / nom.react, st = L.tame ? tame(c.style) : c.style;
+    const level = c.lv || levelOf(T), L = LEVELS[level - 1], m6 = level >= MYTHIC, st = L.tame ? tame(c.style) : c.style;
     const win = T.win_score, mine = info ? info.score[c.team] : 0, theirs = info ? info.score[1 - c.team] : 0;
     // the state of the match: how far from the end each side is decides how much risk and defence it wants
     const sit = { behind: theirs - mine, toWin: win - mine, foeToWin: win - theirs };
@@ -206,7 +204,7 @@ const AI = (() => {
       c, w, T, dt, info, level, L, st, sit, m6, K: m6 ? 2 : 4, swipeCap: L.swipeCap || 9, selfPass: !!L.selfPass, W: c.w, skill: L.skill, hold: w.hold, ball: w.ball, prof: c.profile,
       def: clamp(L.defense * (sit.foeToWin <= 2 ? 1.25 : 1), 0, L.defense > 1 ? 2.5 : 1),      // (past 1 every answer is already certain: reach and speed stop growing at 1, where a longer lunge only loses position)
       lag: 0.32 * Math.max(0, 1 - L.defense),
-      react: L.react * rr, base: REACT_BASE * rr, errK: T.ai_error / nom.error,   // (rr: the REACT setting against what the selected level sets it to: 1 until it is nudged)
+      react: L.react, base: L.react,
       tap: dt * 2,
       risk: clamp(st.risk + (chase ? 0.2 : 0) - (protect ? 0.2 : 0), 0, 1),
       atk: w.hoops.find(h => h.team === c.team),        // the hoop it shoots at
@@ -376,7 +374,7 @@ const AI = (() => {
     const pBase = (q === 2 ? lerp(0.5, 0.93, skill) : q === 1 ? lerp(0.18, 0.5, skill) : 0.05) * (ownHalf ? 0.8 : 1);
     const takesShot = inRange && (level < 5 || q === 2);
     const startAim = (kind, txt, forced = false) => () => {
-      const noiseOff = (c.rng() * 2 - 1) * span * 0.55 * L.error * X.errK;
+      const noiseOff = (c.rng() * 2 - 1) * span * 0.55 * L.error;
       const slipped = c.rng() < L.slip * 0.5;     // a rushed or misread shot: aimed well off, whoever it is
       c.foeReact.cocks++;
       // how likely a pump is: only from level 4; more against a defender who has jumped at its shots before; a showman likes it
