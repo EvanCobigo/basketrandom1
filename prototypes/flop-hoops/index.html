@@ -553,11 +553,7 @@ function drawGame(opts = {}) {
       text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128 + aiN * 22, 16, Render.TEAM_COLORS[t], { stroke: 4 });
     }
     if (state.aiDebug && cpu && scene === 'play') {   // AI vision (I): its options with their scores, what it reads from you, what it has learned
-      const d = cpu.dbg || {}, pf = cpu.profile, tn = AI.tendencies(pf), lines = [];
-      if (d.ops) lines.push('OPTIONS ' + d.ops.map(o => `${o[0]} ${o[1]}`).join('  '));
-      if (d.threat) lines.push(`READS  SHOT IN ${d.threat.shoot === null ? '-' : d.threat.shoot}  DUNK IN ${d.threat.dunk === null ? '-' : d.threat.dunk}  PASS ${Math.round(d.threat.pass * 100)}%`);
-      lines.push(`LEARNED  SHOTS ${pf.shots} (LONG ${Math.round(tn.longShare * 100)}%)  DUNKS ${pf.dunks}  PASSES ${pf.passes}  DRIBBLES ${pf.dribbles}  PRESSURE ${Math.round(cpu.press * 100)}%`);
-      if (cpu.selfStats && cpu.selfStats.tries) lines.push(`SELF-PASS  THROWN ${cpu.selfStats.tries}  CAUGHT BY HIMSELF ${cpu.selfStats.caught}  DUNKS AFTER ${cpu.selfStats.dunks}`);
+      const lines = AI.summary(cpu, tune);
       lines.forEach((l, i) => text(l, W / 2, 172 + i * 18, 12, '#c9c3e0', { stroke: 3 }));
     }
   }
