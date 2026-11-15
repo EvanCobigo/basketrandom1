@@ -13,7 +13,6 @@ window.CONFIG = {
   ai_level: { value: 3, min: 1, max: 5, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend (what each does is in js/ai.js)
   ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at the middle level
   ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at the lowest level
-  ai_roles: { value: 1, min: 0, max: 2, step: 0.1 },              // CPU: team roles by court position: the front man drives closer, the back man shoots from range (0 off, 1 default, 2 strong)
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   replay_clips: { value: 5, min: 0, max: 10, step: 1 },           // best moments shown in the replay after a match (0 = none)
