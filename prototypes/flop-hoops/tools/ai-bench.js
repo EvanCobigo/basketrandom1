@@ -6,7 +6,7 @@
  * AI benchmark: the same fixed seeds and scripted opponents every run, so a change to js/ai.js can be
  * judged by numbers instead of by eye.
  *
- *   node tools/ai-bench.js [--levels 1,2,3,4,5] [--seeds 5,9,23] [--secs 90] [--mode defense|mirror|both]
+ *   node tools/ai-bench.js [--levels 1,2,3,4,5,6] [--seeds 5,9,23] [--secs 90] [--mode defense|mirror|both]
  *                          [--weights '{"fake":0}'] [--label name]
  *
  * defense: the CPU (team 1) at each level defends against four scripted attackers (a sniper, a dunker,
@@ -24,12 +24,13 @@ const fs = require('fs');
 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const dir = path.resolve(__dirname, '..');
-const levels = arg('levels', '1,2,3,4,5').split(',').map(Number);
+const levels = arg('levels', '1,2,3,4,5,6').split(',').map(Number);
 const seeds = arg('seeds', '5,9,23').split(',').map(Number);
 const secs = Number(arg('secs', 90));
 const mode = arg('mode', 'both');
 const weights = JSON.parse(arg('weights', '{}'));
 const label = arg('label', 'run');
+const patch = JSON.parse(arg('patch', '{}'));   // fields to overwrite on each tested level's entry in AI.LEVELS (an ablation: --patch '{"look":40}')
 
 const ATTACKERS = {
   sniper: { range: 6, attack: 0.2 },
@@ -43,6 +44,7 @@ const ATTACKERS = {
   const errs = []; page.on('pageerror', e => errs.push(e.message));
   await page.goto('file://' + dir + '/index.html?manual=1');
   await page.evaluate(() => { try { localStorage.clear(); } catch (e) { /* no storage */ } });
+  await page.evaluate(([levels, patch]) => { for (const lv of levels) Object.assign(AI.LEVELS[lv - 1], patch); }, [levels, patch]);
   const rows = [];
   for (const lv of levels) {
     if (mode !== 'mirror') for (const [name, tilt] of Object.entries(ATTACKERS)) {

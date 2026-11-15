@@ -1,0 +1,40 @@
+trait	L4	L5	better
+POINTS	431	323	L4
+jump shots	93	49	L4
+  made	6	1	L4
+fadeaways	243	55	L4
+  made	89	42	L4
+long shots	222	131	L4
+  made	51	38	L4
+perfect lines	129	135	L5
+  made	63	39	L4
+baskets off scrambles	75	89	L5
+dunks started	170	193	L5
+dunks made	79	76	L4
+alley-oop dunks	22	28	L5
+lobs thrown	80	68	L4
+  became an alley-oop	18	21	L5
+  banked in	12	13	L5
+  lost to the foe	46	31	L4
+passes	13	39	L5
+  completed	11	28	L5
+  picked off	1	9	L4
+blocks (all)	86	86	=
+  of dunks	75	55	L4
+steals	887	666	L4
+strips	50	95	L5
+dribbles	1903	2565	L5
+pump fakes	215	44	L4
+  shots after	34	3	L4
+  made	10	2	L4
+screens set	247	304	L5
+fast breaks	16	29	L5
+rim protector waits	43	53	L5
+forced shots (stalls)	0	31	L4
+rebound jumps	633	1346	L5
+timed steals	140	272	L5
+learned reads shown	344	485	L5
+longest hold (s)	46.2	5.6	L5
+holds over 3 s	0	37	L4
+time behind a basket %	9.9	8.9	L5
+MATCHES	L4 won 31	L5 won 12	ties 5; L5 point difference per match -2.3

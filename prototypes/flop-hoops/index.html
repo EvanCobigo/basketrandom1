@@ -106,7 +106,7 @@ canvas.addEventListener('pointermove', e => {
   mouse = { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
   const i = buttons.findIndex(b => mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h);
   if (i >= 0) menuFocus = i;
-  if (dragKey === 'ai_level' && e.buttons && scene === 'title') Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (mouse.x - LEVEL.x) / LEVEL.w)) * 4));
+  if (dragKey === 'ai_level' && e.buttons && scene === 'title') Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (mouse.x - LEVEL.x) / LEVEL.w)) * (AI.LEVELS.length - 1)));
   else if (dragKey && e.buttons && scene === 'settings') settingsSlide(dragKey, mouse.x);
 });
 /** Press a button: it squashes for a moment, then its action runs (on the game step, not a timer). */
@@ -366,7 +366,7 @@ function score(hoop) {
   if (own && shot.kind === 'fade') sparkShow();
   sfx.cheer(own && (shot.kind === 'dunk' || shot.perfect) ? 1 : 0.6);
   puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 9, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
-  events.push({ type: 'score', team, points: pts, score: state.score.slice() });
+  events.push({ type: 'score', team, points: pts, score: state.score.slice(), how: shot ? shot.kind : null, perfect: !!(own && shot && shot.perfect), lob: !!(shot && shot.lob), own });
   if (pts === 2) sparkShow();   // a long shot gets the sparks too
   state.winner = Scoring.winner(state.score, tune.win_score);
   scene = 'scored';
@@ -430,7 +430,7 @@ function checkStall(dt) {
 const LEVEL = { x: W / 2 - 150, y: 548, w: 300 };
 function levelClick(x, y) {
   if (Math.abs(y - LEVEL.y) > 22 || x < LEVEL.x - 14 || x > LEVEL.x + LEVEL.w + 14) return false;
-  Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (x - LEVEL.x) / LEVEL.w)) * 4)); sfx.click();
+  Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (x - LEVEL.x) / LEVEL.w)) * (AI.LEVELS.length - 1))); sfx.click();
   return true;
 }
 
@@ -554,6 +554,7 @@ function drawGame(opts = {}) {
       if (d.ops) lines.push('OPTIONS ' + d.ops.map(o => `${o[0]} ${o[1]}`).join('  '));
       if (d.threat) lines.push(`READS  SHOT IN ${d.threat.shoot === null ? '-' : d.threat.shoot}  DUNK IN ${d.threat.dunk === null ? '-' : d.threat.dunk}  PASS ${Math.round(d.threat.pass * 100)}%`);
       lines.push(`LEARNED  SHOTS ${pf.shots} (LONG ${Math.round(tn.longShare * 100)}%)  DUNKS ${pf.dunks}  PASSES ${pf.passes}  DRIBBLES ${pf.dribbles}  PRESSURE ${Math.round(cpu.press * 100)}%`);
+      if (cpu.selfStats && cpu.selfStats.tries) lines.push(`SELF-PASS  THROWN ${cpu.selfStats.tries}  CAUGHT BY HIMSELF ${cpu.selfStats.caught}  DUNKS AFTER ${cpu.selfStats.dunks}`);
       lines.forEach((l, i) => text(l, W / 2, 172 + i * 18, 12, '#c9c3e0', { stroke: 3 }));
     }
   }
@@ -637,15 +638,15 @@ const scenes = {
       btn('VS CPU', W / 2 - 420, 356, 260, 72, () => newMatch('cpu'), 'YOU VS COMPUTER', 4);
       btn('2 PLAYERS', W / 2 - 130, 356, 260, 72, () => newMatch('2p'), 'ONE KEYBOARD', 4);
       btn('WATCH CPU', W / 2 + 160, 356, 260, 72, () => newMatch('sim'), 'COMPUTER VS COMPUTER', 4);
-      // CPU difficulty: a five-step slider with what the level does written under it
+      // CPU difficulty: a six-step slider with what the level does written under it
       const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];
       btn('<', LEVEL.x - 64, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv - 1), '', 4);
       btn('>', LEVEL.x + LEVEL.w + 20, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv + 1), '', 4);
       ptext(`CPU LEVEL ${lv}: ${L.name}`, W / 2, LEVEL.y - 34, 3, '#ffd23f');
       ctx.fillStyle = '#0a0618'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w, 10);
-      ctx.fillStyle = '#1fc2b1'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w * (lv - 1) / 4, 10);
-      for (let n = 1; n <= 5; n++) {   // the five stops; the current one is the knob
-        const x = LEVEL.x + LEVEL.w * (n - 1) / 4, on = n === lv;
+      ctx.fillStyle = '#1fc2b1'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w * (lv - 1) / (AI.LEVELS.length - 1), 10);
+      for (let n = 1; n <= AI.LEVELS.length; n++) {   // the stops; the current one is the knob
+        const x = LEVEL.x + LEVEL.w * (n - 1) / (AI.LEVELS.length - 1), on = n === lv;
         ctx.fillStyle = Render.INK; ctx.fillRect(x - (on ? 11 : 7), LEVEL.y - (on ? 15 : 9), on ? 22 : 14, on ? 30 : 18);
         ctx.fillStyle = on ? '#ffffff' : n < lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - (on ? 8 : 4), LEVEL.y - (on ? 12 : 6), on ? 16 : 8, on ? 24 : 12);
       }
