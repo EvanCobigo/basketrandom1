@@ -1,0 +1,9 @@
+# iteration 40 build, same probe and seeds
+L3 pts 79-60 own 0 carried 0 clears 3 | mine {"shot":[18,6],"long":[28,14],"fade":[46,22],"dunk":[11,2]} self {"tries":0,"caught":0,"dunks":0} fk {"fakes":18,"shots":8,"made":5}
+   lob 0:0/0  screen 14:12/2  fake 18:1/13  fade 36:12/15  long 79:24/41  jump 8:4/3  self 0:0/0  fastbreak 5:0/4  outlet 54:24/23  waitout 0:0/0  swat 5:2/2  rimread 4:0/1  timed 0:0/0  swipe 3:0/0  crash 19:12/6  contest 6:1/2
+L4 pts 72-66 own 0 carried 0 clears 4 | mine {"shot":[19,6],"long":[26,14],"fade":[23,11],"dunk":[17,8]} self {"tries":0,"caught":0,"dunks":0} fk {"fakes":15,"shots":2,"made":1}
+   lob 0:0/0  screen 8:5/2  fake 15:0/12  fade 21:6/13  long 77:19/46  jump 7:5/2  self 0:0/0  fastbreak 2:0/1  outlet 72:37/32  waitout 6:1/4  swat 7:2/1  rimread 12:2/5  timed 11:2/4  swipe 36:13/0  crash 58:21/34  contest 31:19/6
+L5 pts 71-36 own 0 carried 1 clears 12 | mine {"shot":[25,1],"long":[35,13],"fade":[35,12],"dunk":[22,14]} self {"tries":6,"caught":1,"dunks":0} fk {"fakes":20,"shots":6,"made":1}
+   lob 4:0/4  screen 15:8/6  fake 19:1/9  fade 25:10/11  long 76:19/44  jump 4:1/2  self 6:0/5  fastbreak 4:1/2  outlet 52:20/23  waitout 7:2/4  swat 9:3/2  rimread 27:17/4  timed 18:7/7  swipe 79:25/0  crash 4:0/4  contest 41:15/18
+L6 pts 81-36 own 2 carried 0 clears 14 | mine {"shot":[24,6],"long":[48,16],"fade":[29,11],"dunk":[24,15]} self {"tries":16,"caught":3,"dunks":0} fk {"fakes":37,"shots":10,"made":4}
+   lob 6:1/5  screen 7:5/2  fake 37:0/30  fade 46:10/33  long 90:22/57  jump 7:3/4  self 16:1/14  fastbreak 2:1/0  outlet 53:22/25  waitout 5:2/3  swat 7:4/1  rimread 37:22/5  timed 35:14/16  swipe 94:35/0  crash 13:6/5  contest 47:26/15

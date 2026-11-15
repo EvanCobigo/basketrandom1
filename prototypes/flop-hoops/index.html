@@ -1,0 +1,933 @@
+<!doctype html>
+<!-- PROTOTYPE - NOT FOR PRODUCTION -->
+<!-- Question: Does one key plus floppy physics give a match that is chaotic, funny and still winnable on skill? -->
+<!-- Date: 2026-11-14 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flop Hoops</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14111f; overflow: hidden; }
+  body { font-variant-numeric: tabular-nums; }
+  canvas { display: block; margin: 0 auto; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script src="config.js"></script>
+<script src="js/font.js"></script>
+<script src="js/settings.js"></script>
+<script src="vendor/matter.min.js"></script>
+<script src="js/rounds.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/pixelfont.js"></script>
+<script src="js/replay.js"></script>
+<script src="js/render.js"></script>
+<script>
+'use strict';
+// Flop Hoops: the game shell. Input, sound, and the state machine (title, round card, play,
+// basket celebration, pause, results). Physics, rendering, scoring rules and round rolls live
+// in js/. Keep the fixed step, the clock hook, window.game and the play and figures scenes.
+
+// ---- Built to be checked ----------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.speed is CONFIG.speed.value
+const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
+const W = 1280, H = 720;        // logical size
+const PIXEL = false;
+const FONT = '"Departure Mono", "Courier New", ui-monospace, Menlo, Consolas, monospace'; // Departure Mono (js/font.js)
+const TITLE = 'Flop Hoops';
+const CONTROLS = ['Player 1: W jump/shoot, S bounce', 'Player 2: Up jump/shoot, Down bounce', 'Esc / P: pause', 'M: mute'];
+const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
+const CHEAP = params.get('render') === 'cheap';
+let seed;
+function rng() { // mulberry32; every gameplay random call reads this, never Math.random
+  seed = (seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const events = []; // window.game.events: anything the game wants a run to see
+Render.setFont(FONT);
+Settings.load();   // this browser's saved settings, if any
+
+// ---- Screen ---------------------------------------------------------------------------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let viewScale = 1;
+function fit() { // fills the window at any size and pixel ratio
+  const k = Math.min(innerWidth / W, innerHeight / H);
+  const s = PIXEL ? Math.max(1, Math.floor(k)) : k;
+  const r = PIXEL ? 1 : s * (devicePixelRatio || 1);
+  viewScale = s;
+  canvas.width = Math.round(W * r); canvas.height = Math.round(H * r);
+  canvas.style.width = Math.round(W * s) + 'px'; canvas.style.height = Math.round(H * s) + 'px';
+  canvas.style.marginTop = Math.max(0, Math.floor((innerHeight - H * s) / 2)) + 'px';
+  ctx.setTransform(r, 0, 0, r, 0, 0); ctx.imageSmoothingEnabled = !PIXEL;
+}
+addEventListener('resize', fit); fit();
+const text = (s, x, y, size, c, o) => Render.text(ctx, s, x, y, size, c, o);
+
+// ---- Input: keys by position (event.code), OS key repeat ignored ------------------------
+const down = new Set(), hit = new Set();
+const pressed = code => hit.has(code); // true for one step after the key goes down
+const KEYS = ['KeyW', 'ArrowUp'];       // team 0 jumps (and cocks a shot) on W, team 1 on Up Arrow
+const BOUNCE_KEYS = ['KeyS', 'ArrowDown']; // with the ball: hold to wind up, let go to bounce it (dribble or pass)
+addEventListener('keydown', e => {
+  startAudio();
+  if (!e.repeat) { down.add(e.code); hit.add(e.code); }
+  if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => down.delete(e.code));
+addEventListener('blur', () => down.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) { down.clear(); if (scene === 'play' || scene === 'card') pauseGame(); } });
+// Buttons on screen are clickable too; each one does what its key does.
+let buttons = [];
+canvas.addEventListener('pointerdown', e => {
+  startAudio();
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+  const b = buttons.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+  if (b) activate(b);
+  else if (scene === 'settings') settingsClick(x, y);
+  else if (scene === 'title' && levelClick(x, y)) dragKey = 'ai_level';
+});
+// Settings list: the wheel scrolls it; clicking or dragging on a slider sets that value.
+let dragKey = null;
+canvas.addEventListener('wheel', e => { if (scene === 'settings') { e.preventDefault(); settingsMove(Math.sign(e.deltaY) * 3); } }, { passive: false });
+canvas.addEventListener('pointerup', () => { dragKey = null; });
+// Menus: the pointer lights the button under it; arrows or W/S move the focus; Enter presses it.
+let mouse = { x: -1, y: -1 }, menuFocus = 0, menuScene = '', menuPress = null;
+canvas.addEventListener('pointermove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouse = { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  const i = buttons.findIndex(b => mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h);
+  if (i >= 0) menuFocus = i;
+  if (dragKey === 'ai_level' && e.buttons && scene === 'title') Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (mouse.x - LEVEL.x) / LEVEL.w)) * (AI.LEVELS.length - 1)));
+  else if (dragKey && e.buttons && scene === 'settings') settingsSlide(dragKey, mouse.x);
+});
+/** Press a button: it squashes for a moment, then its action runs (on the game step, not a timer). */
+function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14, action: b.action, label: b.label }; }
+/** Arrow / W / S focus moves and Enter / Space presses, for any menu scene. */
+function menuKeys() {
+  if (!buttons.length) return false;
+  if (pressed('ArrowDown') || pressed('ArrowRight') || pressed('KeyS')) { menuFocus = (menuFocus + 1) % buttons.length; sfx.click(); }
+  if (pressed('ArrowUp') || pressed('ArrowLeft') || pressed('KeyW')) { menuFocus = (menuFocus + buttons.length - 1) % buttons.length; sfx.click(); }
+  if (pressed('Enter') || pressed('Space')) { activate(buttons[Math.min(menuFocus, buttons.length - 1)]); return true; }
+  return false;
+}
+
+// ---- Audio: started on first input, mute on M --------------------------------------------
+// Everything is synthesised. Voices go through a soft compressor, and a share of each goes to a
+// short generated room reverb, so effects sound rounded and have a little space around them.
+let audio = null, muted = false;
+function startAudio() {
+  if (!audio) {
+    const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)(); // a check may inject one
+    const has = f => typeof ac[f] === 'function';
+    const out = ac.createGain(); out.gain.value = muted ? 0 : tune.volume;
+    let head = out;
+    if (has('createDynamicsCompressor')) {   // glue: loud hits do not clip, quiet ones stay present
+      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -20; comp.knee.value = 18; comp.ratio.value = 3.2; comp.attack.value = 0.004; comp.release.value = 0.18;
+      comp.connect(out); head = comp;
+    }
+    out.connect(ac.destination);
+    const bus = ac.createGain(); bus.gain.value = 1; bus.connect(head);
+    let send = null;
+    if (has('createConvolver') && has('createBuffer')) {   // a 1.5 s room: decaying, softened noise, different in each ear
+      const len = Math.floor(ac.sampleRate * 1.5), ir = ac.createBuffer(2, len, ac.sampleRate);
+      let x = 777; for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let lp = 0;
+        for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; lp += ((x / 0x3fffffff - 1) - lp) * 0.42; d[k] = lp * Math.pow(1 - k / len, 2.6); } }
+      const cv = ac.createConvolver(); cv.buffer = ir; const wet = ac.createGain(); wet.gain.value = 0.34;
+      send = ac.createGain(); send.gain.value = 1; send.connect(cv); cv.connect(wet); wet.connect(head);
+    }
+    audio = { ac, out, bus, send, has };
+    // one second of noise for the swishes and cheers, from a fixed LCG (sound only, not gameplay)
+    const len = ac.sampleRate, buf = ac.createBuffer(1, len, ac.sampleRate), data = buf.getChannelData(0);
+    let x = 12345; for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; data[k] = x / 0x3fffffff - 1; }
+    audio.noise = buf;
+  }
+  if (audio.ac.state === 'suspended') audio.ac.resume();
+}
+function setMuted(m) { muted = m; if (audio) audio.out.gain.value = m ? 0 : tune.volume; }
+addEventListener('tune', () => setMuted(muted));
+let sfxSeed = 99; const arand = () => { sfxSeed = (sfxSeed * 1103515245 + 12345) & 0x7fffffff; return sfxSeed / 0x7fffffff; };   // sound only
+/** Route a node to the dry bus, and to the reverb by `verb` (0..1), panned by `pan` (-1..1). */
+function route(node, verb, pan) {
+  let n = node;
+  if (pan && audio.has('createStereoPanner')) { const p = audio.ac.createStereoPanner(); p.pan.value = pan; n.connect(p); n = p; }
+  n.connect(audio.bus);
+  if (audio.send && verb) { const g = audio.ac.createGain(); g.gain.value = verb; n.connect(g); g.connect(audio.send); }
+}
+/**
+ * One voice: a tone with a soft attack and a curved decay, optionally two slightly detuned
+ * oscillators, a low-pass that closes as it fades, a pitch glide, and a send to the reverb.
+ * Options: type, vol, delay, to (glide target Hz), att (s), detune (cents), lp (Hz), verb, pan.
+ */
+function tone(freq, dur, type = 'sine', vol = 0.3, delay = 0, to = freq, o = {}) {
+  if (!audio || muted) return;
+  const ac = audio.ac, t = ac.currentTime + delay, att = o.att ?? 0.006, g = ac.createGain();
+  const peak = Math.max(0.0002, vol);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + att);
+  g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.02, (dur - att) / 4.2));
+  let node = g;
+  if (o.lp) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(o.lp, t); f.frequency.exponentialRampToValueAtTime(Math.max(120, o.lp * 0.25), t + dur); f.Q.value = 0.7; g.connect(f); node = f; }
+  const dets = o.detune ? [-o.detune, o.detune] : [0];
+  for (const d of dets) {
+    const osc = ac.createOscillator(); osc.type = type; osc.frequency.setValueAtTime(freq, t); if (d) osc.detune.value = d;
+    if (to !== freq) osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + Math.min(dur, o.glide ?? dur));
+    osc.connect(g); osc.start(t); osc.stop(t + dur + 0.05);
+  }
+  if (dets.length > 1) g.gain.value = 0.0001;   // (the ramp above sets the level; two voices share it)
+  route(node, o.verb ?? 0.12, o.pan);
+}
+/** Shaped noise: a band (or a sweep from `freq` to `to`), a soft attack and a curved decay. */
+function noise(dur, vol, freq, delay = 0, o = {}) {
+  if (!audio || muted) return;
+  const ac = audio.ac, t = ac.currentTime + delay, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  src.buffer = audio.noise; src.loop = dur > 0.95; f.type = o.type || 'bandpass'; f.Q.value = o.q ?? 0.9;
+  f.frequency.setValueAtTime(freq, t); if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(60, o.to), t + dur);
+  const att = o.att ?? 0.004; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + att); g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.015, (dur - att) / 4));
+  src.connect(f); f.connect(g); route(g, o.verb ?? 0.1, o.pan); src.start(t, arand() * 0.5); src.stop(t + dur + 0.05);
+}
+/** A struck metal or glass sound: inharmonic partials that each ring a little differently. */
+function ring(freq, dur, vol, delay = 0, verb = 0.3, ratios = [1, 1.62, 2.51, 3.7]) {
+  ratios.forEach((r, k) => tone(freq * r, dur * (1 - k * 0.18), 'sine', vol / (1 + k * 0.9), delay, freq * r, { att: 0.002, verb }));
+}
+const lastSound = {};
+function limited(key, gap) { const t = state ? state.t : 0; if (lastSound[key] !== undefined && t - lastSound[key] < gap && t >= lastSound[key]) return true; lastSound[key] = t; return false; }
+const PENT = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.7, 1318.5, 1568];   // C major pentatonic, so stacked sounds never clash
+const sfx = {
+  click() { tone(1760, 0.07, 'sine', 0.05, 0, 1760, { att: 0.002, verb: 0.08 }); tone(2640, 0.05, 'sine', 0.025, 0.012, 2640, { att: 0.002, verb: 0.05 }); },
+  jump(team) { if (limited('jump' + team, 0.05)) return; const k = team ? 1.12 : 1; noise(0.11, 0.05, 500 * k, 0, { to: 1500 * k, q: 1.1, att: 0.02, pan: team ? 0.3 : -0.3 }); tone(190 * k, 0.12, 'sine', 0.07, 0, 330 * k, { att: 0.01, glide: 0.08, pan: team ? 0.3 : -0.3 }); },
+  floor(v) { if (limited('floor', 0.05)) return; const a = Math.min(0.4, v * 0.04); tone(150, 0.16, 'sine', a, 0, 52, { att: 0.002, glide: 0.1, verb: 0.05 }); noise(0.03, a * 0.35, 1800, 0, { type: 'lowpass', q: 0.5 }); },
+  bop(v) { if (limited('bop', 0.04)) return; const a = Math.min(0.28, 0.05 + v * 0.022); tone(230, 0.1, 'sine', a, 0, 120, { att: 0.003, glide: 0.07, verb: 0.05 }); noise(0.045, a * 0.5, 700, 0, { type: 'lowpass', q: 0.4 }); },
+  board(v) { if (limited('board', 0.05)) return; const a = Math.min(0.2, v * 0.02); tone(260, 0.14, 'triangle', a, 0, 200, { att: 0.002, verb: 0.15 }); tone(392, 0.1, 'sine', a * 0.6, 0, 330, { att: 0.002 }); noise(0.05, a * 0.8, 1100, 0, { q: 1.4 }); },
+  rim(v) { if (limited('rim', 0.06)) return; ring(880 + arand() * 60, 0.7, Math.min(0.2, v * 0.028), 0, 0.35); noise(0.03, 0.05, 3400, 0, { q: 1.6 }); },
+  swish() { noise(0.34, 0.16, 4200, 0, { to: 1500, q: 0.7, att: 0.02, verb: 0.25 }); [2, 4, 5].forEach((n, k) => tone(PENT[n] * 2, 0.5, 'sine', 0.05, 0.1 + k * 0.07, PENT[n] * 2, { att: 0.004, verb: 0.45 })); },
+  grab() { noise(0.035, 0.07, 2600, 0, { q: 1.5 }); tone(520, 0.1, 'sine', 0.07, 0, 780, { att: 0.004, glide: 0.06 }); },
+  shoot(c) { noise(0.2, 0.08, 500, 0, { to: 2600 + c * 1200, q: 0.9, att: 0.05, verb: 0.2 }); tone(300 + c * 160, 0.18, 'sine', 0.06, 0, 700 + c * 300, { att: 0.02, glide: 0.16 }); },
+  bounce(c) { tone(210 + c * 110, 0.11, 'triangle', 0.11, 0, 130, { att: 0.003, glide: 0.08, lp: 1800, verb: 0.08 }); tone(420 + c * 220, 0.06, 'sine', 0.03, 0, 300, { att: 0.002 }); },
+  dunk() { tone(96, 0.7, 'sine', 0.5, 0, 36, { att: 0.002, glide: 0.4, verb: 0.3 }); noise(0.09, 0.35, 5200, 0, { type: 'highpass', q: 0.5, att: 0.001, verb: 0.35 }); tone(180, 0.22, 'triangle', 0.2, 0, 70, { att: 0.002, glide: 0.15 }); noise(0.4, 0.14, 900, 0.02, { to: 250, q: 0.6, verb: 0.3 }); },
+  swat() { noise(0.09, 0.3, 2600, 0, { q: 1.2, att: 0.001, verb: 0.2 }); tone(260, 0.16, 'triangle', 0.22, 0, 90, { att: 0.002, glide: 0.1 }); ring(1400, 0.3, 0.06, 0.01, 0.2, [1, 1.5]); },
+  block() { noise(0.1, 0.24, 2200, 0, { q: 1.2, att: 0.001, verb: 0.15 }); tone(220, 0.14, 'triangle', 0.16, 0, 95, { att: 0.002, glide: 0.1 }); },
+  whistle() { for (const d of [0, 0.2]) { tone(2650, 0.17, 'sine', 0.07, d, 2750, { att: 0.012, verb: 0.3 }); tone(2660, 0.17, 'sine', 0.035, d + 0.005, 2770, { att: 0.012, detune: 14 }); noise(0.16, 0.03, 4800, d, { type: 'highpass', att: 0.01 }); } },
+  win() { [0, 2, 3, 5, 6, 8].forEach((n, k) => { tone(PENT[n], 0.6, 'sawtooth', 0.045, k * 0.11, PENT[n], { att: 0.01, lp: 3200, detune: 7, verb: 0.4 }); tone(PENT[n] / 2, 0.6, 'sine', 0.05, k * 0.11, PENT[n] / 2, { verb: 0.3 }); }); },
+  perfect() { [3, 4, 5, 7].forEach((n, k) => { tone(PENT[n] * 2, 0.6, 'sine', 0.06, k * 0.055, PENT[n] * 2, { att: 0.003, verb: 0.5 }); tone(PENT[n] * 4, 0.3, 'sine', 0.02, k * 0.055, PENT[n] * 4, { att: 0.003, verb: 0.5 }); }); },
+  cheer(big) {   // a crowd: noise through vowel-like bands, swelling and settling, with a few claps on top
+    if (!audio || muted) return;
+    [[600, 1.4], [1100, 1.6], [2500, 1.2]].forEach(([f, q], k) => noise(1.9, 0.1 * big * (k === 2 ? 0.55 : 1), f, 0.02 * k, { q, att: 0.35, verb: 0.35, pan: (k - 1) * 0.25 }));
+    for (let k = 0; k < 7; k++) noise(0.05, 0.05 * big, 1800 + arand() * 1400, 0.3 + k * 0.09 + arand() * 0.05, { q: 1.1, att: 0.001, verb: 0.3, pan: arand() * 1.6 - 0.8 });
+    [0.12, 0.3, 0.52].forEach((d, k) => tone(330 + k * 70, 0.4, 'sine', 0.018 * big, d, 640 + k * 90, { att: 0.08, verb: 0.4 }));
+  },
+  sparks() { noise(0.9, 0.07, 6500, 0, { type: 'highpass', q: 0.5, att: 0.05, verb: 0.3 }); for (let k = 0; k < 8; k++) tone(PENT[3 + (k % 5)] * 2, 0.12, 'sine', 0.025, 0.05 * k + arand() * 0.04, PENT[3 + (k % 5)] * 2, { att: 0.002, verb: 0.4, pan: arand() * 1.4 - 0.7 }); },
+};
+
+// ---- Game state -----------------------------------------------------------------------
+// world: the Matter.js world of the current round. Kept out of `state` so state stays plain data.
+let scene, state, world = null, pauseFrom = 'play', prevVenue = '';
+function reset() {
+  seed = Number(params.get('seed')) || CONFIG.seed;
+  state = { t: 0, score: [0, 0], round: 0, venue: '', settings: null, cardT: 0, scoredT: 0,
+    dribble: null, fire: null, floats: [], rings: [], blastFlash: 0, hitstop: 0, scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
+  prevVenue = '';
+}
+const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
+/**
+ * A play's call (LOB!, FADEAWAY!, STOLEN!, ...): small text that pops up where it happened and rises away. The
+ * big banner is kept for a made basket only (the scored scene's own). x, y default to the ball.
+ */
+function callout(s, team, x, y) {
+  if (x === undefined || y === undefined) { x = world.ball.position.x; y = world.ball.position.y; }
+  state.floats.push({ x: Math.max(80, Math.min(W - 80, x)), y: Math.max(160, y - 50), t: 0.9, max: 0.9, size: 18, text: s, color: team >= 0 ? Render.TEAM_COLORS[team] : '#ffd23f' });
+}
+function onPhysEvent(ev) {
+  if (ev.type === 'jump') { sfx.jump(ev.team); puff(ev.x, ev.y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 24 }); return; }
+  if (ev.type === 'dribble') { sfx.bounce(0.2); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
+  if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; puff(ev.x, ev.y, 6, { speed: 150, life: 0.3, colors: ['#ffffff', '#ffd23f', Render.TEAM_COLORS[ev.team]], size: 6, g: 200, drag: 0.85 }); events.push({ type: 'grab', team: ev.team }); return; }
+  if (ev.type === 'lob') {   // an alley-oop lob off the board: gold sparks and a call, so the set-up reads
+    sfx.shoot(0.7); callout('LOB!', ev.team, ev.x, ev.y); world.hype = Math.max(world.hype || 0, 0.4);
+    puff(ev.x, ev.y, 12, { speed: 260, life: 0.5, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 8, g: 200, drag: 0.9 });
+    events.push({ type: 'lob', team: ev.team }); return;
+  }
+  if (ev.type === 'shoot' || ev.type === 'fadeaway') {
+    sfx.shoot(ev.charge); events.push({ type: ev.type, team: ev.team });
+    puff(ev.x, ev.y, 4, { speed: 130, life: 0.3, colors: ['#ffffff', Render.TEAM_COLORS[ev.team]], size: 6, g: 100, drag: 0.88 });
+    if (ev.perfect) puff(ev.x, ev.y, 10, { speed: 300, life: 0.55, colors: Render.RAINBOW, size: 7, g: 300, drag: 0.9 });
+    if (ev.perfect) { callout('PERFECT!', ev.team, ev.x, ev.y); sfx.perfect(); }
+    else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team, ev.x, ev.y);
+    return;
+  }
+  if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
+  if (ev.type === 'dunkmiss') { sfx.rim(6); puff(ev.x, ev.y, 7, { speed: 220, life: 0.3, colors: ['#ffd23f', '#ffffff'], size: 6, g: 500 }); events.push({ type: 'dunkmiss', team: ev.team, reason: ev.reason, best: ev.best, grounded: ev.grounded, style: ev.style, t: ev.t }); return; }
+  if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
+  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
+  if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
+  if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
+    sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
+    state.shake = Math.max(state.shake, tune.shake * 1.5); state.hitstop = Math.max(state.hitstop, 0.06);
+    // a big one: a fireball, a ring of smoke, embers thrown out to the blast's edge, a shockwave ring and a white flash
+    puff(ev.x, ev.y, 70, { speed: 900, life: 0.8, colors: ['#ff5a1f', '#ffd23f', '#c4143c', '#ffffff', '#ff9a1f'], size: 11, g: 300, drag: 0.9 });
+    puff(ev.x, ev.y, 30, { speed: 380, life: 1.1, colors: ['#3a2a3a', '#5a4048', '#2a1e2a'], size: 14, g: -80, drag: 0.9 });
+    puff(ev.x, ev.y, 24, { speed: 1300, life: 0.45, colors: ['#ffffff', '#ffe23b'], size: 6, g: 600, drag: 0.94 });
+    state.rings = (state.rings || []).concat([{ x: ev.x, y: ev.y, r: 10, max: ev.radius || tune.rim_blast_radius, t: 0, life: 0.5 }, { x: ev.x, y: ev.y, r: 4, max: (ev.radius || tune.rim_blast_radius) * 0.6, t: 0, life: 0.35 }]);
+    state.blastFlash = 0.22;
+    state.floats.push({ x: Math.max(120, Math.min(W - 120, ev.x)), y: Math.max(170, ev.y - 70), t: 1.2, max: 1.2, size: 32, text: 'OVERHEAT!', color: '#ff7a1a' });
+    events.push({ type: 'rimblast', n: ev.n, ball: !!ev.ball }); return;
+  }
+  if (ev.type === 'steal') world.flash.t = 0.25;
+  if (ev.type === 'block') Replay.mark(world, ev.dunk ? 'DENIED' : 'BLOCK', ev.dunk ? 80 : 45, ev.team, state.round);
+  if (ev.type === 'steal') Replay.mark(world, 'STEAL', 25, ev.team, state.round);
+  if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team, ev.x, ev.y); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
+  if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
+  if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team, ev.x, ev.y); events.push({ type: ev.type, team: ev.team }); return; }
+  if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
+  if (ev.type !== 'hit' || ev.speed < 1.2) return;
+  if (ev.on === 'floor' && ev.speed > 3) puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 14 });
+  if (ev.on === 'rim' && ev.speed > 2) puff(ev.x, ev.y, 6, { speed: 220, life: 0.25, colors: ['#ffd23f', '#ffffff'], size: 6, g: 600 });
+  if (ev.on === 'player') { sfx.bop(ev.speed); events.push({ type: 'touch', team: ev.team }); }
+  else if (ev.on === 'floor') sfx.floor(ev.speed);
+  else if (ev.on === 'board') { sfx.board(ev.speed); if (ev.hoop) ev.hoop.wobble = 1; }
+  else if (ev.on === 'rim') { sfx.rim(ev.speed); if (ev.hoop) ev.hoop.wobble = 1.4; }
+}
+/** Roll a round and build its world. */
+function buildRound(round) {
+  const S = Rounds.roll(rng, round, prevVenue, tune);
+  prevVenue = S.venue;
+  state.settings = S; state.round = round; state.venue = S.venueName;
+  world = Physics.createWorld(S, tune, rng, onPhysEvent);
+  world.hustle = [0, 1].map(t => state.score[1 - t] - state.score[t] >= tune.hustle_gap); // the trailing team hustles
+  world.flash = { t: 0 };
+  buildPalette(S);
+  state.stall = 0;
+}
+// mode: 'cpu' (Player 1 against the computer, which plays the Tealbacks), '2p' (two people) or 'sim' (the computer plays both teams)
+let watchLv = [4, 4], simLv = null;   // WATCH CPU: the level of each computer
+let mode = 'cpu', cpu = null, cpuA = null, matchNo = 0;   // cpuA: the Tangerines' computer, only in 'sim'
+function newMatch(m, levels) {   // levels: for 'sim', the CPU level of each team [Tangerines, Tealbacks]
+  if (m === 'cpu' || m === '2p' || m === 'sim') mode = m;
+  reset(); Replay.reset(); state.mode = mode;
+  seed += matchNo * 7919;   // each match of a session plays out differently; the first of a page load is the same every time
+  if (mode === 'sim' && levels) simLv = levels;   // (a restart keeps them)
+  const lv = mode === 'sim' && simLv ? simLv : [0, 0];
+  cpu = mode !== '2p' ? AI.create(1, rng, tune, matchNo, null, lv[1]) : null;
+  cpuA = mode === 'sim' ? AI.create(0, rng, tune, matchNo + 3, null, lv[0]) : null;   // watch mode: the computer plays itself
+  matchNo++;
+  nextRound(); events.push({ type: 'match', mode });
+}
+function nextRound() { buildRound(state.round + 1); state.cardT = 0; scene = 'card'; sfx.whistle(); }
+function pauseGame() { pauseFrom = scene; scene = 'pause'; }
+function toMenu() { reset(); buildRound(1); scene = 'title'; }
+// Game speed: the physics advances tune.game_speed steps per game step (below 1 is slower).
+// A key held at any moment between physics steps still reaches the next one.
+let physAcc = 0, pending = [false, false], pendingB = [false, false];
+function physStep(held, bheld = [false, false]) {
+  const b = world.ball, prev = { x: b.position.x, y: b.position.y };
+  pending = pending.map((p, i) => p || held[i]);
+  pendingB = pendingB.map((p, i) => p || bheld[i]);
+  physAcc += tune.game_speed;
+  while (physAcc >= 1) {
+    const now = pending.map((p, i) => held[i] || (p && !physStepSaw[i]));
+    const nowB = pendingB.map((p, i) => bheld[i] || (p && !physStepSawB[i]));
+    Physics.step(world, now, tune, STEP, nowB);
+    if (scene === 'play' || scene === 'scored') Replay.record(world, state.round);   // every step goes into the replay buffer
+    physStepSaw = now.slice(); physStepSawB = nowB.slice(); pending = [false, false]; pendingB = [false, false]; physAcc -= 1;
+  }
+  return { prev, cur: { x: b.position.x, y: b.position.y } };
+}
+let physStepSaw = [false, false], physStepSawB = [false, false];
+function bounceKeys() { return BOUNCE_KEYS.map(k => down.has(k)); }
+/** Both teams' keys this step: [jump keys, bounce keys]. Against the CPU, it presses the Tealbacks' keys. */
+function teamKeys() {
+  const j = heldKeys(), b = bounceKeys();
+  if (cpu && scene === 'play') { AI.update(cpu, world, tune, STEP * tune.game_speed, { score: state.score }); j[1] = cpu.jump; b[1] = cpu.bounce; }
+  else if (cpu) { j[1] = false; b[1] = false; }   // the CPU stands down during a basket's celebration
+  if (cpuA && scene === 'play') { AI.update(cpuA, world, tune, STEP * tune.game_speed, { score: state.score }); j[0] = cpuA.jump; b[0] = cpuA.bounce; }
+  else if (cpuA) { j[0] = false; b[0] = false; }
+  return [j, b];
+}
+function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
+function heldKeys() { return KEYS.map(k => down.has(k)); }
+const DUST = () => (world && Render.VENUES[world.S.venue].line) || '#ffffff';
+const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
+const DUNK_NAMES = { tomahawk: 'TOMAHAWK DUNK!', windmill: 'WINDMILL DUNK!', elbow: 'HONEY DIP!' };
+function score(hoop) {
+  const team = hoop.team, shot = world.ball.shot, own = shot && shot.team === team;
+  if (own && shot.kind !== 'dunk') {
+    // rainbow = what really happened: clean (or a soft kiss), never knocked by a player, and crossing the rim plane near its middle
+    const soft = (shot.hardest || 0) <= tune.soft_touch && !shot.deflected && (shot.crossPerfect === true || shot.perfect === true);
+    shot.perfect = soft;
+    if (world.trail && world.trail.shot === shot) world.trail.mode = soft ? 'rainbow' : shot.kind === 'fade' ? 'blue' : 'green';
+  }
+  const pts = Scoring.points(own ? shot : null, hoop.cx, world.cx);
+  state.scoreKind = own ? (shot.perfect ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
+    : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
+  if (pts === 2) state.scoreKind = (shot.perfect ? 'PERFECT ' : '') + 'LONG SHOT!';
+  if (own && shot.kind === 'dunk' && DUNK_NAMES[shot.style]) state.scoreKind = (shot.oop ? 'ALLEY-OOP ' : '') + DUNK_NAMES[shot.style];
+  state.floats.push({ x: hoop.cx, y: hoop.rimY - 30, t: 1.1, text: '+' + pts, color: pts === 2 ? '#ff9a3c' : '#ffffff' });   // the points float up off the rim
+  state.points = pts;
+  if (shot && shot.kind !== 'dunk' && own) {   // moments worth a replay
+    if (pts === 2) Replay.mark(world, shot.perfect ? 'PERFECT LONG SHOT' : 'LONG SHOT', shot.perfect ? 85 : 55, team, state.round);
+    else if (shot.perfect) Replay.mark(world, 'PERFECT SHOT', 70, team, state.round);
+    else if (shot.kind === 'fade') Replay.mark(world, 'FADEAWAY', 65, team, state.round);
+    else if (shot.lob) Replay.mark(world, 'LOB OFF THE BOARD', 50, team, state.round);
+  }
+  state.toastT = 0; // the score banner names the shot; no callout on top of it
+  state.score[team] += pts; state.pops[team] = pts === 2 ? 1.6 : 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
+  hoop.sway = 1.5;
+  const c = [Render.TEAM_COLORS[team], '#ffd23f', '#ffffff', Render.TEAM_DARK[team]];
+  for (let i = 0, n = Math.round(54 * tune.particles / 1.5); i < n; i++) {
+    state.particles.push({ x: (hoop.x1 + hoop.x2) / 2, y: hoop.rimY + 20, vx: (rng() - 0.5) * 900, vy: -200 - rng() * 700,
+      a: rng() * 6, va: (rng() - 0.5) * 20, life: 1.2 + rng() * 0.8, c: c[i % 4] });
+  }
+  sfx.swish();
+  world.hype = Math.max(world.hype || 0, 0.45);   // every basket lifts the crowd a little
+  if (own && shot.kind === 'fade') sparkShow();
+  sfx.cheer(own && (shot.kind === 'dunk' || shot.perfect) ? 1 : 0.6);
+  puff((hoop.x1 + hoop.x2) / 2, hoop.rimY + 40, 9, { speed: 60, angle: Math.PI / 2, cone: 1.2, life: 0.6, colors: ['#ffffff'], size: 6, g: 500, jitter: 30 }); // net flecks
+  events.push({ type: 'score', team, points: pts, score: state.score.slice(), how: shot ? shot.kind : null, perfect: !!(own && shot && shot.perfect), lob: !!(shot && shot.lob), own });
+  if (pts === 2) sparkShow();   // a long shot gets the sparks too
+  state.winner = Scoring.winner(state.score, tune.win_score);
+  scene = 'scored';
+}
+// ---- Particles: few, short and purposeful. A separate random keeps gameplay rolls untouched.
+let fxSeed = 7;
+function fxr() { fxSeed = (fxSeed * 1103515245 + 12345) & 0x7fffffff; return fxSeed / 0x7fffffff; }
+/** Spawn n particles at (x, y): spread is the launch speed in px/s, up its upward bias, g gravity. */
+function puff(x, y, n, o) {
+  n = tune.particles <= 0 ? 0 : Math.max(1, Math.round(n * tune.particles));   // the Particles setting scales every burst
+  for (let i = 0; i < n; i++) {
+    const a = o.angle !== undefined ? o.angle + (fxr() - 0.5) * (o.cone || Math.PI) : fxr() * Math.PI * 2;
+    const sp = o.speed * (0.5 + fxr() * 0.5);
+    state.particles.push({ x: x + (fxr() - 0.5) * (o.jitter || 0), y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (o.up || 0),
+      a: 0, va: 0, life: o.life * (0.7 + fxr() * 0.3), max: o.life, c: o.colors[i % o.colors.length], size: o.size || 8, g: o.g ?? 900, drag: o.drag ?? 0.9 });
+  }
+}
+/** The cold-spark machines at both court edges fountain for a moment. */
+function sparkShow() { if (world) { world.sparkT = tune.spark_time; world.hype = Math.max(world.hype || 0, 1); } sfx.sparks(); }
+function updateJuice(dt) {
+  state.fxTick = (state.fxTick || 0) + 1;
+  if (world && state.fxTick % 4 === 0) for (const h of world.hoops) if ((h.heat || 0) > 0.5 || (h.gleam !== undefined && h.gleam !== null)) {   // a hot rim gives off sparks
+    puff(h.x1 + rng() * (h.x2 - h.x1), h.rimY - 4, 1, { speed: 60, angle: -Math.PI / 2, cone: 1, life: 0.5, colors: ['#ff7a1a', '#ffd23f', '#c4143c'], size: 5, g: -60, drag: 0.92 });
+  }
+  if (world && state.fxTick % 2 === 0) {
+    const b = world.ball, tr = world.trail;
+    if (tr && b.shot && b.shot === tr.shot && !world.hold) {   // a sparkle trail behind a shot, in the trail's colour
+      const col = tr.mode === 'rainbow' ? Render.RAINBOW : tr.mode === 'green' ? [Render.CONTESTED] : tr.mode === 'blue' ? [Render.FADE_BLUE] : ['#ffffff'];
+      puff(b.position.x, b.position.y, 1, { speed: 40, life: 0.4, colors: col, size: 6, g: 0, drag: 0.93 });
+    }
+    if (world.dunk && world.dunk.slammed && world.dunk.hang) puff(world.dunk.p.torso.position.x, world.dunk.p.torso.position.y - 20, 1, { speed: 50, angle: -Math.PI / 2, cone: 1.2, life: 0.5, colors: ['#ffd23f', '#ff9a1f'], size: 6, g: -120, drag: 0.95 });
+  }
+  if (world && state.fxTick % 6 === 0) for (const q of world.players) if (world.hustle[q.team]) puff(q.torso.position.x, Physics.FLOOR_Y - 6, 1, { speed: 50, angle: -Math.PI / 2, cone: 0.9, life: 0.5, colors: ['#ffd23f', '#ff9a3c'], size: 6, g: -150, drag: 0.95 });
+  if (world && world.hype > 0) world.hype = Math.max(0, world.hype - dt / tune.crowd_hype_time);
+  if (world && world.sparkT > 0) {   // icy sparks fountaining up from both machines
+    world.sparkT -= dt;
+    for (const x of [world.L - 40, world.R + 40]) puff(x, Physics.FLOOR_Y - 44, 3, { speed: 520, angle: -Math.PI / 2, cone: 0.35, life: 0.8, colors: Render.ICE, size: 6, g: 900, drag: 0.99 });
+  }
+  if (state.fire) {   // flames licking up off the rim after a dunk
+    const f = state.fire, h = f.hoop; f.t -= dt;
+    const k = Math.max(0, f.t / tune.fire_time);
+    puff(h.x1 + fxr() * (h.x2 - h.x1), h.rimY - 2, k > 0.3 ? 2 : 1, { speed: 60, angle: -Math.PI / 2, cone: 0.8, life: 0.45, colors: ['#ffe23b', '#ff9a1f', '#ff3b3b'], size: 9, g: -260, drag: 0.95 });
+    if (f.t <= 0) state.fire = null;
+  }
+  state.pops = state.pops.map(p => Math.max(0, p - dt * 2.5));
+  state.shake = Math.max(0, state.shake - dt * tune.shake * 2.2);
+  state.toastT = Math.max(0, state.toastT - dt);
+  for (const f of state.floats) { f.t -= dt; f.y -= 46 * dt; }
+  if (state.rings) { for (const r of state.rings) { r.t += dt; r.r = r.max * (1 - Math.pow(1 - Math.min(1, r.t / r.life), 3)); } state.rings = state.rings.filter(r => r.t < r.life); }
+  if (state.blastFlash > 0) state.blastFlash = Math.max(0, state.blastFlash - dt);
+  state.floats = state.floats.filter(f => f.t > 0);
+  if (state.dribble) { state.dribble.t -= dt; if (state.dribble.t <= 0) state.dribble = null; }
+  if (world && world.flash) world.flash.t = Math.max(0, world.flash.t - dt);
+  for (const p of state.particles) { const d = Math.pow(p.drag ?? 0.99, dt * 60); p.vy += (p.g ?? 1400) * dt; p.vx *= d; p.vy *= p.g === 0 ? d : 1; p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt; p.life -= dt; }
+  state.particles = state.particles.filter(p => p.life > 0 && p.y < H + 20);
+}
+/** A ball that stops moving (on a backboard top, wedged in a corner) is dropped again. */
+function checkStall(dt) {
+  const b = world.ball, v = b.velocity, r = b.r;
+  const corner = (b.position.x < world.L + r + 40 || b.position.x > world.R - r - 40) && b.position.y > world.floorY - r * 2.5;
+  state.stall = !world.hold && (Math.hypot(v.x, v.y) < 0.4 || corner) ? state.stall + dt : 0;
+  if (state.stall > tune.stall_time) { Physics.dropBall(world, tune); state.stall = 0; callout('RE-DROP!', -1); sfx.whistle(); }
+}
+
+// The CPU difficulty slider on the title: click or drag along it to pick a level.
+const LEVEL = { x: W / 2 - 150, y: 548, w: 300 };
+function levelClick(x, y) {
+  if (Math.abs(y - LEVEL.y) > 22 || x < LEVEL.x - 14 || x > LEVEL.x + LEVEL.w + 14) return false;
+  Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (x - LEVEL.x) / LEVEL.w)) * (AI.LEVELS.length - 1))); sfx.click();
+  return true;
+}
+
+// ---- Settings menu: every coefficient in config.js, by section ----------------------------
+const SET_ADV = { x: 120, y: 150, w: 1040, rowH: 28, show: 15, sliderX: 760, sliderW: 340 };
+const SET_SIMPLE = { x: 160, y: 150, w: 960, rowH: 35, show: 12, sliderX: 650, sliderW: 330 };
+let settingsAdvanced = false, SET = SET_SIMPLE;   // opens on the short, plain list; ADVANCED shows every coefficient
+let settingsRows = Settings.rows(true), settingsSel = 0, settingsTop = 0, settingsFrom = 'title', repeatT = 0;
+function setSettingsMode(adv) { settingsAdvanced = adv; SET = adv ? SET_ADV : SET_SIMPLE; settingsRows = Settings.rows(!adv); settingsSel = adv ? 1 : 0; settingsTop = 0; }
+function openSettings() { settingsFrom = scene; setSettingsMode(settingsAdvanced); scene = 'settings'; }
+function settingsMove(n) {
+  let i = settingsSel;
+  for (let k = 0; k < Math.abs(n); k++) {
+    do { i = Math.max(0, Math.min(settingsRows.length - 1, i + Math.sign(n))); } while (settingsRows[i].header && i > 0 && i < settingsRows.length - 1);
+  }
+  if (settingsRows[i].header) i = Math.min(settingsRows.length - 1, i + 1);
+  settingsSel = i;
+  if (settingsSel < settingsTop + 1) settingsTop = Math.max(0, settingsSel - 1);
+  if (settingsSel >= settingsTop + SET.show) settingsTop = settingsSel - SET.show + 1;
+}
+function settingsSlide(k, x) {
+  const c = CONFIG[k], t = Math.max(0, Math.min(1, (x - SET.sliderX) / SET.sliderW));
+  Settings.set(k, c.min + t * (c.max - c.min));
+}
+function settingsClick(x, y) {
+  const i = settingsTop + Math.floor((y - SET.y) / SET.rowH);
+  if (y < SET.y || i < settingsTop || i >= Math.min(settingsRows.length, settingsTop + SET.show) || settingsRows[i].header) return;
+  settingsSel = i;
+  if (x >= SET.sliderX - 10 && x <= SET.sliderX + SET.sliderW + 10) { dragKey = settingsRows[i].key; settingsSlide(dragKey, x); }
+}
+
+// ---- Scenes ---------------------------------------------------------------------------
+// The court is drawn small into `pix`, cut down to a few shades per colour channel, and scaled
+// up with no smoothing, under faint scanlines: the retro look. Text and the HUD are drawn at full
+// size on top, so they stay readable.
+const pix = document.createElement('canvas'), pctx = pix.getContext('2d', { willReadFrequently: true });
+// The retro palette: every colour this round can draw (venue, kits, skins, ball, hoops), plus a
+// few steps between the sky's two colours. Each court pixel snaps to its nearest entry, which
+// removes soft edges and bands gradients. Lookups are cached per colour.
+let palette = null, paletteCache = new Map();
+function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function buildPalette(S) {
+  const v = Render.VENUES[S.venue], cols = new Set(['#1d1a2b', '#ffffff', '#14111f', '#2a2440', '#e8591a', '#8d93a8', '#3d4a7a',
+    '#e04a3a', '#ef4b35', '#c23c2c', '#f4f6fb', '#ffd23f', '#000000', '#4a4560', '#8a8296']);
+  for (const k of ['sky', 'band', 'floor', 'line', 'side']) cols.add(v[k]);
+  for (const kit of S.kits) { cols.add(kit.jersey); cols.add(kit.shorts); }
+  for (const team of S.looks) for (const l of team) { cols.add(l.skin); cols.add(l.shoe); }
+  for (const c of Render.RAINBOW) cols.add(c);
+  for (const c of [Render.FADE_BLUE, ...Render.ICE, '#3a3f55', '#5d6480', '#24283a']) cols.add(c);
+  cols.add(Render.CONTESTED);
+  const out = [...cols].map(hexRGB);
+  palette = out; paletteCache = new Map();
+}
+function snapToPalette(c, w, h) {
+  if (!palette || tune.palette_snap < 1) return;
+  const img = c.getImageData(0, 0, w, h), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const key = d[i] << 16 | d[i + 1] << 8 | d[i + 2];
+    let m = paletteCache.get(key);
+    if (m === undefined) {
+      let best = 1e9;
+      for (let k = 0; k < palette.length; k++) {
+        const q = palette[k], dr = q[0] - d[i], dg = q[1] - d[i + 1], db = q[2] - d[i + 2], dist = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (dist < best) { best = dist; m = k; }
+      }
+      paletteCache.set(key, m);
+    }
+    const q = palette[m]; d[i] = q[0]; d[i + 1] = q[1]; d[i + 2] = q[2];
+  }
+  c.putImageData(img, 0, 0);
+}
+function drawCourt(fn, snap = true) {
+  const ps = Math.max(1, tune.pixel_size), pw = Math.ceil(W / ps), ph = Math.ceil(H / ps);
+  if (pix.width !== pw || pix.height !== ph) { pix.width = pw; pix.height = ph; }
+  pctx.setTransform(1 / ps, 0, 0, 1 / ps, 0, 0); pctx.imageSmoothingEnabled = false;
+  pctx.fillStyle = '#14111f'; pctx.fillRect(0, 0, W, H);
+  fn(pctx);
+  if (snap) snapToPalette(pctx, pw, ph);
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  if (state.shake > 0) ctx.translate(Math.round(Math.sin(state.t * 91) * state.shake / ps) * ps, Math.round(Math.cos(state.t * 77) * state.shake * 0.6 / ps) * ps);
+  ctx.fillStyle = '#14111f'; ctx.fillRect(-50, -50, W + 100, H + 100);
+  ctx.drawImage(pix, 0, 0, pw * ps, ph * ps);
+  ctx.restore(); ctx.imageSmoothingEnabled = true;
+  if (tune.scanlines > 0) { ctx.fillStyle = `rgba(0,0,0,${tune.scanlines})`; for (let y = 0; y < H; y += ps) ctx.fillRect(0, y, W, Math.max(1, ps / 2)); }
+}
+function drawGame(opts = {}) {
+  drawCourt(c => {
+    Render.world(c, world, courtAlpha(), state.t, W, H);
+    for (const p of state.particles) { const k = p.max ? Math.max(0, p.life / p.max) : 1, sz = (p.size || 12) * (p.max ? 0.4 + 0.6 * k : 1); c.globalAlpha = p.max ? Math.min(1, k * 1.5) : 1; c.fillStyle = p.c; c.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz); }
+    c.globalAlpha = 1;
+    if (scene === 'play') for (const ai of [cpuA, cpu]) {   // what each computer player is attempting, over the head of the player doing it
+      const m = ai && AI.marker(ai, world);
+      if (m) Render.aiIcon(c, m.who.head.position.x, m.who.head.position.y - 74, m.icon, Render.TEAM_COLORS[ai.team], state.t, m.who.dir);
+    }
+    if (state.aiDebug && cpu && scene === 'play' && cpu.dbg) {   // AI vision in court space: the ball path it expects and where it means to stand
+      const d = cpu.dbg;
+      if (d.path) { c.fillStyle = '#ffffff'; for (const q of d.path) c.fillRect(q.x - 3, q.y - 3, 6, 6); }
+      if (d.target !== null && d.target !== undefined) { c.fillStyle = '#ffd23f'; c.fillRect(d.target - 2, world.floorY - 60, 4, 60); c.fillRect(d.target - 10, world.floorY - 64, 20, 4); }
+    }
+  });
+  if (tune.vignette > 0) {   // darker corners draw the eye to the court
+    const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95);
+    g.addColorStop(0, 'rgba(10,6,24,0)'); g.addColorStop(1, `rgba(10,6,24,${tune.vignette})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  for (const r of state.rings || []) {   // a rim blast's shockwave: a ring racing out to the blast's reach, fading as it goes
+    const k = 1 - r.t / r.life;
+    ctx.globalAlpha = Math.max(0, k);
+    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 4 + 14 * k; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 + 4 * k; ctx.beginPath(); ctx.arc(r.x, r.y, r.r * 0.94, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (state.blastFlash > 0) { ctx.globalAlpha = Math.min(0.75, state.blastFlash * 3.4); ctx.fillStyle = '#fff4dc'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  for (const f of state.floats) {   // points floating up off the rim, and the small call at a play (LOB!, STOLEN!, ...)
+    ctx.globalAlpha = Math.min(1, f.t * 2.5);
+    const sz = f.size || 34, pop = f.size ? 1 + Math.max(0, f.t - (f.max || 0.9) + 0.12) * 3 : 1;   // a small call pops in, then rises
+    text(f.text, f.x, f.y, Math.round(sz * pop), f.color, { weight: 900, stroke: Math.max(4, Math.round(sz / 5)) });
+    ctx.globalAlpha = 1;
+  }
+  const aiN = cpuA || cpu ? 1 : 0;   // the computers' one-word lines share one row under the scoreboard
+  if (opts.hud !== false) {
+    Render.scoreboard(ctx, W, { cpu: !!cpu, cpuStyle: cpu ? cpu.style.name : '', cpu0: !!cpuA, cpuStyle0: cpuA ? cpuA.style.name : '', score: state.score, pops: state.pops, round: state.round, target: tune.win_score, leader: Scoring.leader(state.score) });
+    if (scene === 'play') [cpuA, cpu].filter(Boolean).forEach((ai, i) => { if (ai.intent) text(AI.brief(ai.intent), W / 2 + (ai.team ? 190 : -190), 128, 16, Render.TEAM_COLORS[ai.team], { stroke: 4 }); });   // what each computer is doing, in a word or two under its own side (the colour says whose)
+    if ((scene === 'play' || scene === 'scored') && world.hustle.some(Boolean)) {
+      const t = world.hustle[0] ? 0 : 1;
+      text(`${Render.TEAM_NAMES[t].toUpperCase()} HUSTLE: HIGHER JUMPS`, W / 2, 128 + aiN * 22, 16, Render.TEAM_COLORS[t], { stroke: 4 });
+    }
+    if (state.aiDebug && cpu && scene === 'play') {   // AI vision (I): its options with their scores, what it reads from you, what it has learned
+      const lines = AI.summary(cpu, tune);
+      lines.forEach((l, i) => text(l, W / 2, 172 + i * 18, 12, '#c9c3e0', { stroke: 3 }));
+    }
+  }
+  if (state.dribble && state.dribble.n > 1 && scene === 'play') { // the dribble chain: the more in a row, the shakier
+    const d = state.dribble, shaky = d.sloppy >= 4;
+    text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, (state.aiDebug && cpu ? 250 : 154) + aiN * 20, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
+  }
+  if (world && world.hold && world.hold.dunkReady && (scene === 'play') && !(world.hold.p.team === 1 && cpu) && !(world.hold.p.team === 0 && cpuA)) {   // (a person's prompt: the computer does not need one)
+    const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;
+    text(`TAP ${p.team ? 'UP' : 'W'} TO DUNK`, h.cx, h.boardTop - 30, 18, on ? '#ffd23f' : '#ffffff', { weight: 900, stroke: 5 });
+  }
+  if (state.toastT > 0) {
+    const k = Math.min(1, (1.1 - state.toastT) / 0.12);
+    ctx.save(); ctx.translate(W / 2, 196); ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k);
+    text(state.toast, 0, 0, 44, state.toastTeam >= 0 ? Render.TEAM_COLORS[state.toastTeam] : '#ffd23f', { weight: 900, stroke: 9 });
+    ctx.restore();
+  }
+}
+function overlay(a = 0.55) { ctx.fillStyle = `rgba(20,16,36,${a})`; ctx.fillRect(0, 0, W, H); }
+function btn(label, x, y, w, h, action, hint, scale) {
+  const i = buttons.length, b = { label, x, y, w, h, action, hint, scale, i, t: state.t + i * 0.4,
+    hot: menuFocus === i, pressT: menuPress && menuPress.label === label ? menuPress.t : 0 };
+  buttons.push(b); Render.button(ctx, b);
+}
+/** Pixel-font text with a drop shadow, for the menus. */
+function ptext(s, x, y, scale, color, o = {}) { return PixelFont.draw(ctx, s, x, y, Object.assign({ scale, color, shadow: Math.max(2, scale) }, o)); }
+
+const scenes = {
+  figures: { // every unit side by side, each named, for the outline check (?scene=figures)
+    update(dt) { state.t += dt; },
+    draw() {
+      if (!world) buildRound(1);
+      const xs = [260, 520];
+      drawCourt(c => { // drawn through the same retro pipeline as play
+        c.fillStyle = '#2a2440'; c.fillRect(0, 0, W, H);
+        [0, 1].forEach(team => {
+          const src = world.players[team * 2];
+          c.save(); c.translate(xs[team] - src.torso.position.x, -170);
+          Render.player(c, src, 1, world.S.kits[team]);
+          c.restore();
+        });
+        Render.ball(c, 820, 420, 34, 0, false);
+        const h = world.hoops[1];
+        c.save(); c.translate(1100 - h.boardX, 400 - h.rimY); Render.hoopBack(c, h); Render.hoopFront(c, h, 0); c.restore();
+      });
+      text('Tangerines baller', xs[0], 560, 18, Render.TEAM_COLORS[0], { stroke: 4 });
+      text('Tealbacks baller', xs[1], 560, 18, Render.TEAM_COLORS[1], { stroke: 4 });
+      text('Ball', 820, 480, 18, '#ffffff', { stroke: 4 });
+      text('Hoop', 1080, 560, 18, '#ffffff', { stroke: 4 });
+      text('FLOP HOOPS: the cast', W / 2, 60, 34, '#ffd23f', { stroke: 6 });
+    },
+  },
+  title: {
+    update(dt) {
+      state.t += dt;
+      // the court plays itself behind the menu: each side hops in short random bursts
+      state.attract = state.attract.map(a => a > 0 ? a - dt : (rng() < 0.02 ? 0.2 + rng() * 0.6 : a - dt));
+      physStep(state.attract.map(a => a > 0));
+      if (state.stall > 3) Physics.dropBall(world, tune);
+      checkStall(dt); state.toastT = 0;
+      menuKeys();
+    },
+    draw() {
+      drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
+      // the title, bobbing gently, in the pixel font with an outline and a hard shadow
+      const bob = Math.round(Math.sin(state.t * 2) * 4);
+      ptext('FLOP', W / 2 - 18, 118 + bob, 14, '#ff9a3c', { align: 'right', outline: true, shadow: 10 });
+      ptext('HOOPS', W / 2 + 18, 118 - bob, 14, '#1fc2b1', { align: 'left', outline: true, shadow: 10 });
+      ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 196, 3, '#fff1a8');
+      // the controls, one slim panel: each team's name and its two keys
+      ctx.fillStyle = Render.INK; ctx.fillRect(W / 2 - 384, 232, 768, 94);
+      ctx.fillStyle = '#21183f'; ctx.fillRect(W / 2 - 380, 236, 760, 86);
+      for (const team of [0, 1]) {
+        const x = W / 2 + (team ? 190 : -190);
+        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 190 + (team ? 4 : 0), 236, 186, 6);
+        ptext(Render.TEAM_NAMES[team].toUpperCase(), x, 258, 2, Render.TEAM_COLORS[team]);
+        Render.keycap(ctx, x - 80, 284, team ? 'up' : 'W', 0.6); ptext('JUMP / SHOOT', x - 80, 308, 1, '#c9c3e0');
+        Render.keycap(ctx, x + 80, 284, team ? 'down' : 'S', 0.6); ptext('BOUNCE / PASS', x + 80, 308, 1, '#c9c3e0');
+      }
+      buttons = [];
+      btn('VS CPU', W / 2 - 420, 356, 260, 72, () => newMatch('cpu'), 'YOU VS COMPUTER', 4);
+      btn('2 PLAYERS', W / 2 - 130, 356, 260, 72, () => newMatch('2p'), 'ONE KEYBOARD', 4);
+      btn('WATCH CPU', W / 2 + 160, 356, 260, 72, () => { scene = 'watch'; }, 'COMPUTER VS COMPUTER', 4);
+      // CPU difficulty: a six-step slider with what the level does written under it
+      const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];
+      btn('<', LEVEL.x - 64, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv - 1), '', 4);
+      btn('>', LEVEL.x + LEVEL.w + 20, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv + 1), '', 4);
+      ptext(`CPU LEVEL ${lv}: ${L.name}`, W / 2, LEVEL.y - 34, 3, '#ffd23f');
+      ctx.fillStyle = '#0a0618'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w, 10);
+      ctx.fillStyle = '#1fc2b1'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w * (lv - 1) / (AI.LEVELS.length - 1), 10);
+      for (let n = 1; n <= AI.LEVELS.length; n++) {   // the stops; the current one is the knob
+        const x = LEVEL.x + LEVEL.w * (n - 1) / (AI.LEVELS.length - 1), on = n === lv;
+        ctx.fillStyle = Render.INK; ctx.fillRect(x - (on ? 11 : 7), LEVEL.y - (on ? 15 : 9), on ? 22 : 14, on ? 30 : 18);
+        ctx.fillStyle = on ? '#ffffff' : n < lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - (on ? 8 : 4), LEVEL.y - (on ? 12 : 6), on ? 16 : 8, on ? 24 : 12);
+      }
+      ptext(L.does, W / 2, LEVEL.y + 32, 2, '#ffffff');
+      ptext('HOLD JUMP, LET GO TO SHOOT (TAP NEAR THE RIM TO DUNK)  ·  TAP BOUNCE TO DRIBBLE, HOLD IT TO PASS', W / 2, 616, 1, '#8f88ad');
+      btn('SETTINGS', 40, H - 84, 200, 50, openSettings, '', 3);
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 240, H - 84, 200, 50, () => setMuted(!muted), 'M', 3);
+      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 14, 1, '#8f88ad');
+    },
+  },
+  settings: {
+    update(dt) {
+      state.t += dt;
+      if (menuPress) return;
+      if (pressed('Escape') || pressed('Enter') || pressed('Backspace')) { scene = settingsFrom; return; }
+      if (pressed('ArrowDown') || pressed('KeyS')) settingsMove(1);
+      if (pressed('ArrowUp') || pressed('KeyW')) settingsMove(-1);
+      if (pressed('PageDown')) settingsMove(SET.show);
+      if (pressed('PageUp')) settingsMove(-SET.show);
+      const row = settingsRows[settingsSel], l = down.has('ArrowLeft') || down.has('KeyA'), r = down.has('ArrowRight') || down.has('KeyD');
+      if (row && row.key) {
+        if (pressed('ArrowLeft') || pressed('KeyA')) { Settings.nudge(row.key, -1); repeatT = 0.35; }
+        else if (pressed('ArrowRight') || pressed('KeyD')) { Settings.nudge(row.key, 1); repeatT = 0.35; }
+        else if (l || r) { repeatT -= dt; if (repeatT <= 0) { Settings.nudge(row.key, r ? 1 : -1); repeatT = 0.04; } }   // held: keeps stepping
+      }
+    },
+    draw() {
+      if (settingsFrom === 'title') drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
+      else { drawGame(); }
+      overlay(0.55);
+      ptext('SETTINGS', W / 2, 62, 8, '#ffd23f', { outline: true, shadow: 6 });
+      ptext(settingsAdvanced ? 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE (HOLD TO RUN)  ·  CLICK OR DRAG A SLIDER  ·  WHEEL SCROLLS' : 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE  ·  OR CLICK A BAR', W / 2, 112, 2, '#e6ddff');
+      const sm = !settingsAdvanced, fs = sm ? 3 : 2, bh = sm ? 12 : 8;
+      ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + 8, SET.y - 8, SET.w, SET.rowH * SET.show + 16);
+      ctx.fillStyle = Render.INK; ctx.fillRect(SET.x - 4, SET.y - 16, SET.w + 8, SET.rowH * SET.show + 24);
+      ctx.fillStyle = '#21183f'; ctx.fillRect(SET.x, SET.y - 12, SET.w, SET.rowH * SET.show + 16);
+      for (let n = 0; n < SET.show; n++) {
+        const i = settingsTop + n, row = settingsRows[i]; if (!row) break;
+        const y = SET.y + n * SET.rowH + SET.rowH / 2;
+        if (row.header) { ptext(row.header, SET.x + 24, y, 3, '#ffd23f', { align: 'left' }); continue; }
+        const k = row.key, sel = i === settingsSel;
+        if (sel) { ctx.fillStyle = '#3a2d6a'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, SET.w - 12, SET.rowH - 4); }
+        ptext(Settings.label(k, sm), SET.x + 44, y, fs, !sm && Settings.changed(k) ? '#ff9a3c' : '#ffffff', { align: 'left', shadow: 2 });
+        ptext(sm ? Settings.showSimple(k) : Settings.show(k), SET.sliderX - 24, y, fs, '#fff1a8', { align: 'right', shadow: 2 });
+        ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW, bh);
+        ctx.fillStyle = sel ? '#1fc2b1' : '#5d6480'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW * Settings.share(k), bh);
+        ctx.fillStyle = sel ? '#ffffff' : '#c9c3e0'; ctx.fillRect(SET.sliderX + SET.sliderW * Settings.share(k) - 5, y - bh, 10, bh * 2);
+        if (sel && Math.floor(state.t * 4) % 2) { ctx.fillStyle = '#ffffff'; for (let q = 0; q < 3; q++) ctx.fillRect(SET.x + 18 + q * 3, y - (3 - q) * 3, 3, (3 - q) * 6); }
+      }
+      if (settingsAdvanced) {   // scroll bar for the long list
+        const total = settingsRows.length, barH = SET.rowH * SET.show;
+        ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8, 8, barH);
+        ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8 + barH * settingsTop / total, 8, Math.max(16, barH * SET.show / total));
+        const sel = settingsRows[settingsSel], note = sel && sel.key ? Settings.describe(sel.key) : '';   // a setting with a plain line of its own says it here
+        ptext(note || 'ORANGE NAMES ARE CHANGED FROM THE DEFAULT. SIZES OF BODIES AND COURT APPLY FROM THE NEXT ROUND.', W / 2, 600, 2, note ? '#e6ddff' : '#c9c3e0');
+      } else {                  // a plain line about the highlighted setting
+        const row = settingsRows[settingsSel];
+        if (row) ptext(Settings.describe(row.key), W / 2, 596, 2, '#e6ddff');
+      }
+      buttons = [];
+      btn('BACK', 210, 628, 260, 58, () => { scene = settingsFrom; }, '', 4);
+      btn(settingsAdvanced ? 'SIMPLE' : 'ADVANCED', 510, 628, 260, 58, () => setSettingsMode(!settingsAdvanced), '', 4);
+      btn('RESET ALL', 810, 628, 260, 58, () => Settings.reset(), '', 4);
+    },
+  },
+  card: { // the round card: physics frozen while it flips in
+    update(dt) {
+      if (pressed('KeyP') || pressed('Escape')) { pauseGame(); return; }
+      state.cardT += dt; state.t += dt; updateJuice(dt);
+      if (state.cardT >= tune.card_time) { scene = 'play'; events.push({ type: 'round', round: state.round, venue: state.venue }); }
+    },
+    draw() { drawGame(); Render.roundCard(ctx, W, H, state.cardT, tune.card_time, state.settings); buttons = []; },
+  },
+  play: {
+    update(dt) {
+      if (pressed('KeyP') || pressed('Escape')) { pauseGame(); return; }
+      state.t += dt; updateJuice(dt);
+      if (state.hitstop > 0) { state.hitstop--; return; }   // a few frozen frames on the slam
+      const { prev, cur } = physStep(...teamKeys());
+      const hoop = Scoring.basket(prev, cur, world.hoops);
+      if (hoop) { score(hoop); return; }
+      checkStall(dt);
+    },
+    draw() { drawGame(); buttons = []; },
+  },
+  scored: { // the basket: shake, confetti, score pop, a short slow-motion, then the next round
+    update(dt) {
+      state.scoredT += dt; state.t += dt; updateJuice(dt);
+      if (state.scoredT < 0.6 ? Math.round(state.scoredT * 60) % 2 === 0 : true) physStep(...teamKeys());
+      if (state.scoredT >= tune.score_time) {
+        if (state.winner >= 0) { startReel('results'); state.resultsT = 0; state.gained = `${Render.TEAM_NAMES[state.winner]} win`; sfx.win(); events.push({ type: 'win', team: state.winner }); }
+        else nextRound();
+      }
+    },
+    draw() {
+      drawGame();
+      const k = Math.min(1, state.scoredT / 0.25), team = state.scorer;
+      ctx.save(); ctx.translate(W / 2, 250); ctx.scale(k, k); ctx.rotate(-0.04);
+      text(`${Render.TEAM_NAMES[team].toUpperCase()} SCORE!`, 0, 0, 64, Render.TEAM_COLORS[team], { weight: 900, stroke: 11 });
+      text(state.scoreKind + (state.points === 2 ? '  +2' : '  +1'), 0, 62, 40, state.points === 2 ? '#ff9a3c' : '#ffd23f', { weight: 900, stroke: 8 });
+      text(`${state.score[0]} - ${state.score[1]}`, 0, 116, 36, '#ffffff', { weight: 900, stroke: 7 });
+      ctx.restore();
+      buttons = [];
+    },
+  },
+  watch: { // WATCH CPU: pick how strong each computer is, then start
+    update(dt) { state.t += dt; menuKeys(); if (pressed('Escape')) scene = 'title'; },
+    draw() {
+      drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
+      ptext('WATCH CPU', W / 2, 110, 9, '#ffd23f', { outline: true, shadow: 6 });
+      ptext('PICK HOW STRONG EACH COMPUTER IS', W / 2, 180, 3, '#ffffff');
+      buttons = [];
+      for (const team of [0, 1]) {
+        const x = W / 2 + (team ? 250 : -250), y = 300, lv = watchLv[team], L = AI.LEVELS[lv - 1];
+        ctx.fillStyle = Render.INK; ctx.fillRect(x - 220, y - 70, 440, 270);
+        ctx.fillStyle = '#21183f'; ctx.fillRect(x - 216, y - 66, 432, 262);
+        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 216, y - 66, 432, 8);
+        ptext(Render.TEAM_NAMES[team].toUpperCase(), x, y - 36, 3, Render.TEAM_COLORS[team]);
+        ptext(`LEVEL ${lv}: ${L.name}`, x, y + 20, 3, '#ffd23f');
+        btn('<', x - 200, y + 50, 50, 50, () => { watchLv[team] = Math.max(1, lv - 1); }, '', 4);
+        btn('>', x + 150, y + 50, 50, 50, () => { watchLv[team] = Math.min(AI.LEVELS.length, lv + 1); }, '', 4);
+        for (let n = 1; n <= AI.LEVELS.length; n++) { ctx.fillStyle = n <= lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - 100 + (n - 1) * 36, y + 66, 28, 18); }
+        const cut = L.does.lastIndexOf(' ', 38) > 0 ? L.does.lastIndexOf(' ', 38) : 38;   // wrap at a word
+        ptext(L.does.slice(0, cut), x, y + 130, 1, '#c9c3e0'); ptext(L.does.slice(cut).trim(), x, y + 148, 1, '#c9c3e0');
+      }
+      btn('START', W / 2 - 150, 548, 300, 70, () => newMatch('sim', watchLv.slice()), 'ENTER', 5);
+      btn('BACK', 40, H - 84, 200, 50, () => { scene = 'title'; }, 'ESC', 3);
+    },
+  },
+  pause: {
+    update() {
+      if (menuKeys()) return;
+      if (pressed('KeyP') || pressed('Escape')) scene = pauseFrom;
+      else if (pressed('KeyR')) newMatch();
+      else if (pressed('KeyQ')) toMenu();
+    },
+    draw() {
+      drawGame(); overlay(0.6);
+      ptext('PAUSED', W / 2, 200, 12, '#ffd23f', { outline: true, shadow: 8 });
+      ptext(`${Render.TEAM_NAMES[0]} ${state.score[0]} - ${state.score[1]} ${Render.TEAM_NAMES[1]}`, W / 2, 280, 4, '#ffffff');
+      buttons = [];
+      btn('RESUME', W / 2 - 150, 320, 300, 60, () => { scene = pauseFrom; }, 'P OR ESC', 5);
+      btn('RESTART', W / 2 - 150, 430, 300, 60, newMatch, 'R', 5);
+      btn('MAIN MENU', W / 2 - 150, 540, 300, 60, toMenu, 'Q', 4);
+      btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3);
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
+    },
+  },
+  replay: { // the best moments of the match, in slow motion around the big moment
+    update(dt) {
+      state.t += dt;
+      const R = reelState, c = R.clips[R.i];
+      if (!R.cheered && R.f >= c.focus) { R.cheered = true; sfx.cheer(0.7); }
+      R.f += Math.abs(R.f - c.focus) < 40 ? tune.replay_slow : 1;   // slow around the moment itself
+      if (pressed('Escape') || pressed('KeyQ')) { endReel(); return; }
+      if (R.f >= c.len - 1 || pressed('Enter') || pressed('Space') || pressed('KeyE')) { R.i++; R.f = 0; R.cheered = false; if (R.i >= R.clips.length) endReel(); }
+    },
+    draw() {
+      const R = reelState, c = R.clips[Math.min(R.i, R.clips.length - 1)];
+      let view = null;
+      drawCourt(cx => { view = Replay.apply(c, R.f, tune.trail_length); Render.world(cx, view, 1, state.t, W, H); });
+      const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 0.95); vg.addColorStop(0, 'rgba(10,6,24,0)'); vg.addColorStop(1, 'rgba(10,6,24,0.55)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(10,6,24,0.85)'; ctx.fillRect(0, 0, W, 70); ctx.fillRect(0, H - 70, W, 70);   // letterbox
+      if (Math.floor(state.t * 2) % 2) { ctx.fillStyle = '#ff3b3b'; ctx.fillRect(40, 26, 18, 18); }
+      ptext('REPLAY', 120, 35, 3, '#ffffff'); ptext(`${R.i + 1} / ${R.clips.length}`, W - 110, 35, 3, '#c9c3e0');
+      const near = Math.abs(R.f - c.focus) < 50;
+      ptext(c.label, W / 2, H - 38, near ? 5 : 4, Render.TEAM_COLORS[c.team], { outline: true });
+      ptext(`${Render.TEAM_NAMES[c.team].toUpperCase()} · ROUND ${c.round}`, W / 2, 35, 2, '#c9c3e0');
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(0, H - 6, W * R.f / (c.len - 1), 6);
+      ptext('ENTER: NEXT   ESC: SKIP', W - 200, H - 38, 2, '#c9c3e0');
+      buttons = [];
+    },
+  },
+  results: { // the winners keep bouncing; the losers stand there
+    update(dt) {
+      state.resultsT += dt; state.t += dt; updateJuice(dt);
+      physStep([state.winner === 0, state.winner === 1]);
+      if (state.resultsT > 0.6) {
+        if (menuKeys()) return;
+        if (pressed('KeyQ') || pressed('Escape')) toMenu();
+        else if (pressed('KeyH') && Replay.count() > 0) startReel('results');
+      }
+    },
+    draw() {
+      drawGame(); overlay(0.45);
+      const team = state.winner;
+      Render.crown(ctx, W / 2, 150, 2.4);
+      ptext(`${Render.TEAM_NAMES[team]} WIN!`, W / 2, 240, 8, Render.TEAM_COLORS[team], { outline: true, shadow: 6 });
+      ptext(`${state.score[0]} - ${state.score[1]}`, W / 2, 320, 8, '#ffffff', { outline: true });
+      ptext(`AFTER ${state.round} ROUNDS`, W / 2, 370, 3, '#c9c3e0');
+      buttons = [];
+      btn('REMATCH', W / 2 - 300, 430, 270, 74, newMatch, 'ENTER OR SPACE', 4);
+      btn('MAIN MENU', W / 2 + 30, 430, 270, 74, toMenu, 'Q OR ESC', 4);
+      if (Replay.count() > 0 && tune.replay_clips > 0) btn('HIGHLIGHTS', W / 2 - 135, 565, 270, 56, () => startReel('results'), 'H', 3);
+    },
+  },
+};
+
+// ---- The replay reel: the best moments of the match, shown before the results
+let reelState = null;
+function startReel(then) {
+  const clips = tune.replay_clips > 0 ? Replay.reel(tune.replay_clips) : [];
+  if (!clips.length) { scene = then; return false; }
+  reelState = { clips, i: 0, f: 0, then, cheered: false };
+  Replay.borrow(world); scene = 'replay'; return true;
+}
+function endReel() { Replay.giveBack(); scene = reelState.then; reelState = null; }
+
+// ---- Loop: fixed step, frame time clamped ---------------------------------------------
+function step() {
+  if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
+  if (pressed('KeyI')) { state.aiDebug = !state.aiDebug; hit.delete('KeyI'); }   // AI vision: what the CPU thinks will happen
+  if (scene !== menuScene) { menuScene = scene; menuFocus = scene === 'settings' ? -1 : 0; }   // in settings the list has the keys; buttons light on hover
+  if (menuPress) { menuPress.t -= STEP; if (menuPress.t <= 0) { const a = menuPress.action; menuPress = null; a(); } }
+  scenes[scene].update(STEP); hit.clear();
+}
+let last, acc = 0, ALPHA = 1; // ALPHA: how far the frame is between the last two steps
+function tick() {
+  const now = clock.now();
+  acc += Math.min(now - last, 0.25); last = now; // a stall never fast-forwards the game
+  while (acc >= STEP) { step(); acc -= STEP; }
+  ALPHA = acc / STEP; // draw between steps, so the view never judders
+  drawFrame();
+}
+function drawFrame() { scenes[scene].draw(); }
+function frame() { tick(); requestAnimationFrame(frame); }
+function timer() { if (document.visibilityState === 'visible' && clock.now() - last > 0.1) tick(); }
+
+// ---- What a check can read and drive (?manual=1 stops the loop; players never see it) ----
+window.game = {
+  get scene() { return scene; },
+  get state() { return state; },
+  get ball() { return world ? { x: world.ball.position.x, y: world.ball.position.y } : null; }, // read-only, for checks
+  press(code) { hit.add(code); },
+  hold(code, on) { on ? down.add(code) : down.delete(code); },
+  get events() { return events; },
+  step(n = 1, draw = true, alpha = 1) {
+    for (let i = 0; i < n; i++) step();
+    if (draw) { ALPHA = alpha; drawFrame(); }
+  },
+};
+
+reset();
+buildRound(1);
+scene = params.get('scene') || 'title';
+if (scene === 'play') { state.round = 1; }
+last = clock.now();
+if (params.get('manual') === '1') drawFrame();
+else { requestAnimationFrame(frame); setInterval(timer, 50); }
+</script>
+</body>
+</html>

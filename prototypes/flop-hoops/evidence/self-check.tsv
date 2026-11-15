@@ -1,0 +1,54 @@
+time	2026-11-14 03:20:03
+keep	lines	0	pinned	0
+briefword	2D	shown	evidence/play.png
+briefword	ragdoll	shown	evidence/play.png
+briefword	rigid rectangles	shown	evidence/figures.png
+briefword	Basket Random	shown	evidence/play.png
+checklist	L1	pass	evidence/play.png	Look: bold flat-vector cut-out style with thick dark outlines; big round heads with simple faces, noodle arms, stubby legs; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: a big round card flips in naming the round's twist. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*	flat vector, thick ink outlines, big round heads, tangerine vs teal, seamed orange ball, venues (street, rooftop seen), round card in evidence/card.png
+checklist	L2	pass	evidence/play.png	References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.	one key per team drives jumps, ragdoll joints and random round twists; own name, cast and look
+checklist	L3	pass	evidence/play.png	View: 2D side view · Camera: static, whole court visible, scaled to the window.	2D side view, static camera, whole court visible; fit() scales to the window
+checklist	F1	pass	evidence/figures.png	Multi-body ragdoll players (head, torso, arms, legs) on one key per team	torso, head, two legs and an arm joined by constraints; one key drives both players of a team
+checklist	F2	pass	evidence/play.png	Ball physics with ground, player, rim and backboard collisions	floor, walls, backboards and rim bodies collide with the ball and players; ball restitution per round
+checklist	F3	pass	evidence/results.png	Basket detection, scoreboard, score animation, screen shake, round reset	Scoring.basket at index.html:288; scoreboard, score pop, shake and confetti in score(); round reset via nextRound()
+checklist	F4	pass	evidence/card.png	Randomised rounds: proportions, ball size, court width, gravity/jump, bounce, venue, outfits	twists and jitter roll proportions, ball size, court width, gravity/jump, bounce, venue and outfits each round
+checklist	F5	pass	evidence/title.png	Menu, pause, victory screen, restart	title menu, pause scene index.html:313, results scene evidence/results.png, rematch and restart buttons
+checklist	F6	not_assessed	index.html:122	Synth sounds: jump, bounce, rim, swish; mute	sounds for jump, floor, board, rim, swish, whistle and win exist; a headless run cannot hear them
+checklist	F7	pass	index.html:350	Fixed physics timestep, requestAnimationFrame render, responsive canvas	fixed 1/60 s step with clamped accumulator, requestAnimationFrame draw with interpolation, fit() on resize
+checklist	S1	pass	evidence/play.png	ragdoll physics · in the slice	floppy ragdolls with upright spring, loose legs and arm motor
+checklist	S2	pass	evidence/results.png	randomised rounds · in the slice	round settings rolled each round, never repeating last round's twist or venue
+checklist	S3	pass	index.html:72	local 2-player · in the slice	KeyW drives the Tangerines, ArrowUp the Tealbacks, both on one keyboard
+checklist	S4	pass	index.html:216	menus and game states · in the slice	title, card, play, scored, pause, results scenes
+checklist	M1	pass	evidence/title.png	The menu reads "W vs ↑"; Start.	menu shows Player 1 W keycap and Player 2 up-arrow keycap with PLAY
+checklist	M2	pass	evidence/card.png	A round card flips: "Normal ball".	round 1 card reads NORMAL BALL
+checklist	M3	pass	evidence/play.png	Each player taps; both their ballers hop and tip forward, arms swinging.	held key makes both team players hop and tip forward with the arm raised
+checklist	M4	pass	evidence/results.png	The ball drops at centre; someone headbutts it, it clangs off a rim, a scramble, and a flailing arm knocks it in: the screen shakes, the score pops, and a new card flips in, "Giant ball!".	ball drops at centre; smoke run scored after a scramble, shake and score pop, then a new twist card (Moon Gravity / Flat Ball, random rather than always Giant Ball)
+checklist	C1	not_assessed	js/physics.js:168	Every touch is contested from second one: the skill is timing your hop against theirs.	whether timing feels skilful needs two people playing
+checklist	C2	pass	index.html:169	A conceded basket costs a point and resets the court.	a basket adds a point and nextRound() rebuilds the court
+checklist	C3	pass	evidence/card.png	Twists add variety, not difficulty: every random range is clamped and applies to both teams equally.	every value clamped; one settings object applies to both teams alike
+browser	HeadlessChrome/153.0.0.0
+scene	play	0	title
+scene	play	1	card
+scene	play	92	play
+digits	log	800 20px "Trebuchet MS", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif	proportional	5.01
+digits	log	bold 17px "Trebuchet MS", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif	proportional	4.167
+digits	log	900 52px "Trebuchet MS", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif	proportional	13.457
+digits	log	800 15px "Trebuchet MS", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif	proportional	3.757
+digits	log	800 22px "Trebuchet MS", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif	proportional	5.511
+measure	step-time	play	0.149	7.600	414
+lane	play	stop	6.9	309
+uncaught	play	0
+text	play	canvas	466,27,554,39	25.5	17.01	inside	TANGERINES
+text	play	canvas	502,54,515,63	22.5	15.36	inside	W
+text	play	canvas	433,31,459,63	75.0	17.01	inside	0
+text	play	canvas	728,27,811,39	25.5	17.01	inside	TEALBACKS
+text	play	canvas	821,31,847,63	75.0	17.01	inside	0
+text	play	canvas	607,28,672,38	22.5	10.63	inside	FIRST TO 5
+text	play	canvas	604,46,676,59	30.0	15.35	inside	ROUND 1
+text	play	canvas	624,66,656,74	19.5	9.04	inside	LEVEL
+text	play	canvas	844,446,866,462	30.0	13.18	inside	41
+text	play	canvas	1015,458,1039,480	30.0	7.25	inside	13
+text	play	canvas	898,445,920,460	30.0	7.88	inside	24
+text	play	canvas	751,452,775,472	30.0	7.88	inside	68
+text	play	canvas	593,97,687,107	24.0	17.01	inside	NORMAL BALL
+screen	play	drawn
+responds	changed	124

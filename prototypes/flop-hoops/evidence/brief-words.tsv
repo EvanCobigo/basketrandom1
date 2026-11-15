@@ -1,0 +1,12 @@
+minimalist	flat cut-out vector shapes with thick ink outlines, plain two-tone venues	evidence/play.png
+2D	side-view canvas, static camera, whole court visible	evidence/play.png
+colorful	tangerine vs teal kits, orange ball, four venue palettes	evidence/play.png
+circular or simplified character heads	round heads with simple eyes and mouth, exaggerated size	evidence/figures.png
+exaggerated character proportions	big heads, noodle arms, stubby legs; twists like Big Heads and Stilt Legs	evidence/figures.png
+backboards and rims	backboard face with target square, red rim in two halves, white net	evidence/figures.png
+scoreboard at the top	centred scoreboard panel with scores, round and leader	evidence/play.png
+Canvas	Canvas 2D renderer in js/render.js	evidence/play.png
+like Basket Random	genre feel only (one key, floppy ragdolls, random rounds); own name, cast and look	evidence/play.png
+ragdoll	multi-body ragdolls (torso, head, legs, arm) on pin joints, seen flopping mid-jump	evidence/play.png
+rigid rectangles	not rigid: each player is five jointed bodies, never one box	evidence/figures.png
+Basket Random	genre reference only: one key, floppy ragdolls, random rounds; own name, cast and look	evidence/play.png

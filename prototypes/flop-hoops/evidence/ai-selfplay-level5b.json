@@ -1,0 +1,159 @@
+{
+ "level": 5,
+ "secs": 60,
+ "sigma": 0.12,
+ "margin": 8,
+ "defaults": {
+  "dribble": 0.48,
+  "shot": 1,
+  "pass": 1,
+  "risk": 1,
+  "press": 1,
+  "stand": 0.28,
+  "fake": 1
+ },
+ "tuned": {
+  "dribble": 0.479,
+  "shot": 1.04,
+  "pass": 1.028,
+  "risk": 0.755,
+  "press": 0.855,
+  "stand": 0.277,
+  "fake": 1.051
+ },
+ "final": {
+  "diff": 2,
+  "pa": 69,
+  "pb": 67
+ },
+ "history": [
+  {
+   "gen": 1,
+   "challenger": {
+    "dribble": 0.558,
+    "shot": 1.29,
+    "pass": 1.143,
+    "risk": 1.056,
+    "press": 0.952,
+    "stand": 0.277,
+    "fake": 0.998
+   },
+   "challengerPoints": 30,
+   "championPoints": 39,
+   "diff": -9,
+   "accepted": false
+  },
+  {
+   "gen": 2,
+   "challenger": {
+    "dribble": 0.462,
+    "shot": 0.967,
+    "pass": 1.044,
+    "risk": 1.172,
+    "press": 0.83,
+    "stand": 0.212,
+    "fake": 1.025
+   },
+   "challengerPoints": 38,
+   "championPoints": 38,
+   "diff": 0,
+   "accepted": false
+  },
+  {
+   "gen": 3,
+   "challenger": {
+    "dribble": 0.479,
+    "shot": 1.04,
+    "pass": 1.028,
+    "risk": 0.755,
+    "press": 0.855,
+    "stand": 0.277,
+    "fake": 1.051
+   },
+   "challengerPoints": 35,
+   "championPoints": 27,
+   "diff": 8,
+   "accepted": true
+  },
+  {
+   "gen": 4,
+   "challenger": {
+    "dribble": 0.484,
+    "shot": 0.976,
+    "pass": 0.872,
+    "risk": 0.755,
+    "press": 0.934,
+    "stand": 0.256,
+    "fake": 0.954
+   },
+   "challengerPoints": 30,
+   "championPoints": 38,
+   "diff": -8,
+   "accepted": false
+  },
+  {
+   "gen": 5,
+   "challenger": {
+    "dribble": 0.427,
+    "shot": 1.096,
+    "pass": 0.956,
+    "risk": 0.897,
+    "press": 0.829,
+    "stand": 0.304,
+    "fake": 1.114
+   },
+   "challengerPoints": 37,
+   "championPoints": 40,
+   "diff": -3,
+   "accepted": false
+  },
+  {
+   "gen": 6,
+   "challenger": {
+    "dribble": 0.528,
+    "shot": 0.876,
+    "pass": 0.946,
+    "risk": 0.667,
+    "press": 0.781,
+    "stand": 0.28,
+    "fake": 1.188
+   },
+   "challengerPoints": 33,
+   "championPoints": 34,
+   "diff": -1,
+   "accepted": false
+  },
+  {
+   "gen": 7,
+   "challenger": {
+    "dribble": 0.477,
+    "shot": 0.853,
+    "pass": 1.024,
+    "risk": 0.72,
+    "press": 0.811,
+    "stand": 0.292,
+    "fake": 1.205
+   },
+   "challengerPoints": 28,
+   "championPoints": 41,
+   "diff": -13,
+   "accepted": false
+  },
+  {
+   "gen": 8,
+   "challenger": {
+    "dribble": 0.425,
+    "shot": 1.016,
+    "pass": 1.074,
+    "risk": 0.898,
+    "press": 0.735,
+    "stand": 0.267,
+    "fake": 1.394
+   },
+   "challengerPoints": 33,
+   "championPoints": 41,
+   "diff": -8,
+   "accepted": false
+  }
+ ]
+}

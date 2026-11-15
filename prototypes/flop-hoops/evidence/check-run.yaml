@@ -1,0 +1,128 @@
+# The one-shot's small check (check-run/1).
+# Written by one-shot-check.sh --record: the results are /prototype's reading of
+# evidence/self-check.tsv; never edited by hand.
+kind: check-run/1
+engine: web
+browser: "HeadlessChrome/153.0.0.0"
+time: "2026-11-14 03:20:03"
+checks:
+  - id: boots
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: shot
+    result: not_run
+    mark: not assessed
+    why: "the check's own capture saved no play.png in this sandbox; evidence/play.png was taken separately with Playwright and looked at"
+    evidence:
+  - id: outlines
+    result: pass
+    evidence:
+      - "evidence/figures.png"
+  - id: brief-words
+    result: pass
+    evidence:
+      - "evidence/brief-words.tsv"
+  - id: emoji
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: nearest-game
+    result: pass
+    evidence:
+      - "evidence/nearest-game.txt"
+brief_checklist:
+  - id: L1
+    result: pass
+    evidence: "evidence/play.png"
+    item: "Look: bold flat-vector cut-out style with thick dark outlines; big round heads with simple faces, noodle arms, stubby legs; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: a big round card flips in naming the round's twist. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*"
+  - id: L2
+    result: pass
+    evidence: "evidence/play.png"
+    item: "References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds."
+  - id: L3
+    result: pass
+    evidence: "evidence/play.png"
+    item: "View: 2D side view · Camera: static, whole court visible, scaled to the window."
+  - id: F1
+    result: pass
+    evidence: "evidence/figures.png"
+    item: "Multi-body ragdoll players (head, torso, arms, legs) on one key per team"
+  - id: F2
+    result: pass
+    evidence: "evidence/play.png"
+    item: "Ball physics with ground, player, rim and backboard collisions"
+  - id: F3
+    result: pass
+    evidence: "evidence/results.png"
+    item: "Basket detection, scoreboard, score animation, screen shake, round reset"
+  - id: F4
+    result: pass
+    evidence: "evidence/card.png"
+    item: "Randomised rounds: proportions, ball size, court width, gravity/jump, bounce, venue, outfits"
+  - id: F5
+    result: pass
+    evidence: "evidence/title.png"
+    item: "Menu, pause, victory screen, restart"
+  - id: F6
+    result: not_run
+    mark: not assessed
+    why: "sounds for jump, floor, board, rim, swish, whistle and win exist; a headless run cannot hear them"
+    evidence: "index.html:122"
+    item: "Synth sounds: jump, bounce, rim, swish; mute"
+  - id: F7
+    result: pass
+    evidence: "index.html:350"
+    item: "Fixed physics timestep, requestAnimationFrame render, responsive canvas"
+  - id: S1
+    result: pass
+    evidence: "evidence/play.png"
+    item: "ragdoll physics · in the slice"
+  - id: S2
+    result: pass
+    evidence: "evidence/results.png"
+    item: "randomised rounds · in the slice"
+  - id: S3
+    result: pass
+    evidence: "index.html:72"
+    item: "local 2-player · in the slice"
+  - id: S4
+    result: pass
+    evidence: "index.html:216"
+    item: "menus and game states · in the slice"
+  - id: M1
+    result: pass
+    evidence: "evidence/title.png"
+    item: "The menu reads \"W vs ↑\"; Start."
+  - id: M2
+    result: pass
+    evidence: "evidence/card.png"
+    item: "A round card flips: \"Normal ball\"."
+  - id: M3
+    result: pass
+    evidence: "evidence/play.png"
+    item: "Each player taps; both their ballers hop and tip forward, arms swinging."
+  - id: M4
+    result: pass
+    evidence: "evidence/results.png"
+    item: "The ball drops at centre; someone headbutts it, it clangs off a rim, a scramble, and a flailing arm knocks it in: the screen shakes, the score pops, and a new card flips in, \"Giant ball!\"."
+  - id: C1
+    result: not_run
+    mark: not assessed
+    why: "whether timing feels skilful needs two people playing"
+    evidence: "js/physics.js:168"
+    item: "Every touch is contested from second one: the skill is timing your hop against theirs."
+  - id: C2
+    result: pass
+    evidence: "index.html:169"
+    item: "A conceded basket costs a point and resets the court."
+  - id: C3
+    result: pass
+    evidence: "evidence/card.png"
+    item: "Twists add variety, not difficulty: every random range is clamped and applies to both teams equally."
+measures:
+  - id: step-time
+    value: 7.600
+    unit: ms
+    by: browser
+    detail: "mean 0.149 ms, slowest 7.600 ms, 414 steps"

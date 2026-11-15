@@ -1,0 +1,21 @@
+L1	pass	evidence/play.png	flat vector, thick ink outlines, big round heads, tangerine vs teal, seamed orange ball, venues (street, rooftop seen), round card in evidence/card.png
+L2	pass	evidence/play.png	one key per team drives jumps, ragdoll joints and random round twists; own name, cast and look
+L3	pass	evidence/play.png	2D side view, static camera, whole court visible; fit() scales to the window
+F1	pass	evidence/figures.png	torso, head, two legs and an arm joined by constraints; one key drives both players of a team
+F2	pass	evidence/play.png	floor, walls, backboards and rim bodies collide with the ball and players; ball restitution per round
+F3	pass	evidence/results.png	Scoring.basket at index.html:288; scoreboard, score pop, shake and confetti in score(); round reset via nextRound()
+F4	pass	evidence/card.png	twists and jitter roll proportions, ball size, court width, gravity/jump, bounce, venue and outfits each round
+F5	pass	evidence/title.png	title menu, pause scene index.html:313, results scene evidence/results.png, rematch and restart buttons
+F6	not_assessed	index.html:122	sounds for jump, floor, board, rim, swish, whistle and win exist; a headless run cannot hear them
+F7	pass	index.html:350	fixed 1/60 s step with clamped accumulator, requestAnimationFrame draw with interpolation, fit() on resize
+S1	pass	evidence/play.png	floppy ragdolls with upright spring, loose legs and arm motor
+S2	pass	evidence/results.png	round settings rolled each round, never repeating last round's twist or venue
+S3	pass	index.html:72	KeyW drives the Tangerines, ArrowUp the Tealbacks, both on one keyboard
+S4	pass	index.html:216	title, card, play, scored, pause, results scenes
+M1	pass	evidence/title.png	menu shows Player 1 W keycap and Player 2 up-arrow keycap with PLAY
+M2	pass	evidence/card.png	round 1 card reads NORMAL BALL
+M3	pass	evidence/play.png	held key makes both team players hop and tip forward with the arm raised
+M4	pass	evidence/results.png	ball drops at centre; smoke run scored after a scramble, shake and score pop, then a new twist card (Moon Gravity / Flat Ball, random rather than always Giant Ball)
+C1	not_assessed	js/physics.js:168	whether timing feels skilful needs two people playing
+C2	pass	index.html:169	a basket adds a point and nextRound() rebuilds the court
+C3	pass	evidence/card.png	every value clamped; one settings object applies to both teams alike

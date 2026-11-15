@@ -1,0 +1,16 @@
+mode	level	vs	allowed	own	faced	madeShots	dunkStarts	dunks	blocks	swats	steals	shots	fakes	fakeShots	fakeMade
+defense	3	sniper	19	19	30	7	8	4	3	3	21				
+defense	3	dunker	15	10	7	5	13	2	11	10	52				
+defense	3	passer	8	8	7	2	13	2	6	5	32				
+defense	3	mixed	8	12	15	3	9	1	7	6	29				
+mirror	3	same level	15	12		5		1				18	0	0	0
+defense	4	sniper	16	18	25	5	13	2	6	5	16				
+defense	4	dunker	7	12	8	2	11	3	7	6	44				
+defense	4	passer	9	13	8	2	10	3	5	5	23				
+defense	4	mixed	13	18	17	4	9	3	4	4	29				
+mirror	4	same level	9	19		8		2				16	3	1	0
+defense	5	sniper	24	11	23	8	21	8	11	9	15				
+defense	5	dunker	13	15	10	2	18	9	7	7	33				
+defense	5	passer	8	17	4	0	14	5	7	7	27				
+defense	5	mixed	9	12	7	0	13	5	4	4	30				
+mirror	5	same level	10	7		2		2				4	1	0	0

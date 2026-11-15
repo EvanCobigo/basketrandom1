@@ -1,0 +1,32 @@
+# Where each file in assets/ and vendor/ came from, one entry per file. The field names are the
+# provenance record's, so the entries carry over when the game grows.
+# - path: assets/hit.wav      # relative to this game's folder
+#   origin: ai                # ai | bought | cc0 | you | outsourced | template | plugin | licensed | code | unknown
+#   tool: "what made or fetched it: the generator, or the script for code"
+#   model: "the model ID, when a model made it or an AI wrote its code"
+#   source: {vendor: "who made or sold it", product: "its name", url: "where from"}   # a download
+#   licence: {id: CC0-1.0}    # a download: the SPDX id where one exists
+#   date: 2026-01-31
+#   ships: true               # false for a file only the build uses
+#   placeholder: true         # until it is replaced; leave the line out otherwise
+- path: vendor/matter.min.js
+  origin: licensed
+  tool: "npm pack matter-js@0.19.0"
+  source: {vendor: "liabru", product: "matter-js 0.19.0", url: "https://www.npmjs.com/package/matter-js"}
+  licence: {id: MIT}
+  date: 2026-11-14
+  ships: true
+- path: js/font.js
+  origin: licensed
+  tool: "the Departure Mono 1.500 woff2, base64-embedded by a script"
+  source: {vendor: "Helena Zhang", product: "Departure Mono 1.500", url: "https://github.com/rektdeckard/departure-mono"}
+  licence: {id: OFL-1.1}
+  date: 2026-11-14
+  ships: true
+- path: assets/DepartureMono-LICENSE.txt
+  origin: licensed
+  tool: "copied from the release zip"
+  source: {vendor: "Helena Zhang", product: "Departure Mono 1.500", url: "https://github.com/rektdeckard/departure-mono"}
+  licence: {id: OFL-1.1}
+  date: 2026-11-14
+  ships: true
