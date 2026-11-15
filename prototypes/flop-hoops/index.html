@@ -232,7 +232,7 @@ let scene, state, world = null, pauseFrom = 'play', prevVenue = '';
 function reset() {
   seed = Number(params.get('seed')) || CONFIG.seed;
   state = { t: 0, score: [0, 0], round: 0, venue: '', settings: null, cardT: 0, scoredT: 0,
-    dribble: null, fire: null, floats: [], rings: [], blastFlash: 0, hitstop: 0, scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
+    dribble: null, fire: null, floats: [], rings: [], blastFlash: 0, streak: null, hot: null, hitstop: 0, scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
   prevVenue = '';
 }
 const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
@@ -264,7 +264,9 @@ function onPhysEvent(ev) {
   if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
   if (ev.type === 'dunkmiss') { sfx.rim(6); puff(ev.x, ev.y, 7, { speed: 220, life: 0.3, colors: ['#ffd23f', '#ffffff'], size: 6, g: 500 }); events.push({ type: 'dunkmiss', team: ev.team, reason: ev.reason, best: ev.best, grounded: ev.grounded, style: ev.style, t: ev.t }); return; }
   if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
-  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout('ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop }); return; }
+  if (ev.type === 'cut') { puff(ev.x, ev.y - 4, 5, { speed: 140, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 16 }); events.push({ type: 'cut', team: ev.team }); return; }
+  if (ev.type === 'dunkstart' && ev.putback) { sfx.grab(); callout('PUTBACK!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 18, { speed: 360, life: 0.6, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 500, drag: 0.92 }); events.push({ type: 'dunkstart', team: ev.team, style: ev.style, putback: true }); return; }
+  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout(ev.giveGo ? 'GIVE-AND-GO!' : 'ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop, giveGo: !!ev.giveGo }); return; }
   if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
     sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
@@ -301,6 +303,10 @@ function buildRound(round) {
   world = Physics.createWorld(S, tune, rng, onPhysEvent);
   world.hustle = [0, 1].map(t => state.score[1 - t] - state.score[t] >= tune.hustle_gap); // the trailing team hustles
   world.flash = { t: 0 };
+  // the CPU's dribbles are short: each carries the ball and the dribbler at most ai_dribble_reach toward the rim (people are not capped)
+  world.dribCap = [mode === 'sim' ? tune.ai_dribble_reach : 0, mode !== '2p' ? tune.ai_dribble_reach : 0];
+  // a hot player (a heat check) carries it into the next round, until the other team scores
+  world.hot = state.hot ? world.players.find(q => q.team === state.hot.team && q.idx === state.hot.idx) || null : null;
   buildPalette(S);
   state.stall = 0;
 }
@@ -366,7 +372,14 @@ function score(hoop) {
   state.scoreKind = own ? (shot.perfect ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
     : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
   if (pts === 2) state.scoreKind = (shot.perfect ? 'PERFECT ' : '') + 'LONG SHOT!';
-  if (own && shot.kind === 'dunk' && DUNK_NAMES[shot.style]) state.scoreKind = (shot.oop ? 'ALLEY-OOP ' : '') + DUNK_NAMES[shot.style];
+  if (own && shot.kind === 'dunk' && DUNK_NAMES[shot.style]) state.scoreKind = (shot.giveGo ? 'GIVE-AND-GO ' : shot.oop ? 'ALLEY-OOP ' : shot.putback ? 'PUTBACK ' : '') + DUNK_NAMES[shot.style];
+  // the heat check: the same player scoring heat_streak times in a row (his own shots and dunks) is hot until the other team scores
+  if (state.streak && state.streak.team !== team) { if (state.hot && state.hot.team !== team) callout('COOLED OFF', state.hot.team, hoop.cx, hoop.rimY - 40); state.streak = null; if (state.hot && state.hot.team !== team) state.hot = null; }
+  if (own && shot.by !== undefined) {
+    const st = state.streak && state.streak.team === team && state.streak.idx === shot.by ? state.streak : { team, idx: shot.by, n: 0 };
+    st.n++; state.streak = st;
+    if (st.n >= tune.heat_streak && !(state.hot && state.hot.team === team && state.hot.idx === shot.by)) { state.hot = { team, idx: shot.by }; state.floats.push({ x: Math.max(120, Math.min(W - 120, hoop.cx)), y: hoop.rimY - 80, t: 1.4, max: 1.4, size: 28, text: 'HEAT CHECK!', color: '#ff7a1a' }); events.push({ type: 'hot', team, idx: shot.by }); }
+  }
   state.floats.push({ x: hoop.cx, y: hoop.rimY - 30, t: 1.1, text: '+' + pts, color: pts === 2 ? '#ff9a3c' : '#ffffff' });   // the points float up off the rim
   state.points = pts;
   if (shot && shot.kind !== 'dunk' && own) {   // moments worth a replay
@@ -422,6 +435,11 @@ function updateJuice(dt) {
     if (world.dunk && world.dunk.slammed && world.dunk.hang) puff(world.dunk.p.torso.position.x, world.dunk.p.torso.position.y - 20, 1, { speed: 50, angle: -Math.PI / 2, cone: 1.2, life: 0.5, colors: ['#ffd23f', '#ff9a1f'], size: 6, g: -120, drag: 0.95 });
   }
   if (world && state.fxTick % 6 === 0) for (const q of world.players) if (world.hustle[q.team]) puff(q.torso.position.x, Physics.FLOOR_Y - 6, 1, { speed: 50, angle: -Math.PI / 2, cone: 0.9, life: 0.5, colors: ['#ffd23f', '#ff9a3c'], size: 6, g: -150, drag: 0.95 });
+  if (world && world.hot && state.fxTick % 2 === 0) {   // a hot player trails flames
+    const q = world.hot;
+    puff(q.torso.position.x + (fxr() - 0.5) * 20, q.torso.position.y + (fxr() - 0.5) * 50, 1, { speed: 60, angle: -Math.PI / 2, cone: 0.9, life: 0.45, colors: ['#ffe23b', '#ff9a1f', '#ff3b3b'], size: 8, g: -260, drag: 0.94 });
+    if (state.fxTick % 6 === 0) puff(q.head.position.x, q.head.position.y - 10, 1, { speed: 40, angle: -Math.PI / 2, cone: 0.6, life: 0.5, colors: ['#ffd23f', '#ff7a1a'], size: 10, g: -200, drag: 0.95 });
+  }
   if (world && world.hype > 0) world.hype = Math.max(0, world.hype - dt / tune.crowd_hype_time);
   if (world && world.sparkT > 0) {   // icy sparks fountaining up from both machines
     world.sparkT -= dt;

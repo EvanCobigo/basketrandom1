@@ -1,0 +1,5 @@
+# iteration 42, 8 seeds x 90 s per level vs tools/ai-ref.js (tools/ai-plays.js); pts = [opponent, CPU]
+{"lv":3,"ggTry":2,"ggHit":0,"passes":44,"dribbles":184,"maxTorso":30,"maxBall":27,"over25":3,"cuts":0,"cpuCuts":0,"giveGoStarts":0,"giveGoDunks":0,"putbackStarts":5,"putbackDunks":2,"hot":0,"lobs":0,"oops":0,"pts":[31,31],"errs":0}
+{"lv":4,"ggTry":0,"ggHit":0,"passes":55,"dribbles":150,"maxTorso":28,"maxBall":24,"over25":1,"cuts":0,"cpuCuts":0,"giveGoStarts":0,"giveGoDunks":0,"putbackStarts":1,"putbackDunks":0,"hot":1,"lobs":0,"oops":1,"pts":[40,33],"errs":0}
+{"lv":5,"ggTry":0,"ggHit":0,"passes":68,"dribbles":123,"maxTorso":33,"maxBall":20,"over25":1,"cuts":5,"cpuCuts":2,"giveGoStarts":0,"giveGoDunks":0,"putbackStarts":5,"putbackDunks":2,"hot":2,"lobs":1,"oops":1,"pts":[19,54],"errs":0}
+{"lv":6,"ggTry":1,"ggHit":0,"passes":39,"dribbles":136,"maxTorso":21,"maxBall":21,"over25":0,"cuts":4,"cpuCuts":2,"giveGoStarts":0,"giveGoDunks":0,"putbackStarts":3,"putbackDunks":1,"hot":0,"lobs":1,"oops":0,"pts":[43,37],"errs":0}

@@ -544,7 +544,7 @@ const AI = (() => {
     const underOwn = underOwnRim(c, w, T, px);
     const takesShot = inRange && !underOwn;   // every level takes a good shot (no level lines up for a perfect one)
     const anyTarget = inRange && q >= 1 && !underOwn;            // some line from here can go in
-    const urgS = level >= 4 && q === 0 ? 0 : 0.4 * urg;   // (from level 4 the clock pushes it to pass or drive, never into a shot with no line)
+    const urgS = (level >= 4 && q === 0 ? 0 : 0.4 * urg) + (w.hot === p && q >= 1 ? 0.15 : 0);   // (a hot hand shoots more)   // (from level 4 the clock pushes it to pass or drive, never into a shot with no line)
     const startAim = (kind, txt, forced = false) => () => {
       const noiseOff = (c.rng() * 2 - 1) * span * L.aimSpread;   // the level's own aim: up to aimSpread rim spans off
       const slipped = slip(c, X, 0.5);            // a rushed or misread shot: aimed well off, whoever it is
@@ -643,17 +643,33 @@ const AI = (() => {
       const reachX = (mx - px) * dir + leadX, maxPass = 440 + (runner ? (level >= 5 ? 170 : 120) : 0);   // (a Legend or Mythic leads the receiver by where he is running)
       const catchable = mateAhead && reachX >= 60 && reachX <= maxPass && mate.sinceGround < 0.12;
       catchableMate = catchable && Math.abs(mx - px) < 800;
+      // the give-and-go: the teammate passed to it and cut for the rim; the ball straight back to him (on the floor, or coming down to it) is caught as an alley-oop and dunked
+      const cutter = !!w.cut && w.cut.p === mate && w.time < w.cut.until;
+      // (thrown to where he will be: he is mid-run, and a pass is taken off the legs or chest, in the air or not)
+      // and only once he will be within dunk reach of the rim when it gets there (an alley-oop catch's reach): caught further out it is just a pass
+      const cutX = mx + mate.torso.velocity.x * 20, cutReach = (cutX - px) * dir, cutGap = (atk.cx - cutX) * dir;
+      const cutOk = cutter && cutReach >= 40 && cutReach <= maxPass && cutGap <= T.dunk_ground_x * T.oop_bonus + 30;
+      if (cutOk && level >= 2 && !underOwn) add('pass', (level >= 3 ? 2.1 : 0.9) + 0.15 * open + (w.hot === mate ? 0.1 : 0), passTo('GIVE-AND-GO: HITTING THE CUTTER', Math.max(0, cutReach - reachX)), 'GIVEGO');
+      // he is still on his way in: hold it a moment for him (not with a defender on it, nor for longer than the cut lasts)
+      else if (cutter && level >= 3 && !underOwn && !foeNear && w.cut.until - w.time > 0.3 && (mate.torso.velocity.x * dir > 1 || mate.sinceGround < 0.1))
+        add('wait', cutGap < 260 ? 1.9 : 0.95, () => { c.wait = X.react * 0.5 + 0.05; say(c, 'GIVE-AND-GO: WAITING FOR THE CUTTER'); return c; }, 'WAIT');   // (nearly there: that beats any shot)
+      // pass and cut: from far out, a pass to a teammate ahead sets up the give-and-go (he cuts as soon as it is caught)
+      const ggSetup = level >= 3 && gap > zone + 150 && gap < zone + 480 && mateGap > zone + 20 && open > 0.25 && !cutter;
+      // a hot teammate (a heat check) is fed
+      const hotMate = w.hot === mate;
       // how good each spot is: mine (the shot I have, or the dunk I am about to get) against his (open, and near
       // enough the rim to dunk or shoot). A carrier in a bad spot gives it up to a teammate in a better one.
       const mine = Math.max(takesShot ? pBase * pts * (1 - 0.3 * press) : 0, dunkSoon ? 0.8 : 0);
       const theirs = open * (mateGap >= T.dunk_min_gap && mateGap <= zone + 60 ? 0.85 : clamp(1 - mateGap / 700, 0, 0.7));
       const better = theirs > mine + 0.3 && open > 0.5, pressedPoor = foeNear && !anyTarget && !dunkSoon;   // (a clear gain only: a pass is a turnover risk)
       if (Math.abs(mx - px) < 800) {
-        if (catchable && (underOwn || (!shotViable && !dunkSoon) || pressedPoor || better)) {
+        if (catchable && (underOwn || (!shotViable && !dunkSoon) || pressedPoor || better || ggSetup || (hotMate && open > 0.4 && !dunkSoon))) {
           let u = (behind ? 0.7 : 0.18) + 0.3 * Math.max(0, theirs - mine) + (pressedPoor ? 0.1 : 0) + 0.42 * open * Math.max(0, adv) + 0.28 * pressure * open * (mateAhead ? 1 : 0.3) + 0.2 * (st.pass - 1) - (1 - X.risk) * 0.3 * X.W.risk * (1 - open) + 0.4 * urg;
           u *= X.W.pass;
           let txt = better || pressedPoor ? 'PASSING OUT OF A BAD SPOT' : 'PASSING TO THE OPEN TEAMMATE';
           let lead = 0;
+          if (ggSetup && !better && !pressedPoor) { u = Math.max(u, (0.7 + 0.15 * (st.pass - 1) + (level >= 5 ? 0.1 : 0)) * X.W.pass); txt = 'GIVE-AND-GO: PASS AND CUT'; }   // (a play of its own: the pass, the cut, the ball straight back)
+          if (hotMate) { u += 0.3; txt = 'FEEDING THE HOT HAND'; }
           if (runner && hold.t < 2.5) { u += 0.3 * st.scav + (level >= 5 ? 0.1 : 0); txt = 'FAST BREAK: FEEDING THE RUNNER'; lead = Math.max(0, leadX); }   // (thrown to where he will be)
           if (underOwn) { u = Math.max(u, 1.2); txt = 'OUTLET PASS FROM UNDER OUR RIM'; }   // under the basket it defends: always out
           add('pass', u, passTo(txt, lead), 'PASS');
@@ -763,6 +779,7 @@ const AI = (() => {
     if (L.rimGuard && toRim > 0 && toRim < L.rimGuard) frac = Math.max(frac, L.guardFrac - adapt * tn.cShot * tn.longShare * 0.25);   // near the rim: defend it (less so against a man who shoots long)
     if (X.m6) frac += adapt * 0.12 * clamp(prof.drive, 0, 1) * conf(prof.dribbles, X.K);   // the Mythic has seen which way they drive: a driver is met nearer the rim
     frac -= c.press * 0.15;                                                       // pressure that works: closer
+    if (X.w.hot === foe) frac -= 0.1;                                             // a hot hand is met closer
     frac += (0.5 - X.st.risk) * 0.12;                                             // a careful mind sags, a bold one steps up
     // where they like to shoot from (learned): inside that range, step up to the shooter rather than sit on the rim
     const fx = foe.torso.position.x, dist = Math.abs(dfn.cx - fx), sd = prof.shotDist;
@@ -896,6 +913,11 @@ const AI = (() => {
       txt = 'CHASING THE LOOSE BALL';
       // a foe shot in the air that will miss: go to where the rebound comes off
       const sh = ball.shot;
+      // our own shot that will miss: the man who did not shoot heads for the rebound and goes up for the putback
+      if (sh && sh.team === c.team && !sh.lob && sh.kind !== 'dunk' && level >= 3) {
+        const atk = X.atk, line = Physics.predictLine(w, T, atk);
+        if (line.crossX === null || !line.onTarget) { target = atk.cx - atk.side * atk.span * (0.9 + 0.5 * (1 - skill)) + c.err * 0.5; txt = 'CRASHING FOR THE PUTBACK'; }
+      }
       if (sh && sh.team !== c.team && level >= 3) {
         const line = Physics.predictLine(w, T, dfn);
         if (line.crossX === null || !line.onTarget) {
@@ -1115,7 +1137,7 @@ const AI = (() => {
    */
   const BRIEF = [
     [/OUT OF TIME/, 'OUT OF TIME'], [/TAKING A GOOD ONE/, 'JUMP SHOT'], [/PUMP FAKE/, 'PUMP FAKE'], [/SELF-PASS/, 'SELF-PASS'], [/OFF THE WALL/, 'WALL PASS'], [/OUTLET/, 'OUTLET PASS'],
-    [/FAST BREAK/, 'FAST BREAK'], [/ALLEY-OOP: GOING UP/, 'ALLEY-OOP'], [/LOB/, 'LOB'], [/WATCHING THE PASS/, 'READING PASS'],
+    [/GIVE-AND-GO/, 'GIVE-AND-GO'], [/PUTBACK/, 'PUTBACK'], [/HOT HAND/, 'HOT HAND'], [/FAST BREAK/, 'FAST BREAK'], [/ALLEY-OOP: GOING UP/, 'ALLEY-OOP'], [/LOB/, 'LOB'], [/WATCHING THE PASS/, 'READING PASS'],
     [/MEETING THE PASS/, 'CATCHING'], [/PASS/, 'PASS'], [/SCREEN/, 'SCREEN'], [/STEAL/, 'STEAL'], [/SWATTING/, 'SWAT'],
     [/CONTESTING/, 'CONTEST'], [/READING THE DUNK|PROTECTING THE RIM|GUARDING THE RIM/, 'RIM GUARD'], [/DEFENDING DEEP/, 'DEEP D'],
     [/PRESSURING/, 'PRESSURE'], [/STANDING BETWEEN/, 'GUARDING'], [/RIM PROTECTOR|WAITING FOR THE DUNK/, 'WAITING'],

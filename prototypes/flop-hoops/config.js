@@ -13,6 +13,7 @@ window.CONFIG = {
   ai_level: { value: 3, min: 1, max: 6, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend, 6 Mythic (what each does is in js/ai.js)
   ai_hold_limit: { value: 2.5, min: 1, max: 5, step: 0.1 },    // s the CPU may hold the ball before it must shoot, dunk or pass (people have no limit)
   ai_own_rim_zone: { value: 70, min: 0, max: 300, step: 10 },  // px either side of the rim it defends where the CPU never shoots (it passes out instead)
+  ai_dribble_reach: { value: 20, min: 0, max: 200, step: 5 },  // px: the most one CPU dribble carries the ball and the dribbler toward the rim it attacks (0: no limit)
   ai_fade_room: { value: 260, min: 0, max: 600, step: 10 },     // px the CPU needs between it and the rim it defends to fade away (the fade drifts back)
   ai_lob_guard: { value: 150, min: 0, max: 400, step: 10 },     // px: a defender this near the board stops a CPU alley-oop lob (levels 4+)
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
@@ -72,6 +73,13 @@ window.CONFIG = {
   dunk_fall_limit: { value: 9, min: 0, max: 14, step: 0.5 },      // px/step downward speed above which a falling dunker is too late
   dunk_air_assist: { value: 0.7, min: 0, max: 1, step: 0.05 },    // how strongly a dunk started in the air steers the body over the rim and holds it up (falling dunkers need it)
   dunk_air_slack: { value: 60, min: 0, max: 120, step: 5 },       // px lower than the rim a falling carrier's hand may be and still get the prompt (scaled by the assist)
+  lob_reach: { value: 340, min: 150, max: 500, step: 10 },        // px from the rim an alley-oop lob's receiver may stand and still be sent up for it
+  give_go_window: { value: 2.2, min: 0.5, max: 4, step: 0.1 },    // s after a pass that the passer's cut can take a return pass as a give-and-go (an alley-oop catch)
+  cut_rise: { value: 40, min: 20, max: 160, step: 5 },             // px the passer's cut hop rises as he heads for the rim
+  cut_vx_max: { value: 13, min: 2, max: 16, step: 0.5 },            // px/step of sideways speed a cut may take at most
+  putback_window: { value: 1.5, min: 0.2, max: 4, step: 0.1 },     // s after a shot that a player catching the miss in the air dunks it straight back (a putback)
+  heat_streak: { value: 3, min: 2, max: 8, step: 1 },              // baskets in a row by one player that make him hot (a heat check)
+  heat_assist: { value: 0.85, min: 0, max: 1, step: 0.05 },        // a hot player's shot help (instead of shot_assist) until the other team scores
   oop_bonus: { value: 1.3, min: 1, max: 2, step: 0.05 },          // an alley-oop catch gets this much more dunk reach
   dunk_hang: { value: 0.18, min: 0, max: 0.6, step: 0.02 },      // s the dunker hangs on the rim after the slam
   dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk or windmill ends hanging on the rim
