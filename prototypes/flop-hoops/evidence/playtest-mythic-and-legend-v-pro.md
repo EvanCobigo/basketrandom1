@@ -38,3 +38,12 @@ Dunk misses: Mythic landed 38 / timeout 5; Pro landed 72 / timeout 19 (Legend ru
 7. Slips are frequent at Pro (531) vs Mythic (176) — Pro's mistakes do not hurt it enough to matter.
 8. "Landed" is the main dunk failure (Mythic 38 of 43 misses; Pro 72 of 91): carriers reach the dunk prompt and still come down without finishing.
 9. Long holds: Mythic max hold per match averaged 2.5 s; no hold over 6 s was flagged, no frozen play (no 25 s event gaps), no player stuck upside-down for 3 s+, no page errors.
+
+## Follow-up check (build 9a3ef49, iteration 38): which of the above are real bugs
+- Lob "9.8%" was misleading: it counted only baskets banked off the board. A thrown lob becomes an alley-oop dunk start 39 of 85 times and scores 29 + 8 = 37 of 85 (44%) on the current build. Not a bug.
+- Perfect-line shots do go in: of Mythic shots flagged perfect, the ones that cross the rim within 10 px of centre all scored once given 400 steps (my first 180-step window cut late scores off). The real misses are defender deflections (about 14%) and a few releases whose real crossing is 60-140 px off the previewed line (about 7%). Minor.
+- Behind-a-basket 17%: 24 matches traced; most samples are players under the rim defending or chasing a loose ball/rebound ("CHASING THE LOOSE BALL" 2088, "GOING UP FOR THE BOARD" 586, "GETTING BACK FROM BEHIND" 649 of 6643 samples). The metric counts standing within 20 px court-side of the rim, so it flags normal rim defence. Not confirmed as a bug.
+- Ball above the top of the view: only 8 events in 24 matches, all a free ball launched at vy -7 to -13. Rare and cosmetic.
+- Player lying upside-down 3 s+: 1 in 24 matches (a swipe under the rim). Rare.
+- Self-pass counts of 247 per 60 matches on 9a3ef49 are the new own-rim outlet reusing selfStats.tries, not 247 self-passes.
+- Still true and not a bug fix: Mythic loses 41-14 to Pro. Pro takes about 3x the shots and steals more; the high levels shoot only on perfect lines and lose the volume and ball-security game.
