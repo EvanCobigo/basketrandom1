@@ -14,6 +14,7 @@ const Physics = (() => {
   const CAT = { STATIC: 0x1, TEAM0: 0x2, TEAM1: 0x4, BALL: 0x8 };
   const TEAM_CAT = [CAT.TEAM0, CAT.TEAM1];
   const DELTA = 1000 / 60;   // ms per engine update: one physics step
+  const CONTACT = 5.2;       // px beyond the ball's radius at which its centre first touches the rim ring or the board (measured)
   const FLOOR_Y = 640;       // court floor, logical px
   const CX = 640;            // court centre, logical px
   const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -249,7 +250,10 @@ const Physics = (() => {
     // righted gently by the upright spring first, never snapped round in one step
     const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < T.rock_engage;   // dribbling too: the swing steers it
     if (swinging) {
-      const next = Math.sin(phase + T.rock_rate * Math.PI * 2 * dt) * T.rock_angle;   // where the swing should be next step
+      // the dribble wobble: while a dribble chain is on, the swing grows or shrinks by T.dribble_rock (eased, so it never snaps)
+      const chain = dribbling || w.time - (p.lastDribble ?? -9) < T.dribble_chain_time;
+      p.dribRock = (p.dribRock ?? 1) + ((chain ? T.dribble_rock : 1) - (p.dribRock ?? 1)) * 0.12;
+      const next = Math.sin(phase + T.rock_rate * Math.PI * 2 * dt) * T.rock_angle * p.dribRock;   // where the swing should be next step
       const om = clamp(lerp(torso.angularVelocity, wrap(next - a), T.rock_follow), -T.rock_max_turn, T.rock_max_turn); // rad/step, never faster than the swing itself
       const piv = p.legs.reduce((q, l) => {
         const c = Math.cos(l.angle), sn = Math.sin(l.angle), hl = p.dims.legL / 2;
@@ -402,8 +406,10 @@ const Physics = (() => {
     for (let i = 0; i < 400; i++) {
       vx *= keep; vy = vy * keep + g;
       const ny = y + vy, nx = x + vx;
-      if (Math.hypot(nx - hoop.frontX, ny - hoop.rimY) < r * 1.09 + 6 - T.perfect_graze) touched = true;   // front rim (a squircle's corner reaches 9% further)
-      if (Math.abs(nx - hoop.boardX) < r * 1.09 + 5 - T.perfect_graze && ny > hoop.boardTop - r && ny < hoop.boardBot + r) touched = true;   // backboard
+      // measured against the real engine (a few hundred flown shots): the ball first touches the rim ring (radius 5) or the
+      // board (half its 10 px thickness) when its centre is about r + 5 away, so that is the line, less any allowed graze
+      if (Math.hypot(nx - hoop.frontX, ny - hoop.rimY) < r + CONTACT - T.perfect_graze) touched = true;   // front rim
+      if (Math.abs(nx - hoop.boardX) < r + CONTACT - T.perfect_graze && ny > hoop.boardTop - r && ny < hoop.boardBot + r) touched = true;   // backboard
       if (nx > w.R - r || nx < w.L + r || ny < -400) touched = true;   // a side wall or the ceiling: the flight past it is not real
       if (vy > 0 && y < hoop.rimY && ny >= hoop.rimY) return { crossX: x + (nx - x) * (hoop.rimY - y) / (ny - y), touched };
       x = nx; y = ny;
@@ -439,7 +445,8 @@ const Physics = (() => {
     let vx = lerp(T.shot_vx_min, T.shot_vx_max, charge);
     const vy = lerp(T.shot_vy_min, T.shot_vy_max, charge);
     if (T.shot_assist > 0 && (hoop.cx - from.x) * p.dir > 30) {
-      const sol = solveVx(w, T, hoop, from.x, from.y, vy, p.dir, hoop.cx);
+      // a ball dropped on the exact centre clips the front rim on a shallow arc, so the help aims a little toward the board
+      const sol = solveVx(w, T, hoop, from.x, from.y, vy, p.dir, hoop.cx + p.dir * T.aim_bias);
       if (sol !== null) vx = lerp(vx, sol, T.shot_assist);
     }
     return { vx, vy };
@@ -470,14 +477,15 @@ const Physics = (() => {
   /**
    * Whether the ball, flying free from here with drag and gravity, drops through the middle of
    * the rim. onTarget: its centre crosses inside the rim opening. perfect: it crosses within
-   * T.perfect_window of the rim's width from the centre AND the whole ball clears both rim edges
-   * and never touches the front rim or the backboard on the way. crossX is where it crosses.
+   * T.perfect_window of the rim's width from the centre AND never touches the front rim or the
+   * backboard on the way (touching is judged at the distance the engine really collides at, see
+   * CONTACT). crossX is where it crosses.
    */
   function predictFlight(w, T, hoop, x, y, vx, vy) {
     const r = w.ball.r, f = flightTo(w, T, hoop, x, y, vx, vy);
     if (f.crossX === null) return { onTarget: false, perfect: false, crossX: null, touched: f.touched };
-    const off = Math.abs(f.crossX - hoop.cx), clears = off <= hoop.span / 2 - r * 1.09 + T.perfect_graze;   // inside both rim edges, give or take a slight graze
-    return { onTarget: off < hoop.span / 2, perfect: !f.touched && clears && off < hoop.span * T.perfect_window, crossX: f.crossX, touched: f.touched };
+    const off = Math.abs(f.crossX - hoop.cx);
+    return { onTarget: off < hoop.span / 2, perfect: !f.touched && off < hoop.span * T.perfect_window, crossX: f.crossX, touched: f.touched };   // no touch on the way is the whole clearance test
   }
   function predictLine(w, T, hoop) { const b = w.ball; return predictFlight(w, T, hoop, b.position.x, b.position.y, b.velocity.x, b.velocity.y); }
 
@@ -485,10 +493,13 @@ const Physics = (() => {
    * A shot that has not been taken yet: what would happen if player `p`, holding the ball with
    * a cock-back of `charge`, let go right now. Returns where it crosses the rim plane and how far
    * from the rim's centre that is (err, positive meaning past the centre, away from the shooter).
+   * `lead` is how many steps ahead of now the ball leaves (0 = from where it is this instant).
    */
-  function previewShot(w, T, p, charge) {
-    const hoop = attackedHoop(w, p), b = w.ball, v = shotVelocity(w, T, p, charge, b.position);
-    const f = predictFlight(w, T, hoop, b.position.x, b.position.y, v.vx * p.dir, -v.vy);
+  function previewShot(w, T, p, charge, lead = 0) {
+    // `lead` steps ahead: a shot let go this step leaves from where the held ball will be next step
+    const hoop = attackedHoop(w, p), b = w.ball, at = { x: b.position.x + b.velocity.x * lead, y: b.position.y + b.velocity.y * lead };
+    const v = shotVelocity(w, T, p, charge, at);
+    const f = predictFlight(w, T, hoop, at.x, at.y, v.vx * p.dir, -v.vy);
     return Object.assign(f, { err: f.crossX === null ? null : (f.crossX - hoop.cx) * p.dir, vx: v.vx, vy: v.vy });
   }
 
@@ -875,7 +886,7 @@ const Physics = (() => {
           const hp = w.hoops.find(q => q.team === sh.team);
           if (hp && w.prevBallY < hp.rimY && ball.position.y >= hp.rimY) {
             const f = (hp.rimY - w.prevBallY) / (ball.position.y - w.prevBallY), cx = w.prevBallX + (ball.position.x - w.prevBallX) * f;
-            sh.crossOff = Math.abs(cx - hp.cx); sh.crossPerfect = sh.crossOff < hp.span * T.perfect_window && sh.crossOff <= hp.span / 2 - ball.r * 1.09 + T.perfect_graze;
+            sh.crossOff = Math.abs(cx - hp.cx); sh.crossPerfect = sh.crossOff < hp.span * T.perfect_window;   // (a hard touch on the way still disqualifies it, in index.html)
           }
         } }
       if (ball.shot && ball.shot === w.trail.shot && !w.hold) { w.trail.pts.push({ x: ball.position.x, y: ball.position.y }); if (w.trail.pts.length > T.trail_length) w.trail.pts.shift(); }

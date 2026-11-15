@@ -42,6 +42,7 @@ const Settings = (() => {
     { key: 'game_speed', label: 'GAME SPEED', desc: 'SLOWER IS EASIER TO FOLLOW, FASTER IS MORE FRANTIC.', fmt: (v, k) => pct(v, k) },
     { key: 'jump_height', label: 'JUMP POWER', desc: 'HOW HIGH A FULL JUMP GOES.', fmt: (v, k) => pct(v, k) },
     { key: 'dunk_reach_x', label: 'DUNK REACH', desc: 'HOW CLOSE TO THE RIM YOU NEED TO BE TO DUNK. SMALLER IS HARDER.', fmt: (v, k) => pct(v, k) },
+    { key: 'dribble_rock', label: 'DRIBBLE WOBBLE', desc: 'HOW MUCH THE BODY ROCKS WHILE DRIBBLING. 0% HOLDS IT STEADY, 100% IS THE NORMAL ROCK.', fmt: v => Math.round(v * 100) + '%' },
     { key: 'particles', label: 'PARTICLES', desc: 'HOW MANY SPARKS, DUST PUFFS AND CONFETTI THE EFFECTS MAKE.', fmt: level },
     { key: 'shake', label: 'SCREEN SHAKE', desc: 'HOW HARD THE SCREEN SHAKES ON BIG PLAYS.', fmt: v => v <= 0 ? 'OFF' : v <= 8 ? 'LOW' : v <= 20 ? 'NORMAL' : 'HIGH' },
     { key: 'crowd_rows', label: 'CROWD SIZE', desc: 'HOW MANY ROWS OF FANS WATCH THE GAME.', fmt: v => v <= 0 ? 'NONE' : v + (v === 1 ? ' ROW' : ' ROWS') },

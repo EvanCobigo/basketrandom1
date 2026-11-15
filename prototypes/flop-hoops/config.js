@@ -44,6 +44,7 @@ window.CONFIG = {
   shot_vx_max: { value: 14, min: 4, max: 24, step: 0.5 },       // px/step forward speed fully cocked
   shot_vy_min: { value: 11, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
   shot_vy_max: { value: 13, min: 4, max: 22, step: 0.5 },       // px/step upward speed fully cocked (barely more)
+  aim_bias: { value: 5, min: -10, max: 15, step: 1 },              // px toward the backboard that the aim help aims past the rim's centre (a swish needs room at the front rim)
   shot_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },     // pull toward the speed that drops the ball on the rim's centre (1 = always)
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
@@ -93,9 +94,10 @@ window.CONFIG = {
   dribble_chain_time: { value: 1.2, min: 0.3, max: 3, step: 0.05 }, // s between dribbles that still counts as one chain
   dribble_error: { value: 0.9, min: 0, max: 3, step: 0.05 },      // px/step of random bounce error per unit of sloppiness
   dribble_safe_chain: { value: 6, min: 1, max: 20, step: 1 },     // dribbles in a row before the chain itself adds wobble
-  dribble_sway: { value: 1.6, min: 0, max: 5, step: 0.1 },        // how much each dribble in a chain adds to the sway
+  dribble_rock: { value: 1, min: 0, max: 1.5, step: 0.1 },         // how big the planted swing is while dribbling (1 = as standing, 0 = steady, 1.5 = big wobble; much past that tips the body over)
+  dribble_sway: { value: 1.6, min: 0, max: 5, step: 0.1 },        // how much sloppy taps sway the body in the air
   perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
-  perfect_graze: { value: 0, min: 0, max: 15, step: 1 },         // px a perfect shot may overlap the rim or board and still count
+  perfect_graze: { value: 3, min: 0, max: 15, step: 1 },         // px a perfect shot may overlap the rim or board (a soft kiss) and still count
   soft_touch: { value: 3, min: 0, max: 10, step: 0.5 },          // px/step: a basket whose rim contact was this soft still counts as rainbow
   trail_width: { value: 1.6, min: 0.5, max: 3, step: 0.1 },        // trail block size, in ball radii
   trail_length: { value: 18, min: 0, max: 60, step: 1 },        // steps of ball trail behind a fired shot

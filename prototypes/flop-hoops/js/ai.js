@@ -13,6 +13,13 @@
  * would cross the rim if it let go right now (Physics.previewShot, the engine's own flight maths
  * and the real aim help), and lets go when that reaches the spot it picked. A bad shot is a
  * badly picked spot, not a bad guess at the flight, so it copes with a shooter that is moving.
+ * The top level goes further: it only lets a shot go when the preview says the line is perfect,
+ * and pumps (a quick dribble) out of a shot that never lines up.
+ *
+ * How it defends: every defensive move (a block jump, a swat at a dunk, a swipe at the ball, a
+ * rebound leap) is rolled once per incident with a chance of DEFENSE x its own weight, and it
+ * is reacted to after a delay that shrinks the same way. DEFENSE doubles with every level
+ * (1/16, 1/8, 1/4, 1/2, 1), so a Rookie rarely gets a hand up in time and a Legend nearly always does.
  */
 const AI = (() => {
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -22,10 +29,10 @@ const AI = (() => {
   /** The five difficulty levels: name, skill (0..1: reaction speed and shot accuracy), what it adds. */
   const LEVELS = [
     { name: 'ROOKIE', skill: 0.15, does: 'CHASES THE BALL AND SHOOTS WITHOUT MUCH AIM. SLOW AND OFTEN OFF TARGET.' },
-    { name: 'AMATEUR', skill: 0.35, does: 'ALSO JUMPS TO BLOCK YOUR SHOTS, AND AIMS STRAIGHTER.' },
+    { name: 'AMATEUR', skill: 0.35, does: 'DEFENDS TWICE AS WELL, AND AIMS STRAIGHTER.' },
     { name: 'PRO', skill: 0.55, does: 'ALSO DRIBBLES UPCOURT TO DUNK, PASSES WHEN CROWDED, AND PLAYS A RANDOM STYLE.' },
     { name: 'ALL-STAR', skill: 0.75, does: 'ALSO DRIBBLES IN RHYTHM, STEALS, AND TRIES FADEAWAYS AND LONG SHOTS FOR 2.' },
-    { name: 'LEGEND', skill: 0.95, does: 'ALSO SETS UP ALLEY-OOPS AND CLEAN PASSES. QUICK AND RARELY MISSES.' },
+    { name: 'LEGEND', skill: 0.95, does: 'ONLY SHOOTS PERFECT LINES, SETS UP ALLEY-OOPS, AND LOCKS DOWN THE RIM.' },
   ];
   /** Styles (level 3+): how much it likes each trick. 1 is the usual; the numbers scale its odds. */
   const STYLES = [
@@ -35,6 +42,20 @@ const AI = (() => {
   ];
   const BALANCED = { name: '', fade: 1, long: 1, pass: 1, block: 1, steal: 1, oop: 1 };
   const levelOf = T => clamp(Math.round(T.ai_level), 1, LEVELS.length);
+  /** How good its defence is, 0..1: it doubles with every level, 1/16 for a Rookie up to 1 for a Legend. */
+  const defenseOf = level => Math.pow(2, level - LEVELS.length);
+  /**
+   * One defensive roll per incident. `cond` says the incident is on (a shot is being cocked, a dunk is
+   * under way); the first step it is true the dice are thrown with chance `p`, and the answer stands
+   * until the incident ends. A yes also carries a reaction delay: the move waits until `at`.
+   * @returns {boolean} true once it has been decided yes and the reaction time has passed
+   */
+  function defend(c, w, kind, cond, p, lag) {
+    const r = c.rolls[kind] || (c.rolls[kind] = { on: false, go: false, at: 0 });
+    if (!cond) { r.on = false; return false; }
+    if (!r.on) { r.on = true; r.go = c.rng() < clamp(p, 0, 1); r.at = w.time + lag * c.rng(); }
+    return r.go && w.time >= r.at;
+  }
 
   /**
    * Make a controller for `team`.
@@ -45,7 +66,7 @@ const AI = (() => {
    */
   function create(team, rng, T, matchNo = 0) {
     const style = T && levelOf(T) >= 3 ? STYLES[(Math.floor(rng() * STYLES.length) + matchNo) % STYLES.length] : BALANCED;
-    return { team, rng, style, jump: false, bounce: false, wait: 0, holdT: 0, bholdT: 0, dribs: 0, aim: null };
+    return { team, rng, style, jump: false, bounce: false, wait: 0, holdT: 0, bholdT: 0, dribs: 0, aim: null, rolls: {} };
   }
 
   /** The player of its team nearest the ball. */
@@ -65,6 +86,12 @@ const AI = (() => {
    */
   function passHold(T, d) { return clamp(0.3 + d / 600, T.dribble_threshold + 0.05, 1) * T.bounce_charge_time; }
 
+  /** Whether some cock-back from here would give a perfect line (a coarse sweep of the preview). */
+  function perfectable(w, T, p) {
+    for (let ch = 0.3; ch <= 1.0001; ch += 0.025) if (Physics.previewShot(w, T, p, ch).perfect) return true;
+    return false;
+  }
+
   /**
    * Hold a cocked shot and let go at the right moment (see the header). `a` is the aim state:
    * `off` is where it means to cross relative to the rim's centre (a little off at low skill),
@@ -79,11 +106,20 @@ const AI = (() => {
       if (a.fade && !a.pressed && wrap(p.torso.angle) * dir > -0.25 && a.wait < 1.6) { a.wait += dt; c.jump = false; return c; }
       a.pressed = true; c.jump = true; return c;
     }
-    const pv = Physics.previewShot(w, T, p, hold.charge);
+    const pv = Physics.previewShot(w, T, p, hold.charge, level >= 5 ? 1 : 0);   // a Legend reads the line from where the ball will be when it leaves
+    const fading = p.sinceGround > 0.1 && (p.torso.velocity.x * dir < -T.fade_speed || wrap(p.torso.angle) * dir < -T.fade_lean);
+    if (level >= 5) {   // Legend: it lets go only on a line the preview calls perfect, and pumps out of one that never comes
+      if (a.abort) {    // the pump: bounce key down for a step, then both up, which dribbles the ball instead of shooting it
+        if (a.abort === 1) { a.abort = 2; c.jump = true; c.bounce = true; return c; }
+        c.aim = null; c.jump = false; c.bounce = false; c.wait = T.ai_react * 0.5; return c;
+      }
+      if (pv.perfect && pv.err >= -2 && (!a.fade || fading || a.t > 1.1)) { c.aim = null; c.jump = false; c.wait = T.ai_react * 0.3; return c; }
+      if ((hold.charge >= 0.995 || a.t > 2.4) && hold.barmed) { a.abort = 1; c.jump = true; return c; }
+      c.jump = true; return c;
+    }
     let release = hold.charge >= 0.995 || a.t > 2.4;
     if (!release && pv.err !== null && pv.err >= a.off - 3) {
       if (a.fade) {   // a fadeaway needs the body drifting or leaning away at the moment of release
-        const fading = p.sinceGround > 0.1 && (p.torso.velocity.x * dir < -T.fade_speed || wrap(p.torso.angle) * dir < -T.fade_lean);
         release = fading || a.t > 1.1;
       } else release = true;
     }
@@ -103,6 +139,9 @@ const AI = (() => {
   function update(c, w, T, dt, info) {
     const level = levelOf(T), skill = LEVELS[level - 1].skill, ball = w.ball, hold = w.hold, st = c.style;
     const react = T.ai_react * (1.6 - skill);   // seconds between fresh decisions
+    const def = defenseOf(level);                // 1/16 .. 1, doubling per level
+    const lag = 0.32 * (1 - def);                // a defender's reaction time, up to this long: nothing for a Legend
+    if (!(hold && hold.p.team !== c.team)) for (const k of ['swat', 'rim', 'contest', 'swipe']) delete c.rolls[k];   // the opponent lost the ball: the next incident is rolled fresh
     const tap = dt * 2;                          // a two-step press: a tap
     const behind = info ? info.score[1 - c.team] - info.score[c.team] : 0;   // points behind (negative: ahead)
     c.jump = false; c.bounce = false;
@@ -150,6 +189,13 @@ const AI = (() => {
       // (one dribble carries about 50-90 px, so it stops short of the zone and lets the sway do the last bit)
       if (level >= 3 && !longShot && !foeNear && gap > T.dunk_ground_x + 60 && c.dribs < maxDribs) { c.bounce = true; c.bholdT = tap; c.dribs++; return c; }
       if (level >= 3 && !inRange && !foeNear && c.dribs < maxDribs + 2) { c.bounce = true; c.bholdT = tap; c.dribs++; return c; }   // out of range: get closer first
+      // Legend takes only perfect lines: if none exists from here, work for one (dribble, wait for the swing),
+      // and past the shot clock's edge pass to the teammate rather than let the ball fire itself
+      if (level >= 5 && !perfectable(w, T, p)) {
+        if (c.dribs < maxDribs + 2 && !foeNear && gap > T.dunk_min_gap + 30) { c.bounce = true; c.bholdT = tap; c.dribs++; return c; }
+        if (hold.t > T.hold_max - 1.2 && mate) return passTo();
+        c.wait = react * 0.5; return c;
+      }
       // near or under the rim and not yet dunk-ready: no shot works from there, so wait for the swing to
       // carry it into the zone (the prompt then comes up and it taps); only give up after a couple of seconds
       if (level >= 2 && gap < T.dunk_ground_x + 60 && hold.t < 2.4 && !(far.err !== null && gap > T.dunk_ground_x + 20 && level < 3)) { c.wait = react * 0.5; return c; }
@@ -182,17 +228,20 @@ const AI = (() => {
       c.dribs = 0;
       const foe = hold.p;
       const gap = Math.min(...w.players.filter(q => q.team === c.team).map(q => Math.abs(q.torso.position.x - foe.torso.position.x)));
-      // level 2+: a dunk is coming at our rim: jump with a straight arm to meet it (a hand or the head on the ball swats it away)
-      if (level >= 2 && w.dunk && !w.dunk.slammed && w.dunk.p === foe) {
+      // Every move below is rolled once per incident at DEFENSE x its weight x the style's taste, then
+      // waits out a reaction delay: a Legend nearly always gets there, a Rookie seldom does.
+      const jumpUp = hold_ => { c.jump = true; c.holdT = hold_; return c; };
+      // a dunk is coming at our rim: jump with a straight arm to meet it (a hand or the head on the ball swats it away)
+      if (w.dunk && !w.dunk.slammed && w.dunk.p === foe) {
         const rimX = w.dunk.hoop.cx, cand = w.players.filter(q => q.team === c.team).sort((q1, q2) => Math.abs(q1.torso.position.x - rimX) - Math.abs(q2.torso.position.x - rimX))[0];
-        if (cand && Math.abs(cand.torso.position.x - rimX) < T.contest_range && c.rng() < (0.3 + skill * 0.6) * st.block) { c.jump = true; c.holdT = 0.32; return c; }
-      }
-      // level 3+: the carrier is closing on our rim and the dunk prompt is up: be under it, ready to jump
-      if (level >= 3 && hold.dunkReady && c.rng() < (0.2 + skill * 0.5) * st.block) { c.jump = true; c.holdT = 0.3; return c; }
-      // level 2+: a shot being cocked nearby: get up so we are in the air as it is let go
-      if (level >= 2 && hold.cocking && hold.charge > 0.4 && gap < 170 && c.rng() < (0.4 + skill * 0.5) * st.block) { c.jump = true; c.holdT = 0.3; return c; }
-      // level 4+: right next to the carrier: raise the arm to get a hand on the ball
-      if (level >= 4 && gap < 100 && c.rng() < 0.25 * st.steal) { c.jump = true; c.holdT = 0.22; return c; }
+        if (cand && Math.abs(cand.torso.position.x - rimX) < T.contest_range && defend(c, w, 'swat', true, def * 1.5 * st.block, lag)) return jumpUp(0.32);
+      } else delete c.rolls.swat;
+      // the carrier is closing on our rim and the dunk prompt is up: be under it, ready to jump
+      if (defend(c, w, 'rim', !!hold.dunkReady, def * 1.2 * st.block, lag)) return jumpUp(0.3);
+      // a shot being cocked nearby: get up so we are in the air as it is let go (it reaches further the better the defence)
+      if (defend(c, w, 'contest', hold.cocking && hold.charge > 0.4 && gap < 120 + 90 * def, def * 1.3 * st.block, lag)) return jumpUp(0.3);
+      // right next to the carrier: raise the arm to get a hand on the ball
+      if (defend(c, w, 'swipe', gap < 60 + 50 * def, def * 0.7 * st.steal, lag)) return jumpUp(0.22);
     }
 
     // ---- free ball, or closing down the carrier: hop toward it on the swing
@@ -203,10 +252,10 @@ const AI = (() => {
     if (!p) return c;
     const s = Math.sign(target - p.torso.position.x) || 1, a = wrap(p.torso.angle);
     const highBall = !hold && ball.position.y < w.floorY - 220 && Math.abs(ball.position.x - p.torso.position.x) < 140;
-    if (highBall) { c.jump = true; c.holdT = 0.32; return c; }                  // a full jump for a high ball
+    if (defend(c, w, 'board', !!highBall, 0.3 + 0.7 * def, lag)) { c.jump = true; c.holdT = 0.32; return c; }   // a full jump for a high ball
     const leaningToward = a * s > 0.22 && p.sinceFoot < 0.1;                    // the swing is tipping toward it
     if (leaningToward) { c.jump = true; c.holdT = 0.06 + c.rng() * 0.08; return c; }
-    c.wait = react * 0.25;
+    c.wait = (hold ? T.ai_react * (1.7 - 1.5 * def) : react) * 0.25;   // closing a carrier down: quicker the better the defence
     return c;
   }
 

@@ -418,7 +418,7 @@ function levelClick(x, y) {
 
 // ---- Settings menu: every coefficient in config.js, by section ----------------------------
 const SET_ADV = { x: 120, y: 150, w: 1040, rowH: 28, show: 15, sliderX: 760, sliderW: 340 };
-const SET_SIMPLE = { x: 160, y: 150, w: 960, rowH: 38, show: 11, sliderX: 650, sliderW: 330 };
+const SET_SIMPLE = { x: 160, y: 150, w: 960, rowH: 35, show: 12, sliderX: 650, sliderW: 330 };
 let settingsAdvanced = false, SET = SET_SIMPLE;   // opens on the short, plain list; ADVANCED shows every coefficient
 let settingsRows = Settings.rows(true), settingsSel = 0, settingsTop = 0, settingsFrom = 'title', repeatT = 0;
 function setSettingsMode(adv) { settingsAdvanced = adv; SET = adv ? SET_ADV : SET_SIMPLE; settingsRows = Settings.rows(!adv); settingsSel = adv ? 1 : 0; settingsTop = 0; }
