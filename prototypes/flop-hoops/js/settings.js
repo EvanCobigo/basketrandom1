@@ -17,7 +17,7 @@ const Settings = (() => {
     ['CPU OPPONENT', k => k.startsWith('ai_')],
     ['JUMPING AND MOVING', k => k.startsWith('jump_') || ['hop_reach', 'coyote_time', 'spread_distance', 'spread_push', 'hustle_gap', 'hustle_jump'].includes(k)],
     ['CATCHING', ['regrab_delay', 'palm_offset', 'belly_margin', 'hand_box', 'steal_guard', 'strip_speed', 'block_window', 'block_pop']],
-    ['SHOOTING', k => k.startsWith('shot_') || k.startsWith('fade_') || k === 'hold_max'],
+    ['SHOOTING', k => k.startsWith('shot_') || k.startsWith('fade_')],
     ['DUNKS', k => k.startsWith('dunk_')],
     ['PASSING AND DRIBBLING', k => k.startsWith('bounce_') || k.startsWith('pass_') || k.startsWith('dribble_')],
     ['TRAILS', k => k.startsWith('perfect_') || k.startsWith('trail_') || k === 'soft_touch'],

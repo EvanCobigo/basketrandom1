@@ -939,7 +939,7 @@ const Physics = (() => {
       if ((h.dunkReady || h.wasReady) && k && !h.prevK && startDunk(w, T, hoop)) return;
       h.wasReady = h.dunkReady;
       h.prevK = k;
-      if ((h.cocking && !k) || h.t > T.hold_max) { shoot(w, T); return; }
+      if (h.cocking && !k) { shoot(w, T); return; }
       for (const q of w.players) { // a defender's hand box over the held ball: stolen
         if (q.team === p.team || h.t < T.steal_guard || !canCatch(q)) continue;
         if (shareInHandBox(q, ball, T) > 0.5) { grab(w, q, T, 'steal', held[q.team]); return; }

@@ -13,6 +13,7 @@ window.CONFIG = {
   ai_level: { value: 3, min: 1, max: 5, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend (what each does is in js/ai.js)
   ai_react: { value: 0.18, min: 0.02, max: 0.6, step: 0.01 },      // CPU: s between fresh decisions at the middle level
   ai_error: { value: 0.35, min: 0, max: 1, step: 0.05 },          // CPU: how far its shot power can be off, at the lowest level
+  ai_roles: { value: 1, min: 0, max: 2, step: 0.1 },              // CPU: team roles by court position: the front man drives closer, the back man shoots from range (0 off, 1 default, 2 strong)
   game_speed: { value: 0.9, min: 0.3, max: 1.2, step: 0.02 }, // physics steps per real step: below 1 is slower
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   replay_clips: { value: 5, min: 0, max: 10, step: 1 },           // best moments shown in the replay after a match (0 = none)
@@ -41,7 +42,6 @@ window.CONFIG = {
   belly_margin: { value: 6, min: 0, max: 30, step: 1 },          // px the abdomen catch reaches past the torso
   hand_box: { value: 78, min: 20, max: 120, step: 2 },          // px side of the square catch box around each hand
   shot_charge_time: { value: 1.0, min: 0.2, max: 2.5, step: 0.05 }, // s of holding to reach full shot power
-  hold_max: { value: 4, min: 1, max: 6, step: 0.1 },          // s a ball can be held before it fires itself
   shot_vx_min: { value: 3.5, min: 0, max: 15, step: 0.5 },      // px/step forward speed on a quick release
   shot_vx_max: { value: 14, min: 4, max: 24, step: 0.5 },       // px/step forward speed fully cocked
   shot_vy_min: { value: 11, min: 4, max: 20, step: 0.5 },       // px/step upward speed on a quick release
