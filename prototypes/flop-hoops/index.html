@@ -267,6 +267,11 @@ function onPhysEvent(ev) {
   if (ev.type === 'cut') { puff(ev.x, ev.y - 4, 5, { speed: 140, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 16 }); events.push({ type: 'cut', team: ev.team }); return; }
   if (ev.type === 'dunkstart' && ev.putback) { sfx.grab(); callout('PUTBACK!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 18, { speed: 360, life: 0.6, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 500, drag: 0.92 }); events.push({ type: 'dunkstart', team: ev.team, style: ev.style, putback: true }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout(ev.giveGo ? 'GIVE-AND-GO!' : 'ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop, giveGo: !!ev.giveGo }); return; }
+  if (ev.type === 'dunk') {   // the slam: an impact ring at the rim, a burst of chalk dust, and the view punches in for a moment
+    state.rings = (state.rings || []).concat([{ x: ev.x, y: ev.y, r: 6, max: ev.oop || ev.giveGo ? 150 : 110, t: 0, life: 0.3 }]);
+    puff(ev.x, ev.y + 30, 10, { speed: 200, angle: Math.PI / 2, cone: 2.2, life: 0.5, colors: ['#ffffff', '#e8e2d6'], size: 7, g: 200, drag: 0.9 });
+    state.zoom = { x: ev.x, y: ev.y, t: 0.28, max: 0.28, k: ev.oop || ev.giveGo || ev.putback ? 0.08 : 0.05 };
+  }
   if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
     sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
@@ -458,6 +463,7 @@ function updateJuice(dt) {
   for (const f of state.floats) { f.t -= dt; f.y -= 46 * dt; }
   if (state.rings) { for (const r of state.rings) { r.t += dt; r.r = r.max * (1 - Math.pow(1 - Math.min(1, r.t / r.life), 3)); } state.rings = state.rings.filter(r => r.t < r.life); }
   if (state.blastFlash > 0) state.blastFlash = Math.max(0, state.blastFlash - dt);
+  if (state.zoom && state.zoom.t > 0) state.zoom.t = Math.max(0, state.zoom.t - dt);
   state.floats = state.floats.filter(f => f.t > 0);
   if (state.dribble) { state.dribble.t -= dt; if (state.dribble.t <= 0) state.dribble = null; }
   if (world && world.flash) world.flash.t = Math.max(0, world.flash.t - dt);
@@ -557,6 +563,10 @@ function drawCourt(fn, snap = true) {
   if (snap) snapToPalette(pctx, pw, ph);
   ctx.save(); ctx.imageSmoothingEnabled = false;
   if (state.shake > 0) ctx.translate(Math.round(Math.sin(state.t * 91) * state.shake / ps) * ps, Math.round(Math.cos(state.t * 77) * state.shake * 0.6 / ps) * ps);
+  if (state.zoom && state.zoom.t > 0) {   // a slam's punch-in: scaled about the rim, easing back out
+    const z = state.zoom, k = 1 + z.k * Math.sin(Math.PI * (1 - z.t / z.max));
+    ctx.translate(z.x, z.y); ctx.scale(k, k); ctx.translate(-z.x, -z.y);
+  }
   ctx.fillStyle = '#14111f'; ctx.fillRect(-50, -50, W + 100, H + 100);
   ctx.drawImage(pix, 0, 0, pw * ps, ph * ps);
   ctx.restore(); ctx.imageSmoothingEnabled = true;

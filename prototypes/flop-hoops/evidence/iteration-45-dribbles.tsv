@@ -1,0 +1,7 @@
+# CPU dribble endings, 10 seeds x 90 s vs tools/ai-ref.js (tools/ai-dribbles.js): own = caught back by the dribbler (chains included), foe = stolen, loose = got away
+L2 iteration 44: 222 {'other': 16, 'own': 138, 'foe': 63, 'mate': 5}
+L2 iteration 45: 138 {'other': 11, 'own': 78, 'foe': 45, 'mate': 4}
+L4 iteration 44: 160 {'own': 110, 'foe': 37, 'other': 7, 'loose': 1, 'mate': 3}
+L4 iteration 45: 61 {'foe': 13, 'own': 45, 'other': 1, 'mate': 2}
+L6 iteration 44: 151 {'foe': 37, 'mate': 13, 'own': 81, 'other': 15, 'loose': 5}
+L6 iteration 45: 92 {'own': 67, 'mate': 7, 'other': 4, 'foe': 10, 'loose': 3}

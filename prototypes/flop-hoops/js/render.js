@@ -205,7 +205,7 @@ const Render = (() => {
   function hoopFront(ctx, h, t) {
     const sway = Math.sin(t * 18) * 5 * h.sway + Math.sin(t * 30) * 3 * h.wobble;
     const top1 = h.x1 + 4, top2 = h.x2 - 4, inset = (top2 - top1) * 0.2;
-    const b1 = top1 + inset + sway, b2 = top2 - inset + sway, depth = 54 + h.sway * 6;
+    const b1 = top1 + inset + sway, b2 = top2 - inset + sway, depth = 54 + h.sway * 6 + (h.flex || 0) * 14;
     ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(3, CONFIG.pixel_size.value * 1.2); // at least one art pixel wide
     ctx.beginPath();
     const n = 3;
@@ -217,7 +217,7 @@ const Render = (() => {
     }
     ctx.moveTo(b1, h.rimY + depth); ctx.lineTo(b2, h.rimY + depth);
     ctx.stroke();
-    const dy = Math.sin(t * 40) * 2 * h.wobble, rx = (h.x2 - h.x1) / 2;
+    const dy = Math.sin(t * 40) * 2 * h.wobble + (h.flex || 0) * 8, rx = (h.x2 - h.x1) / 2;   // (flex: bent down by a slam, springing back)
     const heat = h.gleam !== undefined && h.gleam !== null ? 1 : h.heat || 0;
     const rim = () => { ctx.beginPath(); ctx.ellipse(h.cx, h.rimY + dy, rx, 6, 0, 0, Math.PI); };
     if (heat > 0.4) {   // a red-hot rim glows, pulsing faster the hotter it gets
@@ -298,9 +298,11 @@ const Render = (() => {
 
   // ---- Ball -----------------------------------------------------------------------------
   /** The squircle ball with its seams. */
-  function ball(ctx, x, y, r, a, withShadow = true) {
+  function ball(ctx, x, y, r, a, withShadow = true, squash = 0) {
     if (withShadow) shadow(ctx, x, y, r);
-    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    ctx.save(); ctx.translate(x, y + squash * r * 0.5);
+    if (squash) ctx.scale(1 + squash, 1 - squash);   // squashed flat where it meets the floor (or the slam drives it down)
+    ctx.rotate(a);
     const e = CONFIG.ball_shape.value;
     squirclePath(ctx, r, e); ink(ctx, '#e8591a', Math.max(4, r * 0.18));
     squirclePath(ctx, r - 1, e); ctx.save(); ctx.clip();
@@ -395,7 +397,17 @@ const Render = (() => {
       player(ctx, p, al, w.S.kits[p.team]);
     }
     if (w.trail) trail(ctx, w.trail, r, t);
-    ball(ctx, B.x, B.y, r, B.a);
+    if (w.dunk && w.dunk.ghosts) {   // a dunk in the air: the ball's afterimages and a swoosh through them, in the dunker's colour
+      const G = w.dunk.ghosts, col = TEAM_COLORS[w.dunk.p.team];
+      ctx.lineCap = 'round'; ctx.strokeStyle = col; ctx.globalAlpha = 0.8; ctx.lineWidth = r * 1.3;
+      ctx.beginPath(); G.forEach((g, i) => i ? ctx.lineTo(g.x, g.y) : ctx.moveTo(g.x, g.y)); ctx.lineTo(B.x, B.y); ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.9; ctx.lineWidth = r * 0.45; ctx.stroke(); ctx.lineCap = 'butt';
+      G.forEach((g, i) => { ctx.globalAlpha = 0.25 + 0.45 * i / G.length; ball(ctx, g.x, g.y, r * (0.8 + 0.2 * i / G.length), B.a, false); });
+      ctx.globalAlpha = 1;
+    }
+    const nearFloor = B.y + r > F() - 5, vy = w.ball.velocity.y;
+    const sq = nearFloor && !w.hold ? Math.min(0.3, Math.abs(vy) * 0.035) : 0;
+    ball(ctx, B.x, B.y, r, B.a, true, sq);
     if (w.flash && w.flash.t > 0) { // pickup flash: four blocks spinning out from the ball
       const k = 1 - w.flash.t / 0.25, d = r + 6 + k * 18;
       ctx.fillStyle = '#ffffff';

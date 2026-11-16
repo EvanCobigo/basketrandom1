@@ -874,6 +874,7 @@ const Physics = (() => {
     d.t += dt; d.steps++; d.topY = Math.min(d.topY === undefined ? 1e9 : d.topY, t.position.y);
     const g = gravityPx(w), keep = 1 - t.frictionAir;
     const slot = d.plan ? d.plan.slot : { x: h.cx, y: h.rimY - r - T.dunk_slot };
+    if (!d.slammed && d.steps % 2 === 0) { (d.ghosts || (d.ghosts = [])).push({ x: ball.position.x, y: ball.position.y }); if (d.ghosts.length > 7) d.ghosts.shift(); }
     if (!d.slammed) {
       // opponents: a hand or the head on the ball swats it away
       for (const q of w.players) {
@@ -925,7 +926,7 @@ const Physics = (() => {
         release(w, T, 0.35);
         Body.setVelocity(ball, { x: clamp((h.cx - ball.position.x) * 0.5, -5, 5), y: T.dunk_speed });
         ball.shot = { team: p.team, t: w.time, kind: 'dunk', style: d.style, oop: d.oop, giveGo: d.giveGo, putback: d.putback, by: p.idx, dir, clean: true };
-        d.slammed = true; d.hangT = 0; h.wobble = 2; p.windSpin = null;
+        d.slammed = true; d.hangT = 0; h.wobble = 2; h.flex = 1; p.windSpin = null; d.ghosts = null;   // (the rim bends down under the slam)
         if (d.hang) {   // hang by the hand: a pin from the hand to the rim (a honey dip puts the forearm inside the basket)
           const hp = d.style === 'elbow' ? { x: h.cx + dir * 0, y: h.rimY + 8 } : { x: h.frontX, y: h.rimY };
           const aa = p.arm.angle, tip = p.dims.armL / 2;
@@ -948,6 +949,7 @@ const Physics = (() => {
     }
     // after the slam: hanging on the rim, swaying, then letting go
     d.hangT += dt;
+    if (d.hang) p.legs.forEach((l, i) => Body.setAngularVelocity(l, l.angularVelocity + Math.sin(d.hangT * 13 + i * Math.PI) * 0.035));   // hanging on: the legs swing
     if (d.hang) { h.wobble = Math.max(h.wobble, 0.5); p.slamRel = armToward(p, h.frontX, h.rimY); }
     const hangFor = d.hang ? T.dunk_rim_hang * (d.style === 'elbow' ? 1.2 : 1) : T.dunk_hang;
     if (d.hangT >= hangFor) endDunk(w);
@@ -1167,7 +1169,7 @@ const Physics = (() => {
         Body.setVelocity(ball, { x: ball.velocity.x * 0.86, y: ball.velocity.y * 0.96 });
         h.sway = Math.min(1.5, h.sway + 0.12);
       }
-      h.wobble *= 0.93; h.sway *= 0.95;
+      h.wobble *= 0.93; h.sway *= 0.95; h.flex = (h.flex || 0) * 0.88;
     }
   }
 

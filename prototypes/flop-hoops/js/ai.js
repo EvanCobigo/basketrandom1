@@ -368,7 +368,29 @@ const AI = (() => {
   function nearestFoe(w, team, x) { return nearest(w, 1 - team, x); }
 
   /** A pump (a dribble out of a cocked shot) is allowed: dribbles left in the budget, not sitting, not under its own rim. */
-  function canPump(c, X, p) { return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x); }
+  function canPump(c, X, p) { return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x) && (X.level < 3 || dribbleRisk(c, X, p) < 0.5); }
+
+  /**
+   * How likely a dribble from here is to be taken, 0..1: the dribble's own flight (its speed out of the hand, as bounce() throws
+   * it, from the way the body leans) flown out for 28 steps, against each defender: a defender whose body is within 55 px of
+   * where the ball goes is in the way (1), within 100 px could reach it with a step or a jump (0.5), and one already in the air
+   * coming down near it counts double. The lower levels read it less well (scaled by skill).
+   */
+  function dribbleRisk(c, X, p) {
+    const { w, T } = X, b = w.ball, dir = p.dir, steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);
+    const sx = dir * (0.45 + 0.55 * Math.max(0, steer * dir));
+    const path = Physics.pathFrom(w, T, b.position.x, b.position.y, T.dribble_vx * (sx + 0.25 * dir), T.dribble_vy, 28);
+    let risk = 0;
+    for (const f of w.players) {
+      if (f.team === c.team) continue;
+      const fx = f.torso.position.x, air = f.sinceGround > 0.1 && f.torso.velocity.y > 0;
+      let near = 1e9;
+      for (const q of path) near = Math.min(near, Math.abs(q.x - fx));
+      const r = near < 55 ? 1 : near < 100 ? 0.5 : 0;
+      risk = Math.max(risk, Math.min(1, r * (air ? 2 : 1)));
+    }
+    return risk * (0.4 + 0.6 * X.skill);
+  }
 
   /**
    * Where a floor pass (bounce key held for `ch` of bounce_charge_time) thrown from the held ball now comes back down:
@@ -615,6 +637,7 @@ const AI = (() => {
       // dribbles of mine lost near a defender: dribbling into one is worth less (learned)
       const dl = c.dribRec, lossRate = dl.n ? dl.lost / dl.n : 0;
       if (foeClose) u -= 0.5 * lossRate * conf(dl.n / 3) * learnOf(X) * (foeNear ? 1 : 0.5);
+      u -= dribbleRisk(c, X, p) * (level >= 3 ? 0.6 : 0.3);                                  // (a dribble into a defender's hands: it reads the path first)
       add('dribble', u, () => { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; say(c, gap > zone + 160 ? 'DRIBBLING UPCOURT FOR A DUNK' : 'DRIVING TO THE RIM'); return c; }, 'DRIB', 24);
     }
 
@@ -1163,7 +1186,7 @@ const AI = (() => {
     const lb = w.lastBouncer;
     if (!hold && lb && lb.team === c.team && lb.dribbleT > 0) {
       // past the budget it mostly catches it and thinks again (a taste, not a cap)
-      const keepOn = (X.atk.cx - lb.torso.position.x) * lb.dir > T.dunk_ground_x && c.dribs < maxDribsOf(level) && !lb.queued && c.dribs < c.budget;   // (the hard cap)
+      const keepOn = (X.atk.cx - lb.torso.position.x) * lb.dir > T.dunk_ground_x && c.dribs < maxDribsOf(level) && !lb.queued && c.dribs < c.budget && (level < 3 || dribbleRisk(c, X, lb) < 0.75);   // (the hard cap; and not on into a defender)
       // level 4+ taps in rhythm, as the ball rises (a slip taps it on the way down: a sloppy one); below that it taps whenever
       if (keepOn && (level >= 4 ? ball.velocity.y < -0.5 || (ball.velocity.y > 0.5 && slip(c, X, 0.08)) : c.rng() < 0.12)) { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; }
       // a screen: from level 4, with the ball up, the teammate hops toward the defender to cut him off from the carrier
