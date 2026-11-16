@@ -1,0 +1,14 @@
+switched_off	level	own	allowed	net	net_vs_all_on	shots	cpuMade	holdAvg	stall
+none (all on)	3	129	147	-18	0	227	52	0.46	0.2
+none (all on)	4	123	175	-52	0	154	47	0.47	0.7
+none (all on)	5	179	91	88	0	222	67	0.48	1.1
+abNoLearn	3	125	154	-29	-11	226	50	0.47	0
+abNoLearn	4	130	178	-48	4	158	49	0.48	0.5
+abNoLearn	5	195	94	101	13	230	75	0.48	1
+abNoCommit	3	135	145	-10	8	218	54	0.46	0.4
+abNoCommit	4	122	178	-56	-4	155	45	0.47	0.6
+abNoCommit	5	183	91	92	4	227	69	0.48	1
+abNoHesitate	3	138	127	11	29	232	53	0.42	0.4
+abNoOpen	3	134	135	-1	17	240	53	0.47	0.1
+abNoOpen	4	117	192	-75	-23	156	44	0.47	0.6
+abNoOpen	5	175	101	74	-14	222	63	0.47	1.1
