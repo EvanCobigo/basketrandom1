@@ -1,0 +1,11 @@
+# long-shot defence, 12 seeds x 90 s per level vs tools/ai-ref.js (tools/ai-longd.js): before = iteration 42, after = iteration 43
+## before
+L3 pts cpu 40 - opp 50 | LONG 34 shots, 13 made (38%), 5 perfect, 23 contested, 1 blocked | NEAR 33 shots, 10 made (30%), 1 perfect, 30 contested, 2 blocked | closeouts 0
+L4 pts cpu 49 - opp 62 | LONG 56 shots, 23 made (41%), 9 perfect, 27 contested, 3 blocked | NEAR 17 shots, 6 made (35%), 3 perfect, 14 contested, 3 blocked | closeouts 0
+L5 pts cpu 68 - opp 41 | LONG 27 shots, 13 made (48%), 4 perfect, 9 contested, 0 blocked | NEAR 3 shots, 0 made (0%), 0 perfect, 3 contested, 0 blocked | closeouts 0
+L6 pts cpu 63 - opp 49 | LONG 31 shots, 16 made (52%), 7 perfect, 15 contested, 2 blocked | NEAR 1 shots, 0 made (0%), 0 perfect, 1 contested, 0 blocked | closeouts 0
+## after
+L3 pts cpu 56 - opp 50 | LONG 45 shots, 16 made (36%), 6 perfect, 25 contested, 3 blocked | NEAR 36 shots, 12 made (33%), 2 perfect, 34 contested, 4 blocked | closeouts 18
+L4 pts cpu 42 - opp 51 | LONG 56 shots, 21 made (38%), 8 perfect, 29 contested, 4 blocked | NEAR 21 shots, 3 made (14%), 0 perfect, 14 contested, 1 blocked | closeouts 122
+L5 pts cpu 81 - opp 31 | LONG 23 shots, 7 made (30%), 3 perfect, 9 contested, 1 blocked | NEAR 6 shots, 3 made (50%), 0 perfect, 5 contested, 0 blocked | closeouts 66
+L6 pts cpu 81 - opp 34 | LONG 22 shots, 10 made (45%), 4 perfect, 7 contested, 0 blocked | NEAR 4 shots, 2 made (50%), 0 perfect, 1 contested, 0 blocked | closeouts 72

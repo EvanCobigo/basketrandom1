@@ -162,7 +162,7 @@ const AI = (() => {
       tick: 0, intent: '', intentAt: -99, intentSeen: -99, plan: null, press: 0, err: 0, looseOn: false, qCache: null,
       // tactical memory: what the opponent does, how they fare pressed or left open, and how my own plays fare
       profile: { shots: 0, longShots: 0, dunks: 0, passes: 0, dribbles: 0, shotDist: 0, drive: 0, side: 0, pressed: { att: 0, made: 0 }, open: { att: 0, made: 0 } },
-      mine: { shot: { att: 0, made: 0 }, long: { att: 0, made: 0 }, fade: { att: 0, made: 0 }, dunk: { att: 0, made: 0 }, lob: { att: 0, made: 0 } }, lobPend: null, clears: 0, clearing: 0, fakeFoe: null, fakeUp: false,
+      mine: { shot: { att: 0, made: 0 }, long: { att: 0, made: 0 }, fade: { att: 0, made: 0 }, dunk: { att: 0, made: 0 }, lob: { att: 0, made: 0 } }, lobPend: null, scout: {}, mineP: {}, closeout: null, fqCache: null, hesitated: -1, clears: 0, clearing: 0, fakeFoe: null, fakeUp: false,
       // how the opponent answers a cocked shot (how often a defender jumps at it early) and how its own fakes fare
       foeReact: { cocks: 0, jumps: 0 }, fakes: { fakes: 0, shots: 0, made: 0 }, afterFake: -999, fakeAt: -999,
       seen: {}, pending: null, myPending: null, myDunk: null, dbg: {}, threat: null,
@@ -298,6 +298,7 @@ const AI = (() => {
     if (c.pending && ball.shot !== c.pending.shot) {
       const pd = c.pending, made = score[X.foeTeam] > pd.score, bucket = pd.pressed ? prof.pressed : prof.open;
       bucket.att++; if (made) bucket.made++;
+      if (pd.band !== undefined) { const sc = c.scout[pd.band] || (c.scout[pd.band] = { att: 0, made: 0, perfect: 0 }); sc.att++; if (made) { sc.made++; if (pd.shot.perfect) sc.perfect++; } }
       // pressure that is working (they shoot worse pressed) is turned up a little; pressure that is not is eased off
       const pr = prof.pressed, op = prof.open;
       if (pr.att >= (X.m6 ? 2 : 3) && op.att >= (X.m6 ? 1 : 2)) {
@@ -312,7 +313,8 @@ const AI = (() => {
       prof.shotDist = prof.shots === 1 ? dist : lerp(prof.shotDist, dist, 0.25);
       if ((sh.fromX - w.cx) * sh.dir < 0) prof.longShots++;
       const pressed = w.players.some(q => q.team === c.team && Math.abs(q.torso.position.x - sh.fromX) < 130);
-      c.pending = { shot: sh, pressed, score: score[X.foeTeam] };
+      // the scouting record: their long shots by distance from our rim, in 100 px bands
+      c.pending = { shot: sh, pressed, score: score[X.foeTeam], band: (sh.fromX - w.cx) * sh.dir < 0 ? Math.floor(dist / 100) : undefined };
     }
     if (w.dunk && w.dunk.p.team !== c.team && w.dunk !== s.dunk) { s.dunk = w.dunk; prof.dunks++; }
     if (w.pass && w.pass.team !== c.team && w.pass !== s.pass) { s.pass = w.pass; prof.passes++; }
@@ -327,6 +329,7 @@ const AI = (() => {
     if (c.myPending && ball.shot !== c.myPending.shot) {
       const mp = c.myPending, rec = c.mine[mp.kind], gotIt = score[c.team] > mp.score;
       rec.att++; if (gotIt) rec.made++;
+      const k2 = mp.kind + (mp.pressed ? ':p' : ':o'), r2 = c.mineP[k2] || (c.mineP[k2] = { att: 0, made: 0 }); r2.att++; if (gotIt) r2.made++;
       if (mp.bait) { c.fakes.shots++; if (gotIt) c.fakes.made++; }
       c.myPending = null;
     }
@@ -337,7 +340,8 @@ const AI = (() => {
     if (sh && sh.team === c.team && sh.kind !== 'dunk' && !sh.lob && sh !== s.myShot) {
       s.myShot = sh;
       const kind = sh.kind === 'fade' ? 'fade' : (sh.fromX - w.cx) * sh.dir < 0 ? 'long' : 'shot';
-      c.myPending = { shot: sh, kind, score: score[c.team], bait: c.tick - c.afterFake < 150 };   // a shot soon after a pump fake
+      const pressedMe = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - sh.fromX) < 130);
+      c.myPending = { shot: sh, kind, score: score[c.team], bait: c.tick - c.afterFake < 150, pressed: pressedMe };   // a shot soon after a pump fake
     }
     if (w.dunk && w.dunk.p.team === c.team && w.dunk !== s.myDunk) { s.myDunk = w.dunk; c.myDunk = { score: score[c.team], d: w.dunk }; if (c.tick - c.selfCaughtAt < 150) c.selfStats.dunks++; }
     if (c.myDunk && w.dunk !== c.myDunk.d) { c.mine.dunk.att++; if (score[c.team] > c.myDunk.score) c.mine.dunk.made++; c.myDunk = null; }
@@ -452,7 +456,8 @@ const AI = (() => {
       return c;
     }
     // the bait: a defender near has jumped at a shot not yet let go. Pump (a dribble tap), let him land, then shoot.
-    const jumper = w.players.some(q => q.team !== c.team && q.sinceGround > 0.12 && Math.abs(q.torso.position.x - p.torso.position.x) < 190);
+    const jumper = w.players.some(q => q.team !== c.team && ((q.sinceGround > 0.12 && Math.abs(q.torso.position.x - p.torso.position.x) < 190)
+      || (level >= 3 && Math.abs(q.torso.position.x - p.torso.position.x) < 150 && (p.torso.position.x - q.torso.position.x) * q.torso.velocity.x > 0 && Math.abs(q.torso.velocity.x) > 3)));   // (or a closer flying at it)
     if (jumper && !a.sawJump) { a.sawJump = true; c.foeReact.jumps++; }
     // ...or, to make room, it pumps first with a defender right on it, so he jumps at a shot that is not coming
     const closeFoe = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - p.torso.position.x) < 110);
@@ -561,12 +566,20 @@ const AI = (() => {
       c.dribs = 0;
       return aimStep(c, X);
     };
+    // what a shot is worth, from what it has seen: its own record of this kind of shot open or pressed, blended over the prior
+    // by how much it has seen (level 3+; a lower level goes by feel)
+    const learned = (kind, prior) => {
+      const r = c.mineP[kind + (foeNear ? ':p' : ':o')];
+      if (level < 3 || !r || !r.att) return prior;
+      return lerp(prior, r.made / r.att, conf(r.att, X.K + 2) * learnOf(X) * 0.7);
+    };
     if (takesShot) {
-      const pS = pBase * (1 - 0.3 * press);   // (pressure costs a shot less than it did: it shoots through a defender more readily)
+      const pS0 = pBase * (1 - 0.3 * press);
+      const pS = learned(ownHalf ? 'long' : 'shot', pS0);   // (pressure costs a shot less than it did: it shoots through a defender more readily)
       if (ownHalf) {
-        const openLong = level >= 5 && q >= 1 && near(p) > 200 ? 0.15 : 0;   // a Legend or Mythic left open out there takes the two
+        const openLong = q >= 1 && near(p) > 200 ? (level >= 5 ? 0.15 : level >= 3 ? 0.08 : 0) : 0;   // left open out there, it takes the two
         const bonus = 0.2 * (st.range - 1) + (sit.behind >= 2 ? 0.15 : 0) + form(c, 'long', X.K) * 0.3 * learnOf(X) + (foeClose ? -0.1 : 0) + openLong;
-        add('long', 0.1 + X.W.shot * pS * pts + bonus + urgS + (role < 0 ? roleTilt : 0), startAim('long', 'TAKING A LONG SHOT FOR 2'), 'LONG');
+        add('long', 0.1 + X.W.shot * pS * pts + bonus + urgS + (role < 0 ? roleTilt : 0), startAim('long', openLong ? 'OPEN: TAKING THE TWO' : 'TAKING A LONG SHOT FOR 2'), 'LONG');
       } else {
         add('shot', 0.1 + X.W.shot * pS * pts + form(c, 'shot', X.K) * 0.3 * learnOf(X) + (screened ? 0.1 : 0) + (baited ? 0.35 : 0) + urgS + (role < 0 ? roleTilt : 0) + (rimHome ? 0.05 : 0), startAim('shot', 'GOING UP FOR A JUMP SHOT'), 'SHOT');
       }
@@ -575,7 +588,7 @@ const AI = (() => {
       const front = foes.map(f => (f.torso.position.x - px) * dir).filter(d => d > -10 && d < 150);
       const room = (px - X.dfn.cx) * dir > T.ai_fade_room;
       if (level >= 3 && front.length && room && Xd < 700) {
-        const pF = pBase * (1 - 0.2 * press) * 0.92, onIt = Math.min(...front) < 110;
+        const pF = learned('fade', pBase * (1 - 0.2 * press) * 0.92), onIt = Math.min(...front) < 110;
         add('fade', 0.1 + X.W.shot * pF * pts + 0.18 * (st.flash - 1) + (level >= 5 && !onIt ? 0 : 0.1) + (baited ? 0.35 : 0) + form(c, 'fade', X.K) * 0.3 * learnOf(X) + urgS, startAim('fade', 'FADING AWAY FROM THE DEFENDER'), 'FADE');
       }
     }
@@ -728,7 +741,10 @@ const AI = (() => {
     // past its budget, say: that is how iteration 28 stalled, and how this one did at seed 128 before this line):
     // it takes the best thing that is not waiting
     if (best.name === 'wait' && hold.t > patience + 0.5) best = ops.find(o => o.name !== 'wait') || best;
-    c.plan = { name: best.name, until: c.tick + best.minTicks };
+    // a person commits: a choice is held a while (longer at levels 3-4), and a Pro with two near-equal options hesitates a moment first
+    c.plan = { name: best.name, until: c.tick + best.minTicks + (level === 3 ? 14 : level === 4 ? 10 : level === 5 ? 6 : 0) };
+    const second = ops.find(o => o !== best);
+    if (level === 3 && second && best.u - second.u < L.noise * 0.5 && c.hesitated !== hold && hold.t < 1.5) { c.hesitated = hold; c.wait = 0.12; say(c, 'THINKING IT OVER'); return c; }
     return best.run();
   }
 
@@ -765,6 +781,44 @@ const AI = (() => {
     const mateAhead = mate && (mate.torso.position.x - fx) * dir > 40;
     th.pass = hold.bouncing && hold.bcharge >= T.dribble_threshold ? 1 : clamp(0.1 + tn.passShare * tn.cPass * 0.5 + (crowded && mateAhead ? 0.25 : 0), 0, 0.7);
     return th;
+  }
+
+  /** What a shot from where THEY stand could be (the same sweep as quality(), run on the carrier): it sees the lines they see. */
+  function foeQuality(c, w, T, foe) {
+    if (c.fqCache && c.fqCache.tick > c.tick - 4 && c.fqCache.p === foe) return c.fqCache;
+    let q = 0;
+    for (let ch = 0.3; ch <= 1.0001; ch += 0.05) { const v = Physics.previewShot(w, T, foe, ch); if (v.perfect) { q = 2; break; } if (v.onTarget) q = 1; }
+    c.fqCache = { tick: c.tick, p: foe, q };
+    return c.fqCache;
+  }
+
+  /**
+   * The long-shot threat (level 3+): the carrier is in his own half (a basket from there is worth two). How dangerous a shot
+   * from here is: the line he has (perfect 1, on target 0.6), plus what the scouting record says of this distance (how many
+   * of his long shots from it went in), trusted by how much it has seen and how much this level learns. 0..1.5.
+   */
+  function longThreat(c, X, foe) {
+    const { w, T, dfn, level } = X;
+    if (level < 3 || (foe.torso.position.x - w.cx) * foe.dir >= 0) return 0;
+    const fq = foeQuality(c, w, T, foe).q, dist = Math.abs(foe.torso.position.x - dfn.cx), sc = c.scout[Math.floor(dist / 100)];
+    let tv = fq === 2 ? 1 : fq === 1 ? 0.6 : 0;
+    if (sc && sc.att) tv += (sc.made / sc.att - 0.3) * 0.8 * conf(sc.att, X.K) * Math.min(1, X.L.learn);
+    return clamp(tv, 0, 1.5);
+  }
+
+  /**
+   * Close out a long shooter: the spot in front of him (between him and our rim) a hand's reach away, led by his drift.
+   * When it closes out depends on the level: L3 only on a perfect line once the shot is cocked, L4 on any line on target,
+   * L5+ also on a spot the scouting says he hits from, before he cocks. A closeout can overcommit (a lower level more often:
+   * the level's slip): it flies past him, and a fake or a drive beats it. Returns the target x, or null.
+   */
+  function closeoutTarget(c, X, foe, hold) {
+    const { level } = X, tv = longThreat(c, X, foe), fq = c.fqCache ? c.fqCache.q : 0;
+    const on = level === 3 ? fq === 2 && hold.cocking : level === 4 ? tv >= 0.6 : tv >= 0.55;
+    if (!on) { c.closeout = null; return null; }
+    if (!c.closeout || c.closeout.p !== foe) c.closeout = { p: foe, over: slip(c, X, 1.5) };
+    const lead = foe.torso.velocity.x * 10;
+    return foe.torso.position.x + lead + foe.dir * (c.closeout.over ? -30 : 70);
   }
 
   /** Where it wants to stand: between the carrier and its rim, nearer the rim the more they dunk, nearer them the more they shoot long. */
@@ -824,6 +878,17 @@ const AI = (() => {
     const reach = 120 + 90 * Math.min(def, 1) + (stand.inTheirRange ? 40 * adaptOf(X) : 0);   // their favourite spot: closed out from further
     const predicted = th.shoot !== null && th.shoot <= lead;
     const early = L.look < 14 && hold.cocking && hold.charge > 0.4;
+    // a long shot (level 4+): fly its early path from the release it predicts, and jump when a raised hand meets it on the way up
+    if (X.level >= 4 && hold.cocking && th.shoot !== null && (foe.torso.position.x - w.cx) * foe.dir < 0) {
+      const k0 = th.shoot, b = w.ball, ch = Math.min(1, hold.charge + k0 * X.dt / T.shot_charge_time);
+      const from = { x: b.position.x + b.velocity.x * k0, y: b.position.y + b.velocity.y * k0 };
+      const v = Physics.shotVelocity(w, T, foe, ch, from), path = Physics.pathFrom(w, T, from.x, from.y, v.vx * foe.dir, -v.vy, 22);
+      const closer = mine.slice().sort((a1, b1) => Math.abs(a1.torso.position.x - foe.torso.position.x) - Math.abs(b1.torso.position.x - foe.torso.position.x))[0];
+      const hr = handRise(X, closer, k0 + 24), rch = T.hand_box / 2 + b.r + 8;
+      let meet = false;
+      for (let j = 0; j < path.length && !meet; j++) { const h = hr[k0 + j + 1]; if (h && Math.abs(path[j].x - h.x) < rch && Math.abs(path[j].y - h.y) < rch) meet = true; }
+      if (defend(c, w, 'lcontest', meet, def * 1.4 * st.guard * press, lag, X)) return jumpUp(0.32, 'CONTESTING THE LONG SHOT');
+    } else delete c.rolls.lcontest;
     if (defend(c, w, 'contest', (predicted || early) && gap < reach, def * 1.3 * st.guard * press, lag, X)) return jumpUp(0.3, 'CONTESTING THE SHOT');
     // right next to the carrier: raise the arm to get a hand on the ball
     // (never a swipe while the carrier is at the rim: that jump comes down before the dunk, and the rim is left open)
@@ -892,10 +957,14 @@ const AI = (() => {
       const stand = stanceTarget(c, X, foe, th);
       const stanceW = level >= 3 ? 1 : level === 2 ? 0.5 : 0;                // a Rookie just chases the carrier
       target = lerp(foe.torso.position.x, stand.x, stanceW);
+      const co = closeoutTarget(c, X, foe, hold);
+      if (co !== null) target = co;
       const fmate = w.players.find(q => q.team === foe.team && q !== foe);
       if (L.look > 0 && th && th.pass >= 0.7 && fmate) target = fmate.torso.position.x;
       const tn = tendencies(c.profile, X.K), adapt = adaptOf(X);
-      txt = th && th.pass >= 0.7 ? 'WATCHING THE PASS'
+      const scB = c.scout[Math.floor(Math.abs(foe.torso.position.x - dfn.cx) / 100)];
+      txt = co !== null ? (scB && scB.made >= 2 ? 'CLOSING OUT: YOU HIT FROM HERE' : c.fqCache && c.fqCache.q === 2 ? 'CLOSING OUT: YOU HAVE A CLEAN LINE' : 'CLOSING OUT ON THE LONG SHOT')
+        : th && th.pass >= 0.7 ? 'WATCHING THE PASS'
         : th && th.dunk !== null ? 'PROTECTING THE RIM'
         : adapt > 0.2 && tn.cDunk > 0.5 && tn.dunkShare > 0.45 ? 'GUARDING THE RIM: YOU KEEP DUNKING'
         : adapt > 0.2 && tn.cShot > 0.5 && tn.longShare > 0.5 ? 'DEFENDING DEEP: YOU SHOOT LONG'
@@ -951,6 +1020,9 @@ const AI = (() => {
     }
     if (hold && Math.abs(target - p.torso.position.x) < dead) { c.wait = react * 0.25; return c; }   // in position: stand
     const leaningToward = a * s > 0.22 && p.sinceFoot < 0.1;                    // the swing is tipping toward it
+    // a closeout is a sprint: it goes on the first sign of the swing turning its way, in longer hops that cover more floor
+    const sprint = hold && c.closeout && Math.abs(target - p.torso.position.x) > 110;
+    if (sprint && a * s > 0.08 && p.sinceFoot < 0.1) { c.jump = true; c.holdT = 0.16 + c.rng() * 0.06; return c; }
     if (leaningToward) { c.jump = true; c.holdT = 0.06 + c.rng() * 0.08; return c; }
     c.wait = (hold ? base * Math.max(0.2, 1.7 - 1.5 * Math.min(def, 1)) : react) * 0.25;           // closing a carrier down: quicker the better the defence
     return c;
@@ -1023,7 +1095,7 @@ const AI = (() => {
     c.jump = false; c.bounce = false;
     c.dbg = { path: null, target: null, ops: null, threat: null, shot: null };
     if (hold) c.looseOn = false;
-    if (!(hold && hold.p.team !== c.team)) { for (const k of ['swat', 'rim', 'contest', 'swipe']) delete c.rolls[k]; c.threat = null; }   // the opponent lost the ball: the next incident is rolled fresh
+    if (!(hold && hold.p.team !== c.team)) { for (const k of ['swat', 'rim', 'contest', 'lcontest', 'swipe']) delete c.rolls[k]; c.threat = null; c.closeout = null; }   // the opponent lost the ball: the next incident is rolled fresh
 
     // a new possession (we hold it, or our dribble or pass is up, after they had it or it was loose): roll its dribble budget
     const lb0 = w.lastBouncer;
@@ -1139,7 +1211,7 @@ const AI = (() => {
     [/OUT OF TIME/, 'OUT OF TIME'], [/TAKING A GOOD ONE/, 'JUMP SHOT'], [/PUMP FAKE/, 'PUMP FAKE'], [/SELF-PASS/, 'SELF-PASS'], [/OFF THE WALL/, 'WALL PASS'], [/OUTLET/, 'OUTLET PASS'],
     [/GIVE-AND-GO/, 'GIVE-AND-GO'], [/PUTBACK/, 'PUTBACK'], [/HOT HAND/, 'HOT HAND'], [/FAST BREAK/, 'FAST BREAK'], [/ALLEY-OOP: GOING UP/, 'ALLEY-OOP'], [/LOB/, 'LOB'], [/WATCHING THE PASS/, 'READING PASS'],
     [/MEETING THE PASS/, 'CATCHING'], [/PASS/, 'PASS'], [/SCREEN/, 'SCREEN'], [/STEAL/, 'STEAL'], [/SWATTING/, 'SWAT'],
-    [/CONTESTING/, 'CONTEST'], [/READING THE DUNK|PROTECTING THE RIM|GUARDING THE RIM/, 'RIM GUARD'], [/DEFENDING DEEP/, 'DEEP D'],
+    [/CLOSING OUT/, 'CLOSEOUT'], [/CONTESTING THE LONG/, 'CONTEST 2'], [/CONTESTING/, 'CONTEST'], [/THINKING/, 'THINKING'], [/OPEN: TAKING/, 'OPEN 2'], [/READING THE DUNK|PROTECTING THE RIM|GUARDING THE RIM/, 'RIM GUARD'], [/DEFENDING DEEP/, 'DEEP D'],
     [/PRESSURING/, 'PRESSURE'], [/STANDING BETWEEN/, 'GUARDING'], [/RIM PROTECTOR|WAITING FOR THE DUNK/, 'WAITING'],
     [/GOING UP FOR THE DUNK/, 'DUNK'], [/FADING/, 'FADEAWAY'], [/LONG SHOT/, 'LONG SHOT'], [/CLEARING/, 'CLEARING IT'], [/PUMPING OUT/, 'PUMP FAKE'], [/NO LOB/, 'JUMP SHOT'],
     [/JUMP SHOT|TAKING THE SHOT/, 'JUMP SHOT'], [/DRIBBLING/, 'DRIBBLING'], [/DRIVING/, 'DRIVE'],
@@ -1179,6 +1251,8 @@ const AI = (() => {
     lines.push(`LEARNED  SHOTS ${pf.shots} (LONG ${pct(tn.longShare)}, FROM ~${Math.round(pf.shotDist)} PX)  DUNKS ${pf.dunks}  PASSES ${pf.passes}  DRIBBLES ${pf.dribbles}  DRIVES ${pf.drive >= 0 ? '+' : ''}${pf.drive.toFixed(2)}  PRESSURE ${pct(c.press)}`);
     const pr = pf.pressed, op = pf.open;
     lines.push(`YOU PRESSED ${pr.made}/${pr.att}  OPEN ${op.made}/${op.att}  ·  MINE SHOT ${rec('shot')} LONG ${rec('long')} FADE ${rec('fade')} DUNK ${rec('dunk')}  FAKES ${c.fakes.fakes}  SWIPES ${c.swipes.won}/${c.swipes.tries}  DRIBBLES LOST ${c.dribRec.lost}/${c.dribRec.n}`);
+    const bands = Object.keys(c.scout).sort((a, b) => a - b).map(k => `${k * 100}-${k * 100 + 99}PX ${c.scout[k].made}/${c.scout[k].att}${c.scout[k].perfect ? ' (' + c.scout[k].perfect + ' PERFECT)' : ''}`);
+    if (bands.length) lines.push('SCOUTING YOUR LONG SHOTS  ' + bands.join('  '));
     if (c.selfStats && c.selfStats.tries) lines.push(`SELF-PASS  THROWN ${c.selfStats.tries}  CAUGHT BY HIMSELF ${c.selfStats.caught}  DUNKS AFTER ${c.selfStats.dunks}`);
     return lines;
   }

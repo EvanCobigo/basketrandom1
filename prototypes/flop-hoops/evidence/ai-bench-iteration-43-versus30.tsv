@@ -1,0 +1,7 @@
+mode	level	vs	allowed	own	faced	madeShots	dunkStarts	dunks	blocks	swats	steals	shots	cpuMade	perfect	cpuDunks	fakes	fakeShots	fakeMade	holdMax	holdAvg	stall	passes	passOk	lobs	oops	lost	behind	slips
+versus	1	reference	165	101	332	85	62	21	53	18	303	236	47	10	10	0	0	0	1.7	0.34	7.3	92	33	0	0	247	32.9	384
+versus	2	reference	174	90	246	71	102	28	57	32	358	243	38	15	13	28	10	2	1.7	0.33	2.2	124	55	0	4	283	31.5	252
+versus	3	reference	147	129	201	59	86	27	41	30	352	227	52	15	22	56	13	4	2.5	0.46	0.2	109	54	0	2	276	32.1	218
+versus	4	reference	175	123	252	69	93	32	44	38	247	154	47	18	12	49	12	3	1.9	0.47	0.7	122	60	6	4	229	33.4	215
+versus	5	reference	91	179	83	22	99	35	42	38	365	222	67	121	29	68	18	6	2.5	0.48	1.1	149	67	9	7	222	31.5	108
+versus	6	reference	87	200	97	19	104	41	33	28	356	239	71	116	38	78	35	13	2.6	0.47	3	126	51	5	7	205	33.4	45
