@@ -305,6 +305,7 @@ function buildRound(round) {
   world.flash = { t: 0 };
   // the CPU's dribbles are short: each carries the ball and the dribbler at most ai_dribble_reach toward the rim (people are not capped)
   world.dribCap = [mode === 'sim' ? tune.ai_dribble_reach : 0, mode !== '2p' ? tune.ai_dribble_reach : 0];
+  world.noDunkAfterDribble = [mode === 'sim' && tune.ai_no_dribble_dunk > 0, mode !== '2p' && tune.ai_no_dribble_dunk > 0];   // and they never dribble into a dunk
   // a hot player (a heat check) carries it into the next round, until the other team scores
   world.hot = state.hot ? world.players.find(q => q.team === state.hot.team && q.idx === state.hot.idx) || null : null;
   buildPalette(S);

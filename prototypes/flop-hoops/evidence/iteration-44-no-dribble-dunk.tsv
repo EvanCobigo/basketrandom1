@@ -1,0 +1,7 @@
+# iteration 44, 10 seeds x 90 s per level vs tools/ai-ref.js (tools/ai-nodunk.js); pts = [opponent, CPU]
+{"lv":1,"violations":0,"dunkStarts":7,"after":{"caught":7},"blocked":2,"pts":[55,20],"errs":[]}
+{"lv":2,"violations":0,"dunkStarts":13,"after":{"caught":13},"blocked":4,"pts":[42,40],"errs":[]}
+{"lv":3,"violations":0,"dunkStarts":15,"after":{"caught":15},"blocked":3,"pts":[36,42],"errs":[]}
+{"lv":4,"violations":0,"dunkStarts":13,"after":{"caught":13},"blocked":6,"pts":[53,29],"errs":[]}
+{"lv":5,"violations":0,"dunkStarts":9,"after":{"caught":9},"blocked":3,"pts":[30,56],"errs":[]}
+{"lv":6,"violations":0,"dunkStarts":15,"after":{"caught":15},"blocked":4,"pts":[30,60],"errs":[]}

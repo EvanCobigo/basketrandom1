@@ -101,7 +101,7 @@ const Physics = (() => {
     engine.positionIterations = 10; engine.velocityIterations = 8; engine.constraintIterations = 4;
     const half = S.courtW / 2, L = CX - half, R = CX + half;
     const w = Object.assign(wRef, { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
-      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, dribbleBall: null, dribCap: [0, 0], cut: null, hot: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] });
+      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, dribbleBall: null, dribCap: [0, 0], noDunkAfterDribble: [false, false], cut: null, hot: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] });
 
     const statics = [
       box(CX, FLOOR_Y + 200, 4000, 400, 'floor', { friction: 1 }),
@@ -413,6 +413,8 @@ const Physics = (() => {
     const air = p.legs.every(l => l.position.y < w.floorY - 40);
     const putback = how === 'grab' && air && !!prevShot && prevShot.kind !== 'dunk' && !prevShot.lob && w.time - prevShot.t < T.putback_window;
     const ownDribble = how === 'dribble' || (w.lastBouncer === p && p.dribbleT > 0);
+    for (const q of w.players) if (q !== p) q.dribbled = false;
+    if (!ownDribble) p.dribbled = false;
     w.lastBouncer = null; w.passGuard = null; w.pass = null;
     if (!ownDribble) for (const q of w.players) { q.dribbleT = 0; q.dribbleChain = 0; }
     w.hold = { p, con, fromPass, giveGo, putback, t: 0, prevK: held, charge: 0, armed: !held, cocking: false, bcharge: 0, barmed: !bheldNow || ownDribble, bouncing: false, dunkReady: false };
@@ -607,6 +609,7 @@ const Physics = (() => {
    */
   function shoot(w, T) {
     const h = w.hold, p = h.p, ball = w.ball, hoop = attackedHoop(w, p);
+    p.dribbled = false;
     const airborne = p.sinceGround > 0.1, a = wrap(p.torso.angle);
     const lob = !!h.lob && !w.dunk;
     const fade = !lob && airborne && (p.torso.velocity.x * p.dir < -T.fade_speed || a * p.dir < -T.fade_lean);
@@ -722,13 +725,15 @@ const Physics = (() => {
       // a dribbled ball passes through opponents' bodies: only an opponent's hand can take it
       ball.collisionFilter.mask = 0x1 | TEAM_CAT[p.team];
       w.dribbleBall = { team: p.team, until: w.time + T.dribble_time + 0.6, x0: ball.position.x, dir: p.dir };
-      p.dribX0 = (p.legs[0].position.x + p.legs[1].position.x) / 2;   // (where this dribble started: a capped team's dribble carries nobody further than dribCap)
+      p.dribX0 = (p.legs[0].position.x + p.legs[1].position.x) / 2;
+      if (w.noDunkAfterDribble[p.team]) p.dribbled = true;   // (a team under the rule: no dunk for him until the ball leaves him)   // (where this dribble started: a capped team's dribble carries nobody further than dribCap)
       Body.setVelocity(ball, { x: T.dribble_vx * (p.dribbleSteer + 0.25 * p.dir) + (w.rng() * 2 - 1) * wild, y: T.dribble_vy + (w.rng() * 2 - 1) * wild * 0.5 });
       Body.setAngularVelocity(p.torso, p.torso.angularVelocity + (w.rng() * 2 - 1) * T.dribble_sway * p.sloppy * 0.01);
       p.dribbleT = T.dribble_time; p.cd = 0;
       p.lastQuality = quality;
     } else {
       Body.setVelocity(ball, { x: lerp(T.bounce_vx_min, T.bounce_vx_max, c) * p.dir, y: lerp(T.bounce_vy_min, T.bounce_vy_max, c) });
+      p.dribbled = false;   // a pass (a self-pass too): the ball has left him
       ball.collisionFilter.mask = 0x1 | TEAM_CAT[p.team];   // a pass slips through opponents for a moment
       w.ghostUntil = w.time + T.pass_ghost;
     }
@@ -832,6 +837,7 @@ const Physics = (() => {
    */
   function startDunk(w, T, hoop) {
     const p = w.hold.p, grounded = p.sinceGround <= 0.08;
+    if (p.dribbled) return false;   // (dribbled into it: no dunk, see noDunkAfterDribble)
     const plan = grounded ? planDunk(w, T, p, hoop) : null;
     if (grounded && !plan) return false;
     const style = DUNK_STYLES[Math.floor(w.rng() * DUNK_STYLES.length) % DUNK_STYLES.length];
@@ -1065,7 +1071,9 @@ const Physics = (() => {
         else { bounce(w, T); return; }
       }
       const hoop = attackedHoop(w, p);
-      h.dunkReady = !w.dunk && dunkReady(w, T, p, hoop, (h.fromPass || h.putback) && h.t < T.oop_window);
+      // (no dunk off the dribble for a team under that rule: the prompt stays off, and a press cocks a shot instead)
+      h.dunkReady = !w.dunk && !p.dribbled && dunkReady(w, T, p, hoop, (h.fromPass || h.putback) && h.t < T.oop_window);
+      if (p.dribbled) h.wasReady = false;
       // a putback goes up by itself: a miss caught in the air with the rim in reach is slammed straight back, no press needed;
       if ((h.putback || h.giveGo) && h.t < 0.4 && h.dunkReady && startDunk(w, T, hoop)) return;   // (so does a give-and-go caught in reach)
       // near the rim: a tap of jump dunks. The prompt that was showing a step ago counts too, since the

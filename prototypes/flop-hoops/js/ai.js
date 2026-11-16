@@ -598,6 +598,10 @@ const AI = (() => {
     // ---- the dribble: it likes it. It brings the ball upcourt toward a dunk and keeps defenders guessing
     const maxDribs = maxDribsOf(level);
     const zone = T.dunk_ground_x;
+    // NO DUNK OFF THE DRIBBLE: once it has dribbled, the physics gives it no dunk until the ball leaves it (a pass, a self-pass,
+    // a shot). So nothing here plays for one: no waiting at the rim, no driving at it for a dunk; near the rim it shoots or gives it up
+    const noDunk = !!p.dribbled;
+    if (noDunk && gap < zone + 80 && !behind) say(c, 'NO DUNK OFF THE DRIBBLE: FINDING ANOTHER WAY');
     // a HARD cap: this possession's budget (BUDGETS, rolled when the ball is won), and never from a seated player
     if (c.dribs < Math.min(maxDribs, c.budget) && gap > zone + 40 && !behind && !underOwn && !Physics.seated(w, p, T)) {   // (under our own rim it passes, never dribbles)
       const progress = clamp((gap - zone) / 500, 0, 1);
@@ -607,6 +611,7 @@ const AI = (() => {
       u -= 0.015 * c.dribs + 0.5 * urg;
       if (X.protect) u += 0.1;                                                                  // ahead near the end: run the clock
       u += (role > 0 ? roleTilt : 0) + 0.25 * form(c, 'dunk') * learnOf(X) - (rimHome ? 0.1 : 0);    // the front man drives; my dunks going in (or not) move it
+      if (noDunk) u -= 0.3 * (1 - progress) + 0.15;                                              // (no dunk at the end of this drive: dribbling on is worth less, the nearer the rim the less)
       // dribbles of mine lost near a defender: dribbling into one is worth less (learned)
       const dl = c.dribRec, lossRate = dl.n ? dl.lost / dl.n : 0;
       if (foeClose) u -= 0.5 * lossRate * conf(dl.n / 3) * learnOf(X) * (foeNear ? 1 : 0.5);
@@ -651,7 +656,7 @@ const AI = (() => {
       //    him (that includes a carrier stuck behind the basket: he has no way to throw it back)
       //  - within the throw: passHold tops out at ~420 px of travel (a runner coming onto it gets a little more), and
       //    not so close that the ball is out of the hand box; and on the ground (a jumping man cannot take a floor pass)
-      const shotViable = takesShot && q >= 1, dunkSoon = !behind && gap < zone + 60 && hold.t < 2.4;
+      const shotViable = takesShot && q >= 1, dunkSoon = !p.dribbled && !behind && gap < zone + 60 && hold.t < 2.4;
       const leadX = level >= 5 ? clamp(mate.torso.velocity.x * dir * 18, -50, 90) : 0;
       const reachX = (mx - px) * dir + leadX, maxPass = 440 + (runner ? (level >= 5 ? 170 : 120) : 0);   // (a Legend or Mythic leads the receiver by where he is running)
       const catchable = mateAhead && reachX >= 60 && reachX <= maxPass && mate.sinceGround < 0.12;
@@ -721,7 +726,7 @@ const AI = (() => {
     else if (hold.t > patience + 0.5 && !anyTarget && !catchableMate && !ops.some(o => o.name !== 'wait')) add('outlet', 5, outlet, selfOk ? 'SELF' : 'WALL');   // (no other option left: in place of the forced shot)
 
     // ---- waiting: near or under the rim and not yet dunk-ready no shot works, so the swing carries it into the zone
-    const inZone = !behind && gap < zone + 60 && hold.t < 2.4 && !(far.err !== null && gap > zone + 20 && level < 3);
+    const inZone = !noDunk && !behind && gap < zone + 60 && hold.t < 2.4 && !(far.err !== null && gap > zone + 20 && level < 3);
     add('wait', inZone ? 0.78 - 0.5 * urg : 0.14 - 0.3 * urg, () => { c.wait = react * 0.5; say(c, inZone ? 'WAITING FOR THE DUNK' : 'LOOKING FOR AN OPENING'); return c; }, 'WAIT', 12);
 
     // the way out: held too long with nothing but waiting on offer (no line on, nobody to pass to, dribbles used up):
@@ -1211,7 +1216,7 @@ const AI = (() => {
     [/OUT OF TIME/, 'OUT OF TIME'], [/TAKING A GOOD ONE/, 'JUMP SHOT'], [/PUMP FAKE/, 'PUMP FAKE'], [/SELF-PASS/, 'SELF-PASS'], [/OFF THE WALL/, 'WALL PASS'], [/OUTLET/, 'OUTLET PASS'],
     [/GIVE-AND-GO/, 'GIVE-AND-GO'], [/PUTBACK/, 'PUTBACK'], [/HOT HAND/, 'HOT HAND'], [/FAST BREAK/, 'FAST BREAK'], [/ALLEY-OOP: GOING UP/, 'ALLEY-OOP'], [/LOB/, 'LOB'], [/WATCHING THE PASS/, 'READING PASS'],
     [/MEETING THE PASS/, 'CATCHING'], [/PASS/, 'PASS'], [/SCREEN/, 'SCREEN'], [/STEAL/, 'STEAL'], [/SWATTING/, 'SWAT'],
-    [/CLOSING OUT/, 'CLOSEOUT'], [/CONTESTING THE LONG/, 'CONTEST 2'], [/CONTESTING/, 'CONTEST'], [/THINKING/, 'THINKING'], [/OPEN: TAKING/, 'OPEN 2'], [/READING THE DUNK|PROTECTING THE RIM|GUARDING THE RIM/, 'RIM GUARD'], [/DEFENDING DEEP/, 'DEEP D'],
+    [/NO DUNK OFF THE DRIBBLE/, 'NO DUNK'], [/CLOSING OUT/, 'CLOSEOUT'], [/CONTESTING THE LONG/, 'CONTEST 2'], [/CONTESTING/, 'CONTEST'], [/THINKING/, 'THINKING'], [/OPEN: TAKING/, 'OPEN 2'], [/READING THE DUNK|PROTECTING THE RIM|GUARDING THE RIM/, 'RIM GUARD'], [/DEFENDING DEEP/, 'DEEP D'],
     [/PRESSURING/, 'PRESSURE'], [/STANDING BETWEEN/, 'GUARDING'], [/RIM PROTECTOR|WAITING FOR THE DUNK/, 'WAITING'],
     [/GOING UP FOR THE DUNK/, 'DUNK'], [/FADING/, 'FADEAWAY'], [/LONG SHOT/, 'LONG SHOT'], [/CLEARING/, 'CLEARING IT'], [/PUMPING OUT/, 'PUMP FAKE'], [/NO LOB/, 'JUMP SHOT'],
     [/JUMP SHOT|TAKING THE SHOT/, 'JUMP SHOT'], [/DRIBBLING/, 'DRIBBLING'], [/DRIVING/, 'DRIVE'],
