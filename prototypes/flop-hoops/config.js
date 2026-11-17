@@ -21,6 +21,8 @@ window.CONFIG = {
   card_time: { value: 1.0, min: 0.5, max: 4, step: 0.1 },      // s the round card shows before play
   replay_clips: { value: 5, min: 0, max: 10, step: 1 },           // best moments shown in the replay after a match (0 = none)
   replay_slow: { value: 0.35, min: 0.1, max: 1, step: 0.05 },      // replay speed around the big moment (1 = normal)
+  replay_label_repeat: { value: 18, min: 0, max: 60, step: 1 },     // reel: points off a moment for each one of the same name already picked
+  replay_kind_repeat: { value: 12, min: 0, max: 60, step: 1 },      // reel: points off for each one of its family already picked (dunk, shot, defence, fake, flashy)
   score_time: { value: 1.4, min: 0.8, max: 4, step: 0.1 },     // s of celebration after a basket
   stall_time: { value: 3.5, min: 2, max: 10, step: 0.5 },      // s a still ball waits before a re-drop
 
@@ -54,6 +56,10 @@ window.CONFIG = {
   shot_assist: { value: 0.6, min: 0, max: 1, step: 0.05 },     // pull toward the speed that drops the ball on the rim's centre (1 = always)
   fade_speed: { value: 0.8, min: 0, max: 5, step: 0.1 },        // px/step drifting away from the hoop that counts
   fade_lean: { value: 0.3, min: 0, max: 1.2, step: 0.05 },      // rad leaning back that counts
+  fake_min_charge: { value: 0.05, min: 0, max: 0.5, step: 0.01 }, // cock-back a shot needs for a bounce out of it to be a pump fake
+  fake_window: { value: 3, min: 0.5, max: 6, step: 0.1 },         // s after a pump fake that its team's next shot counts as set up by it
+  fake_bit_window: { value: 0.6, min: 0.1, max: 1.5, step: 0.05 }, // s after a pump fake that a defender near who leaves the floor has bitten
+  fake_bit_range: { value: 220, min: 50, max: 500, step: 10 },    // px sideways from the faker within which a jumping defender has bitten
   dunk_speed: { value: 12, min: 4, max: 24, step: 0.5 },        // px/step the ball is slammed down
   dunk_slot: { value: 4, min: 0, max: 20, step: 1 },              // px above the rim the ball's centre is carried to before the slam
   dunk_arm_dx: { value: 0.55, min: 0.2, max: 0.9, step: 0.05 },   // how far short of the rim (in arm lengths) the dunker tops out

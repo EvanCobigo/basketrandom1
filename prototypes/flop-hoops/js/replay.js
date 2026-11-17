@@ -7,18 +7,25 @@
  *
  * While a round plays, every physics step is copied into a ring buffer: the pose of every dynamic
  * body (players' parts and the ball) plus the few things the renderer reads (time, crowd, hoop sway,
- * arm form, trail colour). When something worth showing happens (an alley-oop, a dunk, a perfect shot,
- * a fadeaway, a long shot, a block) `mark` tags that moment; a little after it, the stretch around it is
- * copied out as a clip. Clips from one moment merge. At the end `reel` picks the best few (by how
- * special each is, mixing kinds) in the order they happened, and `apply` puts a clip's frame back on
- * its world's bodies so Render.world can draw it. Nothing here steps the physics.
+ * arm form, trail colour). When something worth showing happens (an alley-oop, a dunk, a pump fake that
+ * set up a basket, an interception, a perfect shot, a long shot) `mark` tags that moment; a little after
+ * it, the stretch around it is copied out as a clip. Clips from one moment merge. At the end `reel` picks
+ * the best few (by how special each is, mixing names and families of play) in the order they happened,
+ * and `apply` puts a clip's frame back on its world's bodies so Render.world can draw it. Nothing here
+ * steps the physics.
  */
 const Replay = (() => {
   const RING = 420, PRE = 170, POST = 85, MAX_CLIPS = 16, MERGE = 150;
+  const LEAD = 45;                                    // steps a clip shows before an earlier moment it reaches back to (mark's `since`)
   const EXTRA = 17;                                   // time, hype, sparks, flash, 4 hoop numbers, 8 player numbers, trail code
   const MODES = [null, 'white', 'rainbow', 'green', 'blue', 'lob'];
+  // A moment's family, for a mark made without one: the first pattern its name matches (alley-oops before dunks)
+  const KINDS = [[/FAKE|SOLD/, 'fake'], [/INTERCEPT|BLOCK|DENIED|STEAL/, 'defence'], [/OOP|GIVE-AND-GO|OVERHEAT|HEAT CHECK/, 'flashy'],
+    [/DUNK|DIP|PUTBACK|SLAM/, 'dunk'], [/SHOT|FADEAWAY|LOB/, 'shot']];
+  const kindOf = label => (KINDS.find(([re]) => re.test(label)) || [null, 'other'])[1];
   let rec = null;                                     // the recorder of the round being played
   let clips = [];                                     // finished clips of this match
+  let seq = 0;                                        // clips finished this match: each one's place in match order
   let live = null;                                    // the live world's state, kept while a replay borrows its bodies
 
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -44,20 +51,33 @@ const Replay = (() => {
     for (const p of rec.pending.slice()) if (rec.n - 1 >= p.end) finish(p);
   }
 
+  /** The recorded step at (or just before) world time `t`, as far back as the ring still goes. */
+  function stepAt(t) {
+    const r = rec, lo = Math.max(0, r.n - RING);
+    for (let i = r.n - 1; i > lo; i--) if (r.buf[(i % RING) * r.F + 3 * r.nb] <= t) return i;
+    return lo;
+  }
+
   /**
    * Tag a moment that just happened. `score` says how special it is (an alley-oop 100 .. a steal 25);
    * moments within MERGE steps of one another share a clip, which keeps the best one's name.
+   * `opt` (optional): kind, the moment's family ('dunk', 'shot', 'defence', 'fake', 'flashy'; read off the
+   * name when left out), so a reel mixes them; since, a world time earlier than PRE steps back that the
+   * clip must still show (the pump fake that set up a basket), slowed down there too.
    */
-  function mark(w, label, score, team, round) {
+  function mark(w, label, score, team, round, opt = {}) {
     if (!rec || rec.w !== w || rec.n < 10) return;
-    const at = rec.n - 1;
+    const at = rec.n - 1, kind = opt.kind || kindOf(label);
+    const back = opt.since !== undefined ? stepAt(opt.since) : null;   // the earlier moment: the clip starts LEAD steps before it
+    const from = Math.max(0, Math.min(at - PRE, back !== null ? back - LEAD : at - PRE), at + POST - RING + 1);   // (never longer than the ring)
     const near = rec.pending.find(p => at - p.at < MERGE && at + POST - p.start < RING - 60);
     if (near) {
       near.end = at + POST;
-      if (score > near.score) Object.assign(near, { label, score, team, at });
+      if (back !== null) { near.start = Math.min(near.start, from); near.back = back; }
+      if (score > near.score) Object.assign(near, { label, score, team, at, kind });
       return;
     }
-    rec.pending.push({ label, score, team, round, at, start: Math.max(0, at - PRE), end: at + POST });
+    rec.pending.push({ label, score, team, round, at, kind, back, start: from, end: at + POST });
   }
 
   /** Cut a pending clip out of the ring (with whatever frames exist so far). */
@@ -67,22 +87,31 @@ const Replay = (() => {
     if (len < 30) return;
     const frames = new Float32Array(len * r.F);
     for (let i = 0; i < len; i++) frames.set(r.buf.subarray(((start + i) % RING) * r.F, ((start + i) % RING + 1) * r.F), i * r.F);
-    clips.push({ w: r.w, nb: r.nb, F: r.F, frames, len, focus: p.at - start, label: p.label, score: p.score, team: p.team, round: p.round, order: clips.length });
-    if (clips.length > MAX_CLIPS) clips.splice(clips.indexOf(clips.slice().sort((a, b) => a.score - b.score)[0]), 1);
+    // focus: the frame of the moment itself; also: earlier frames to slow down at too (the pump fake behind a basket)
+    const also = p.back !== null && p.back !== undefined && p.back >= start && p.back < p.at - 40 ? [p.back - start] : [];
+    clips.push({ w: r.w, nb: r.nb, F: r.F, frames, len, focus: p.at - start, also, label: p.label, score: p.score, kind: p.kind || kindOf(p.label), team: p.team, round: p.round, order: seq++ });
+    if (clips.length > MAX_CLIPS) clips.splice(clips.indexOf(clips.slice().sort((a, b) => a.score - b.score || a.order - b.order)[0]), 1);
   }
   function flush() { if (rec) for (const p of rec.pending.slice()) finish(p); }
 
   /** Start a fresh match: forget every clip and the recorder. */
-  function reset() { rec = null; clips = []; live = null; }
+  function reset() { rec = null; clips = []; seq = 0; live = null; }
 
-  /** The best `n` clips of the match, mixing kinds, in the order they happened. */
-  function reel(n) {
+  /**
+   * The best `n` clips of the match, mixing kinds, in the order they happened. Picked one at a time: each
+   * pick is the clip with the best score after the variety penalties, opt.label (default 18) points for each
+   * clip of its name already picked and opt.kind (default 12) for each one of its family. Ties go to the
+   * higher raw score, then the earlier clip, so the same match always gives the same reel.
+   */
+  function reel(n, opt = {}) {
     flush();
-    const left = clips.slice().sort((a, b) => b.score - a.score), pick = [], seen = {};
+    const perLabel = opt.label ?? 18, perKind = opt.kind ?? 12;
+    const left = clips.slice(), pick = [], seenL = {}, seenK = {};
     while (pick.length < n && left.length) {
-      left.forEach(c => { c._adj = c.score - 18 * (seen[c.label] || 0); });
-      left.sort((a, b) => b._adj - a._adj);
-      const c = left.shift(); pick.push(c); seen[c.label] = (seen[c.label] || 0) + 1;
+      for (const c of left) c._adj = c.score - perLabel * (seenL[c.label] || 0) - perKind * (seenK[c.kind] || 0);
+      left.sort((a, b) => b._adj - a._adj || b.score - a.score || a.order - b.order);
+      const c = left.shift(); pick.push(c);
+      seenL[c.label] = (seenL[c.label] || 0) + 1; seenK[c.kind] = (seenK[c.kind] || 0) + 1;
     }
     return pick.sort((a, b) => a.order - b.order);
   }

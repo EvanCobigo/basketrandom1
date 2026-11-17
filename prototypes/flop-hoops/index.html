@@ -235,7 +235,34 @@ function reset() {
     dribble: null, fire: null, floats: [], rings: [], blastFlash: 0, streak: null, hot: null, hitstop: 0, scorer: -1, winner: -1, pops: [0, 0], shake: 0, stall: 0, toast: '', toastT: 0, toastTeam: -1, scoreKind: '', particles: [], resultsT: 0, attract: [0, 0], gained: '' };
   prevVenue = '';
 }
-const CALLOUTS = { block: 'BLOCKED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };
+const CALLOUTS = { block: 'INTERCEPTED!', steal: 'STOLEN!', strip: 'KNOCKED LOOSE!' };   // (a block is a shot taken out of the air: intercepted)
+// The highlight reel: how special each moment is ([score, family]); Replay.reel picks the best, mixing names and families.
+// A pump fake behind a basket adds fakeBit's score when a defender bit on it. Dunk styles in FANCY_DUNKS count as fancy.
+const REEL = {
+  oop: [100, 'flashy'], giveGo: [95, 'flashy'], rimBlast: [85, 'flashy'], heatCheck: [80, 'flashy'],
+  putback: [85, 'dunk'], fancyDunk: [75, 'dunk'], hangDunk: [55, 'dunk'], dunk: [45, 'dunk'],
+  fakeLong: [100, 'fake'], fakeScore: [80, 'fake'], fakeDunk: [80, 'fake'], fakeBit: [10, 'fake'],
+  interceptShot: [90, 'defence'], interceptPass: [70, 'defence'], denied: [80, 'defence'], steal: [25, 'defence'],
+  perfectLong: [85, 'shot'], longShot: [55, 'shot'], perfectShot: [70, 'shot'], fadeaway: [65, 'shot'], lobBoard: [50, 'shot'],
+};
+const FANCY_DUNKS = ['windmill', 'hammer'];
+/** Tag a replay moment of kind `k` (a REEL key). Only while a match plays: nothing is being recorded anywhere else. */
+function reelMark(label, k, team, extra = 0, since) {
+  if (scene !== 'play' && scene !== 'scored') return;
+  Replay.mark(world, label, REEL[k][0] + extra, team, state.round, { kind: REEL[k][1], since });
+}
+// The world as it was before the physics step now running: a catch clears the pass and the shot before its event goes out.
+let preStep = { shot: null, pass: null, t: 0 };
+/**
+ * Whether a catch by `team` took the other team's ball out of the air: 'shot' (a shot that has touched neither rim nor board,
+ * so not a rebound), 'lob' or 'pass' (one still live, see Physics bounce/shoot), or null.
+ */
+function interception(team) {
+  const s = preStep.shot, p = preStep.pass;
+  if (p && p.team !== team && preStep.t < p.until) return p.lob ? 'lob' : 'pass';
+  if (s && s.kind !== 'dunk' && s.team !== team && s.clean && !s.lob) return 'shot';
+  return null;
+}
 /**
  * A play's call (LOB!, FADEAWAY!, STOLEN!, ...): small text that pops up where it happened and rises away. The
  * big banner is kept for a made basket only (the scored scene's own). x, y default to the ball.
@@ -247,6 +274,18 @@ function callout(s, team, x, y) {
 function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); puff(ev.x, ev.y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 24 }); return; }
   if (ev.type === 'dribble') { sfx.bounce(0.2); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
+  // a pump fake (the engine's: a bounce out of a cocked shot) and a defender biting on it
+  if (ev.type === 'pumpfake') { callout('PUMP FAKE!', ev.team, ev.x, ev.y); events.push({ type: 'pumpfake', team: ev.team, airborne: !!ev.airborne, pass: !!ev.pass }); return; }
+  if (ev.type === 'fakebit') { callout('SOLD IT!', ev.team, ev.x, ev.y); world.hype = Math.max(world.hype || 0, 0.3); events.push({ type: 'fakebit', team: ev.team, by: ev.by }); return; }
+  if (ev.type === 'grab' || ev.type === 'steal') {   // the other team's shot, pass or lob taken out of the air
+    const what = interception(ev.team);
+    if (what) {
+      ev.intercepted = what;
+      if (ev.type === 'grab') callout('INTERCEPTED!', ev.team, ev.x, ev.y);   // (a steal's own call says it below)
+      reelMark(what === 'shot' ? 'INTERCEPTED' : 'INTERCEPTED ' + what.toUpperCase(), what === 'shot' ? 'interceptShot' : 'interceptPass', ev.team);
+      events.push({ type: 'intercept', team: ev.team, what });
+    }
+  }
   if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; puff(ev.x, ev.y, 6, { speed: 150, life: 0.3, colors: ['#ffffff', '#ffd23f', Render.TEAM_COLORS[ev.team]], size: 6, g: 200, drag: 0.85 }); events.push({ type: 'grab', team: ev.team }); return; }
   if (ev.type === 'lob') {   // an alley-oop lob off the board: gold sparks and a call, so the set-up reads
     sfx.shoot(0.7); callout('LOB!', ev.team, ev.x, ev.y); world.hype = Math.max(world.hype || 0, 0.4);
@@ -272,7 +311,7 @@ function onPhysEvent(ev) {
     puff(ev.x, ev.y + 30, 10, { speed: 200, angle: Math.PI / 2, cone: 2.2, life: 0.5, colors: ['#ffffff', '#e8e2d6'], size: 7, g: 200, drag: 0.9 });
     state.zoom = { x: ev.x, y: ev.y, t: 0.28, max: 0.28, k: ev.oop || ev.giveGo || ev.putback ? 0.08 : 0.05 };
   }
-  if (ev.type === 'dunk') { Replay.mark(world, (ev.oop ? 'ALLEY-OOP ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), ev.oop ? 100 : ev.hang ? 70 : 60, ev.team, state.round); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
+  if (ev.type === 'dunk') { markDunk(ev); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
     sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
     state.shake = Math.max(state.shake, tune.shake * 1.5); state.hitstop = Math.max(state.hitstop, 0.06);
@@ -283,14 +322,16 @@ function onPhysEvent(ev) {
     state.rings = (state.rings || []).concat([{ x: ev.x, y: ev.y, r: 10, max: ev.radius || tune.rim_blast_radius, t: 0, life: 0.5 }, { x: ev.x, y: ev.y, r: 4, max: (ev.radius || tune.rim_blast_radius) * 0.6, t: 0, life: 0.35 }]);
     state.blastFlash = 0.22;
     state.floats.push({ x: Math.max(120, Math.min(W - 120, ev.x)), y: Math.max(170, ev.y - 70), t: 1.2, max: 1.2, size: 32, text: 'OVERHEAT!', color: '#ff7a1a' });
+    { const h = world.hoops.find(q => q.cx === ev.x); reelMark('OVERHEAT', 'rimBlast', ev.team >= 0 ? ev.team : h ? h.team : 0); }   // (nobody on it: the team that attacks that rim)
     events.push({ type: 'rimblast', n: ev.n, ball: !!ev.ball }); return;
   }
   if (ev.type === 'steal') world.flash.t = 0.25;
-  if (ev.type === 'block') Replay.mark(world, ev.dunk ? 'DENIED' : 'BLOCK', ev.dunk ? 80 : 45, ev.team, state.round);
-  if (ev.type === 'steal') Replay.mark(world, 'STEAL', 25, ev.team, state.round);
+  if (ev.type === 'block') reelMark(ev.dunk ? 'DENIED' : 'INTERCEPTED', ev.dunk ? 'denied' : 'interceptShot', ev.team);
+  if (ev.type === 'block' && !ev.dunk) events.push({ type: 'intercept', team: ev.team, what: 'shot' });
+  if (ev.type === 'steal') reelMark('STEAL', 'steal', ev.team);
   if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team, ev.x, ev.y); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
   if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
-  if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(CALLOUTS[ev.type], ev.team, ev.x, ev.y); events.push({ type: ev.type, team: ev.team }); return; }
+  if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(ev.intercepted ? 'INTERCEPTED!' : CALLOUTS[ev.type], ev.team, ev.x, ev.y); events.push({ type: ev.type, team: ev.team }); return; }
   if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
   if (ev.type !== 'hit' || ev.speed < 1.2) return;
   if (ev.on === 'floor' && ev.speed > 3) puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 14 });
@@ -344,6 +385,7 @@ function physStep(held, bheld = [false, false]) {
   while (physAcc >= 1) {
     const now = pending.map((p, i) => held[i] || (p && !physStepSaw[i]));
     const nowB = pendingB.map((p, i) => bheld[i] || (p && !physStepSawB[i]));
+    preStep = { shot: world.ball.shot, pass: world.pass, t: world.time };   // (see interception)
     Physics.step(world, now, tune, STEP, nowB);
     if (scene === 'play' || scene === 'scored') Replay.record(world, state.round);   // every step goes into the replay buffer
     physStepSaw = now.slice(); physStepSawB = nowB.slice(); pending = [false, false]; pendingB = [false, false]; physAcc -= 1;
@@ -366,6 +408,11 @@ function heldKeys() { return KEYS.map(k => down.has(k)); }
 const DUST = () => (world && Render.VENUES[world.S.venue].line) || '#ffffff';
 const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
 const DUNK_NAMES = { tomahawk: 'TOMAHAWK DUNK!', windmill: 'WINDMILL DUNK!', elbow: 'HONEY DIP!' };
+/** A dunk's replay moment: a give-and-go, alley-oop or putback by what led to it, otherwise by its style (FANCY_DUNKS) and hang. */
+function markDunk(ev) {
+  const k = ev.giveGo ? 'giveGo' : ev.oop ? 'oop' : ev.putback ? 'putback' : FANCY_DUNKS.includes(ev.style) ? 'fancyDunk' : ev.hang ? 'hangDunk' : 'dunk';
+  reelMark((ev.giveGo ? 'GIVE-AND-GO ' : ev.oop ? 'ALLEY-OOP ' : ev.putback ? 'PUTBACK ' : '') + (DUNK_NAMES[ev.style] || 'DUNK!').replace('!', ''), k, ev.team);
+}
 function score(hoop) {
   const team = hoop.team, shot = world.ball.shot, own = shot && shot.team === team;
   if (own && shot.kind !== 'dunk') {
@@ -384,15 +431,24 @@ function score(hoop) {
   if (own && shot.by !== undefined) {
     const st = state.streak && state.streak.team === team && state.streak.idx === shot.by ? state.streak : { team, idx: shot.by, n: 0 };
     st.n++; state.streak = st;
-    if (st.n >= tune.heat_streak && !(state.hot && state.hot.team === team && state.hot.idx === shot.by)) { state.hot = { team, idx: shot.by }; state.floats.push({ x: Math.max(120, Math.min(W - 120, hoop.cx)), y: hoop.rimY - 80, t: 1.4, max: 1.4, size: 28, text: 'HEAT CHECK!', color: '#ff7a1a' }); events.push({ type: 'hot', team, idx: shot.by }); }
+    if (st.n >= tune.heat_streak && !(state.hot && state.hot.team === team && state.hot.idx === shot.by)) { state.hot = { team, idx: shot.by }; state.floats.push({ x: Math.max(120, Math.min(W - 120, hoop.cx)), y: hoop.rimY - 80, t: 1.4, max: 1.4, size: 28, text: 'HEAT CHECK!', color: '#ff7a1a' }); events.push({ type: 'hot', team, idx: shot.by }); reelMark('HEAT CHECK', 'heatCheck', team); }
   }
   state.floats.push({ x: hoop.cx, y: hoop.rimY - 30, t: 1.1, text: '+' + pts, color: pts === 2 ? '#ff9a3c' : '#ffffff' });   // the points float up off the rim
   state.points = pts;
   if (shot && shot.kind !== 'dunk' && own) {   // moments worth a replay
-    if (pts === 2) Replay.mark(world, shot.perfect ? 'PERFECT LONG SHOT' : 'LONG SHOT', shot.perfect ? 85 : 55, team, state.round);
-    else if (shot.perfect) Replay.mark(world, 'PERFECT SHOT', 70, team, state.round);
-    else if (shot.kind === 'fade') Replay.mark(world, 'FADEAWAY', 65, team, state.round);
-    else if (shot.lob) Replay.mark(world, 'LOB OFF THE BOARD', 50, team, state.round);
+    if (pts === 2) reelMark(shot.perfect ? 'PERFECT LONG SHOT' : 'LONG SHOT', shot.perfect ? 'perfectLong' : 'longShot', team);
+    else if (shot.perfect) reelMark('PERFECT SHOT', 'perfectShot', team);
+    else if (shot.kind === 'fade') reelMark('FADEAWAY', 'fadeaway', team);
+    else if (shot.lob) reelMark('LOB OFF THE BOARD', 'lobBoard', team);
+  }
+  // a basket a pump fake set up: a shot the engine tagged (afterFake), or a dunk soon after the team's fake (world.lastFake).
+  // The clip reaches back to show the fake, slowed down there too; a defender who bit adds REEL.fakeBit.
+  const lf = world.lastFake, fake = !own ? null : shot.afterFake ? { bit: shot.fakeBit, t: shot.fakeT }
+    : shot.kind === 'dunk' && lf && lf.team === team && world.time - lf.t < tune.fake_window ? lf : null;
+  if (fake) {
+    const k = shot.kind === 'dunk' ? 'fakeDunk' : pts >= 2 ? 'fakeLong' : 'fakeScore';
+    reelMark({ fakeDunk: 'PUMP FAKE + DUNK', fakeLong: 'PUMP FAKE + LONG SHOT', fakeScore: 'PUMP FAKE + SCORE' }[k], k, team, fake.bit ? REEL.fakeBit[0] : 0, fake.t);
+    events.push({ type: 'fakescore', team, points: pts, bit: !!fake.bit, how: shot.kind });
   }
   state.toastT = 0; // the score banner names the shot; no callout on top of it
   state.score[team] += pts; state.pops[team] = pts === 2 ? 1.6 : 1; state.shake = tune.shake * (shot && shot.kind === 'dunk' ? 1.6 : 1); state.scorer = team; state.scoredT = 0;
@@ -861,7 +917,7 @@ const scenes = {
       state.t += dt;
       const R = reelState, c = R.clips[R.i];
       if (!R.cheered && R.f >= c.focus) { R.cheered = true; sfx.cheer(0.7); }
-      R.f += Math.abs(R.f - c.focus) < 40 ? tune.replay_slow : 1;   // slow around the moment itself
+      R.f += [c.focus, ...(c.also || [])].some(f => Math.abs(R.f - f) < 40) ? tune.replay_slow : 1;   // slow around the moment itself (and the pump fake behind it)
       if (pressed('Escape') || pressed('KeyQ')) { endReel(); return; }
       if (R.f >= c.len - 1 || pressed('Enter') || pressed('Space') || pressed('KeyE')) { R.i++; R.f = 0; R.cheered = false; if (R.i >= R.clips.length) endReel(); }
     },
@@ -909,7 +965,7 @@ const scenes = {
 // ---- The replay reel: the best moments of the match, shown before the results
 let reelState = null;
 function startReel(then) {
-  const clips = tune.replay_clips > 0 ? Replay.reel(tune.replay_clips) : [];
+  const clips = tune.replay_clips > 0 ? Replay.reel(tune.replay_clips, { label: tune.replay_label_repeat, kind: tune.replay_kind_repeat }) : [];
   if (!clips.length) { scene = then; return false; }
   reelState = { clips, i: 0, f: 0, then, cheered: false };
   Replay.borrow(world); scene = 'replay'; return true;
