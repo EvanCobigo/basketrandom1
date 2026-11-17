@@ -7,6 +7,12 @@
 window.CONFIG = {
   seed: 1, // every gameplay random call reads rng(), seeded from this (or ?seed= in the address)
   volume: { value: 0.5, min: 0, max: 1, step: 0.05 },
+  sfx_volume: { value: 1, min: 0, max: 1.5, step: 0.05 },      // the game's effects (ball, bodies, rim, dunks), under the master volume
+  crowd_volume: { value: 0.8, min: 0, max: 1.5, step: 0.05 },  // the crowd's cheers
+  ui_volume: { value: 0.8, min: 0, max: 1.5, step: 0.05 },     // menu ticks and presses
+  reverb: { value: 0.25, min: 0, max: 0.8, step: 0.05 },        // how much of the arena's room is heard around each sound
+  sfx_warmth: { value: 0.6, min: 0, max: 1, step: 0.05 },       // how much the top end is eased: 0 bright and open, 1 soft and muted
+  sfx_variation: { value: 1, min: 0, max: 2, step: 0.1 },       // how much repeats of a sound differ in pitch, level and timing
 
   // ---- Match ----
   win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)

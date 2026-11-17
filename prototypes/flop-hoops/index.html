@@ -114,63 +114,91 @@ function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14
 /** Arrow / W / S focus moves and Enter / Space presses, for any menu scene. */
 function menuKeys() {
   if (!buttons.length) return false;
-  if (pressed('ArrowDown') || pressed('ArrowRight') || pressed('KeyS')) { menuFocus = (menuFocus + 1) % buttons.length; sfx.click(); }
-  if (pressed('ArrowUp') || pressed('ArrowLeft') || pressed('KeyW')) { menuFocus = (menuFocus + buttons.length - 1) % buttons.length; sfx.click(); }
+  if (pressed('ArrowDown') || pressed('ArrowRight') || pressed('KeyS')) { menuFocus = (menuFocus + 1) % buttons.length; sfx.focus(); }
+  if (pressed('ArrowUp') || pressed('ArrowLeft') || pressed('KeyW')) { menuFocus = (menuFocus + buttons.length - 1) % buttons.length; sfx.focus(); }
   if (pressed('Enter') || pressed('Space')) { activate(buttons[Math.min(menuFocus, buttons.length - 1)]); return true; }
   return false;
 }
 
 // ---- Audio: started on first input, mute on M --------------------------------------------
-// Everything is synthesised. Voices go through a soft compressor, and a share of each goes to a
-// short generated room reverb, so effects sound rounded and have a little space around them.
+// Everything is synthesised, and voiced after the ball's floor bounce: rounded attacks, a soft top end, weight from the body
+// of a sound rather than its click. Voices go to three groups (effects, crowd, interface), then a warm master chain (a touch of
+// low-mid body, a high shelf set by sfx_warmth, a gentle compressor and a soft limit), and a share of each goes to a short,
+// dark generated room. Repeats vary a little in pitch, level and timing (sfx_variation), so nothing sounds stamped out.
 let audio = null, muted = false;
 function startAudio() {
   if (!audio) {
     const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)(); // a check may inject one
     const has = f => typeof ac[f] === 'function';
     const out = ac.createGain(); out.gain.value = muted ? 0 : tune.volume;
-    let head = out;
-    if (has('createDynamicsCompressor')) {   // glue: loud hits do not clip, quiet ones stay present
-      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -20; comp.knee.value = 18; comp.ratio.value = 3.2; comp.attack.value = 0.004; comp.release.value = 0.18;
-      comp.connect(out); head = comp;
-    }
     out.connect(ac.destination);
-    const bus = ac.createGain(); bus.gain.value = 1; bus.connect(head);
-    let send = null;
-    if (has('createConvolver') && has('createBuffer')) {   // a 1.5 s room: decaying, softened noise, different in each ear
-      const len = Math.floor(ac.sampleRate * 1.5), ir = ac.createBuffer(2, len, ac.sampleRate);
-      let x = 777; for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let lp = 0;
-        for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; lp += ((x / 0x3fffffff - 1) - lp) * 0.42; d[k] = lp * Math.pow(1 - k / len, 2.6); } }
-      const cv = ac.createConvolver(); cv.buffer = ir; const wet = ac.createGain(); wet.gain.value = 0.34;
-      send = ac.createGain(); send.gain.value = 1; send.connect(cv); cv.connect(wet); wet.connect(head);
+    let head = out;
+    if (has('createDynamicsCompressor')) {   // a soft ceiling, then gentle glue: loud hits do not clip, nothing pumps
+      const lim = ac.createDynamicsCompressor(); lim.threshold.value = -6; lim.knee.value = 4; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.12;
+      lim.connect(out);
+      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -22; comp.knee.value = 20; comp.ratio.value = 2.5; comp.attack.value = 0.012; comp.release.value = 0.25;
+      comp.connect(lim); head = comp;
     }
-    audio = { ac, out, bus, send, has };
-    // one second of noise for the swishes and cheers, from a fixed LCG (sound only, not gameplay)
+    // the tone of the whole mix: a little body at 220 Hz, the top end eased (sfx_warmth), and nothing above ~12 kHz
+    const body = ac.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 220; body.Q.value = 0.8; body.gain.value = 1.5;
+    const shelf = ac.createBiquadFilter(); shelf.type = 'highshelf'; shelf.frequency.value = 4200;
+    const top = ac.createBiquadFilter(); top.type = 'lowpass'; top.Q.value = 0.5;
+    body.connect(shelf); shelf.connect(top); top.connect(head);
+    const bus = ac.createGain(); bus.connect(body);
+    const groups = { sfx: ac.createGain(), crowd: ac.createGain(), ui: ac.createGain() };
+    for (const k in groups) groups[k].connect(bus);
+    let send = null, wet = null;
+    if (has('createConvolver') && has('createBuffer')) {   // a 0.9 s room: a few early reflections, then a dark, decaying tail, different in each ear
+      const len = Math.floor(ac.sampleRate * 0.9), ir = ac.createBuffer(2, len, ac.sampleRate);
+      let x = 777; for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let lp = 0;
+        for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; lp += ((x / 0x3fffffff - 1) - lp) * 0.22; d[k] = lp * Math.pow(1 - k / len, 3.2) * 0.9; }
+        for (const [ms, a] of [[11 + ch * 3, 0.5], [19 + ch * 2, 0.35], [31 - ch * 4, 0.25]]) d[Math.floor(ac.sampleRate * ms / 1000)] += a; }
+      const cv = ac.createConvolver(); cv.buffer = ir; wet = ac.createGain();
+      send = ac.createGain(); send.connect(cv); cv.connect(wet); wet.connect(body);
+    }
+    audio = { ac, out, bus, groups, send, wet, shelf, top, has };
+    // one second of noise for the textures (swish, crowd, leather), from a fixed LCG (sound only, not gameplay)
     const len = ac.sampleRate, buf = ac.createBuffer(1, len, ac.sampleRate), data = buf.getChannelData(0);
     let x = 12345; for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; data[k] = x / 0x3fffffff - 1; }
     audio.noise = buf;
+    applyAudioTune();
   }
-  if (audio.ac.state === 'suspended') audio.ac.resume();
+  if (audio.ac.state === 'suspended' && audio.ac.resume) { const r = audio.ac.resume(); if (r && r.catch) r.catch(() => {}); }   // (an offline context, in a check, cannot resume: that is fine)
 }
-function setMuted(m) { muted = m; if (audio) audio.out.gain.value = m ? 0 : tune.volume; }
-addEventListener('tune', () => setMuted(muted));
+/** The audio settings, live: master volume (and mute), the three group levels, the room, the warmth. */
+function applyAudioTune() {
+  if (!audio) return;
+  const a = audio, w = Math.max(0, Math.min(1, tune.sfx_warmth ?? 0.6));
+  a.out.gain.value = muted ? 0 : tune.volume;
+  a.groups.sfx.gain.value = tune.sfx_volume ?? 1; a.groups.crowd.gain.value = tune.crowd_volume ?? 0.8; a.groups.ui.gain.value = tune.ui_volume ?? 0.8;
+  if (a.wet) a.wet.gain.value = tune.reverb ?? 0.25;
+  a.shelf.gain.value = -10 * w; a.top.frequency.value = 16000 - 6000 * w;
+}
+function setMuted(m) { muted = m; applyAudioTune(); }
+addEventListener('tune', () => applyAudioTune());
+let sfxGain = 1;   // the level of the sound being made now (LOUDNESS below), applied to each of its voices
 let sfxSeed = 99; const arand = () => { sfxSeed = (sfxSeed * 1103515245 + 12345) & 0x7fffffff; return sfxSeed / 0x7fffffff; };   // sound only
-/** Route a node to the dry bus, and to the reverb by `verb` (0..1), panned by `pan` (-1..1). */
-function route(node, verb, pan) {
+/** A repeat's small differences: pitch (p, a ratio), level (g, a gain) and a few ms of delay (d), scaled by sfx_variation and `k`. */
+function vary(k = 1) {
+  const v = (tune.sfx_variation ?? 1) * k, r = () => arand() * 2 - 1;
+  return { p: 1 + r() * 0.045 * v, g: Math.pow(10, r() * 1.4 * v / 20), d: arand() * 0.006 * v };
+}
+/** Route a node to its group (o.grp: sfx, crowd or ui), and to the room by `verb` (0..1), panned by `pan` (-1..1). */
+function route(node, verb, pan, grp) {
   let n = node;
   if (pan && audio.has('createStereoPanner')) { const p = audio.ac.createStereoPanner(); p.pan.value = pan; n.connect(p); n = p; }
-  n.connect(audio.bus);
+  n.connect(audio.groups[grp || 'sfx']);
   if (audio.send && verb) { const g = audio.ac.createGain(); g.gain.value = verb; n.connect(g); g.connect(audio.send); }
 }
 /**
  * One voice: a tone with a soft attack and a curved decay, optionally two slightly detuned
  * oscillators, a low-pass that closes as it fades, a pitch glide, and a send to the reverb.
- * Options: type, vol, delay, to (glide target Hz), att (s), detune (cents), lp (Hz), verb, pan.
+ * Options: att (s), detune (cents), lp (Hz), glide (s), verb, pan, grp.
  */
 function tone(freq, dur, type = 'sine', vol = 0.3, delay = 0, to = freq, o = {}) {
   if (!audio || muted) return;
   const ac = audio.ac, t = ac.currentTime + delay, att = o.att ?? 0.006, g = ac.createGain();
-  const peak = Math.max(0.0002, vol);
+  const peak = Math.max(0.0002, vol * sfxGain);
   g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + att);
   g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.02, (dur - att) / 4.2));
   let node = g;
@@ -182,49 +210,168 @@ function tone(freq, dur, type = 'sine', vol = 0.3, delay = 0, to = freq, o = {})
     osc.connect(g); osc.start(t); osc.stop(t + dur + 0.05);
   }
   if (dets.length > 1) g.gain.value = 0.0001;   // (the ramp above sets the level; two voices share it)
-  route(node, o.verb ?? 0.12, o.pan);
+  route(node, o.verb ?? 0.1, o.pan, o.grp);
 }
-/** Shaped noise: a band (or a sweep from `freq` to `to`), a soft attack and a curved decay. */
+/** Shaped noise: a band (or a sweep from `freq` to `to`), a soft attack and a curved decay. Options: type, q, to, att, verb, pan, grp. */
 function noise(dur, vol, freq, delay = 0, o = {}) {
   if (!audio || muted) return;
   const ac = audio.ac, t = ac.currentTime + delay, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
   src.buffer = audio.noise; src.loop = dur > 0.95; f.type = o.type || 'bandpass'; f.Q.value = o.q ?? 0.9;
   f.frequency.setValueAtTime(freq, t); if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(60, o.to), t + dur);
-  const att = o.att ?? 0.004; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + att); g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.015, (dur - att) / 4));
-  src.connect(f); f.connect(g); route(g, o.verb ?? 0.1, o.pan); src.start(t, arand() * 0.5); src.stop(t + dur + 0.05);
+  const att = o.att ?? 0.004; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(Math.max(0.0002, vol * sfxGain), t + att); g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.015, (dur - att) / 4));
+  src.connect(f); f.connect(g); route(g, o.verb ?? 0.08, o.pan, o.grp); src.start(t, arand() * 0.5); src.stop(t + dur + 0.05);
 }
-/** A struck metal or glass sound: inharmonic partials that each ring a little differently. */
-function ring(freq, dur, vol, delay = 0, verb = 0.3, ratios = [1, 1.62, 2.51, 3.7]) {
-  ratios.forEach((r, k) => tone(freq * r, dur * (1 - k * 0.18), 'sine', vol / (1 + k * 0.9), delay, freq * r, { att: 0.002, verb }));
+/** A struck metal sound, rounded: inharmonic partials, the higher ones quieter and shorter, each a little flat as it rings. */
+function ring(freq, dur, vol, delay = 0, verb = 0.25, ratios = [1, 2.08, 2.92, 4.1]) {
+  ratios.forEach((r, k) => tone(freq * r, dur * (1 - k * 0.2), 'sine', vol / (1 + k * 1.4), delay, freq * r * 0.997, { att: 0.003 + k * 0.001, verb }));
 }
 const lastSound = {};
 function limited(key, gap) { const t = state ? state.t : 0; if (lastSound[key] !== undefined && t - lastSound[key] < gap && t >= lastSound[key]) return true; lastSound[key] = t; return false; }
 const PENT = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.7, 1318.5, 1568];   // C major pentatonic, so stacked sounds never clash
+const clamp01 = v => Math.max(0, Math.min(1, v));
+/** Leather on something: a short, low-passed slap (the ball's skin), the brighter the harder. */
+const leather = (vol, s, d = 0, o = {}) => noise(0.03 + 0.015 * s, vol, 600 + 700 * s, d, { type: 'lowpass', q: 0.6, att: 0.0015, verb: o.verb ?? 0.05, pan: o.pan });
 const sfx = {
-  click() { tone(1760, 0.07, 'sine', 0.05, 0, 1760, { att: 0.002, verb: 0.08 }); tone(2640, 0.05, 'sine', 0.025, 0.012, 2640, { att: 0.002, verb: 0.05 }); },
-  jump(team) { if (limited('jump' + team, 0.05)) return; const k = team ? 1.12 : 1; noise(0.11, 0.05, 500 * k, 0, { to: 1500 * k, q: 1.1, att: 0.02, pan: team ? 0.3 : -0.3 }); tone(190 * k, 0.12, 'sine', 0.07, 0, 330 * k, { att: 0.01, glide: 0.08, pan: team ? 0.3 : -0.3 }); },
-  floor(v) { if (limited('floor', 0.05)) return; const a = Math.min(0.4, v * 0.04); tone(150, 0.16, 'sine', a, 0, 52, { att: 0.002, glide: 0.1, verb: 0.05 }); noise(0.03, a * 0.35, 1800, 0, { type: 'lowpass', q: 0.5 }); },
-  bop(v) { if (limited('bop', 0.04)) return; const a = Math.min(0.28, 0.05 + v * 0.022); tone(230, 0.1, 'sine', a, 0, 120, { att: 0.003, glide: 0.07, verb: 0.05 }); noise(0.045, a * 0.5, 700, 0, { type: 'lowpass', q: 0.4 }); },
-  board(v) { if (limited('board', 0.05)) return; const a = Math.min(0.2, v * 0.02); tone(260, 0.14, 'triangle', a, 0, 200, { att: 0.002, verb: 0.15 }); tone(392, 0.1, 'sine', a * 0.6, 0, 330, { att: 0.002 }); noise(0.05, a * 0.8, 1100, 0, { q: 1.4 }); },
-  rim(v) { if (limited('rim', 0.06)) return; ring(880 + arand() * 60, 0.7, Math.min(0.2, v * 0.028), 0, 0.35); noise(0.03, 0.05, 3400, 0, { q: 1.6 }); },
-  swish() { noise(0.34, 0.16, 4200, 0, { to: 1500, q: 0.7, att: 0.02, verb: 0.25 }); [2, 4, 5].forEach((n, k) => tone(PENT[n] * 2, 0.5, 'sine', 0.05, 0.1 + k * 0.07, PENT[n] * 2, { att: 0.004, verb: 0.45 })); },
-  grab() { noise(0.035, 0.07, 2600, 0, { q: 1.5 }); tone(520, 0.1, 'sine', 0.07, 0, 780, { att: 0.004, glide: 0.06 }); },
-  shoot(c) { noise(0.2, 0.08, 500, 0, { to: 2600 + c * 1200, q: 0.9, att: 0.05, verb: 0.2 }); tone(300 + c * 160, 0.18, 'sine', 0.06, 0, 700 + c * 300, { att: 0.02, glide: 0.16 }); },
-  bounce(c) { tone(210 + c * 110, 0.11, 'triangle', 0.11, 0, 130, { att: 0.003, glide: 0.08, lp: 1800, verb: 0.08 }); tone(420 + c * 220, 0.06, 'sine', 0.03, 0, 300, { att: 0.002 }); },
-  dunk() { tone(96, 0.7, 'sine', 0.5, 0, 36, { att: 0.002, glide: 0.4, verb: 0.3 }); noise(0.09, 0.35, 5200, 0, { type: 'highpass', q: 0.5, att: 0.001, verb: 0.35 }); tone(180, 0.22, 'triangle', 0.2, 0, 70, { att: 0.002, glide: 0.15 }); noise(0.4, 0.14, 900, 0.02, { to: 250, q: 0.6, verb: 0.3 }); },
-  swat() { noise(0.09, 0.3, 2600, 0, { q: 1.2, att: 0.001, verb: 0.2 }); tone(260, 0.16, 'triangle', 0.22, 0, 90, { att: 0.002, glide: 0.1 }); ring(1400, 0.3, 0.06, 0.01, 0.2, [1, 1.5]); },
-  block() { noise(0.1, 0.24, 2200, 0, { q: 1.2, att: 0.001, verb: 0.15 }); tone(220, 0.14, 'triangle', 0.16, 0, 95, { att: 0.002, glide: 0.1 }); },
-  whistle() { for (const d of [0, 0.2]) { tone(2650, 0.17, 'sine', 0.07, d, 2750, { att: 0.012, verb: 0.3 }); tone(2660, 0.17, 'sine', 0.035, d + 0.005, 2770, { att: 0.012, detune: 14 }); noise(0.16, 0.03, 4800, d, { type: 'highpass', att: 0.01 }); } },
-  win() { [0, 2, 3, 5, 6, 8].forEach((n, k) => { tone(PENT[n], 0.6, 'sawtooth', 0.045, k * 0.11, PENT[n], { att: 0.01, lp: 3200, detune: 7, verb: 0.4 }); tone(PENT[n] / 2, 0.6, 'sine', 0.05, k * 0.11, PENT[n] / 2, { verb: 0.3 }); }); },
-  perfect() { [3, 4, 5, 7].forEach((n, k) => { tone(PENT[n] * 2, 0.6, 'sine', 0.06, k * 0.055, PENT[n] * 2, { att: 0.003, verb: 0.5 }); tone(PENT[n] * 4, 0.3, 'sine', 0.02, k * 0.055, PENT[n] * 4, { att: 0.003, verb: 0.5 }); }); },
-  cheer(big) {   // a crowd: noise through vowel-like bands, swelling and settling, with a few claps on top
-    if (!audio || muted) return;
-    [[600, 1.4], [1100, 1.6], [2500, 1.2]].forEach(([f, q], k) => noise(1.9, 0.1 * big * (k === 2 ? 0.55 : 1), f, 0.02 * k, { q, att: 0.35, verb: 0.35, pan: (k - 1) * 0.25 }));
-    for (let k = 0; k < 7; k++) noise(0.05, 0.05 * big, 1800 + arand() * 1400, 0.3 + k * 0.09 + arand() * 0.05, { q: 1.1, att: 0.001, verb: 0.3, pan: arand() * 1.6 - 0.8 });
-    [0.12, 0.3, 0.52].forEach((d, k) => tone(330 + k * 70, 0.4, 'sine', 0.018 * big, d, 640 + k * 90, { att: 0.08, verb: 0.4 }));
+  // ---- the ball: the floor bounce is the reference everything else is voiced against
+  floor(v) {   // the ball on the floor: a round low thump, and the leather slap on top, both scaled by how hard it lands
+    if (limited('floor', 0.045)) return; const s = clamp01(v / 12), r = vary();
+    tone(150 * r.p, 0.17, 'sine', (0.1 + 0.17 * s) * r.g, r.d, 50 * r.p, { att: 0.002, glide: 0.1, verb: 0.05 });
+    leather((0.025 + 0.06 * s) * r.g, s, r.d);
   },
-  sparks() { noise(0.9, 0.07, 6500, 0, { type: 'highpass', q: 0.5, att: 0.05, verb: 0.3 }); for (let k = 0; k < 8; k++) tone(PENT[3 + (k % 5)] * 2, 0.12, 'sine', 0.025, 0.05 * k + arand() * 0.04, PENT[3 + (k % 5)] * 2, { att: 0.002, verb: 0.4, pan: arand() * 1.4 - 0.7 }); },
+  bop(v) {   // the ball off a body: duller and shorter than the floor
+    if (limited('bop', 0.05)) return; const s = clamp01(v / 10), r = vary();
+    tone(125 * r.p, 0.1, 'sine', (0.05 + 0.11 * s) * r.g, r.d, 78 * r.p, { att: 0.003, glide: 0.07, verb: 0.04 });
+    noise(0.04, (0.025 + 0.035 * s) * r.g, 480 * r.p, r.d, { type: 'lowpass', q: 0.4, att: 0.002 });
+  },
+  board(v) {   // the backboard: a hollow thud with a short body resonance; a hard hit rattles the frame a little
+    if (limited('board', 0.05)) return; const s = clamp01(v / 12), r = vary();
+    tone(118 * r.p, 0.2, 'sine', (0.08 + 0.13 * s) * r.g, r.d, 92 * r.p, { att: 0.002, glide: 0.12, verb: 0.12 });
+    tone(305 * r.p, 0.13, 'sine', (0.03 + 0.05 * s) * r.g, r.d, 292 * r.p, { att: 0.002, verb: 0.12 });
+    leather((0.035 + 0.05 * s) * r.g, s, r.d, { verb: 0.1 });
+    if (s > 0.6) noise(0.12, 0.018 * s * r.g, 1500 * r.p, r.d + 0.015, { q: 2.2, att: 0.004 });
+  },
+  rim(v) {   // the rim: rounded metal, ringing longer and a touch brighter the harder it is hit, plus the ball's own knock
+    if (limited('rim', 0.06)) return; const s = clamp01(v / 10), r = vary();
+    ring(505 * r.p, 0.3 + 0.45 * s, (0.035 + 0.07 * s) * r.g, r.d, 0.22, s > 0.5 ? [1, 2.08, 2.92, 4.1] : [1, 2.08, 2.92]);
+    tone(230 * r.p, 0.06, 'sine', (0.03 + 0.05 * s) * r.g, r.d, 160 * r.p, { att: 0.002, verb: 0.05 });
+    noise(0.014, (0.015 + 0.03 * s) * r.g, 1700 * r.p, r.d, { q: 1, att: 0.001 });
+  },
+  // ---- handling
+  dribble(clean) {   // the palm pushing a dribble down (the floor contact that follows carries the bounce); a sloppy one is duller
+    if (limited('dribble', 0.06)) return; const r = vary();
+    noise(0.035, 0.03 * r.g, (clean ? 650 : 420) * r.p, r.d, { type: 'lowpass', q: 0.5, att: 0.004 });
+    tone(105 * r.p, 0.05, 'sine', 0.028 * r.g, r.d, 82 * r.p, { att: 0.003 });
+  },
+  pass(c = 0.6) {   // a pass: a leather push and a little air, longer for a harder pass
+    const r = vary();
+    noise(0.07 + 0.07 * c, (0.035 + 0.03 * c) * r.g, 650 * r.p, r.d, { to: 1300 * r.p, q: 0.7, att: 0.012, verb: 0.06 });
+    tone(135 * r.p, 0.08, 'sine', 0.05 * r.g, r.d, 92 * r.p, { att: 0.004 });
+  },
+  catch(firm = 1) {   // the ball into the hands: a muffled palm "thup" (a dribble coming back is lighter still)
+    if (limited('catch', 0.05)) return; const r = vary(), k = firm ? 1 : 0.45;
+    tone(165 * r.p, 0.09, 'sine', 0.085 * k * r.g, r.d, 108 * r.p, { att: 0.003, glide: 0.06, verb: 0.04 });
+    noise(0.04, 0.045 * k * r.g, 560 * r.p, r.d, { type: 'lowpass', q: 0.5, att: 0.002 });
+  },
+  grab() { sfx.catch(1); },
+  bounce(c) { if (c >= (tune.dribble_threshold ?? 0.25)) sfx.pass(c); else sfx.dribble(1); },   // (kept for older callers)
+  shoot(c = 0.6) {   // a shot leaving the fingertips: a soft flick, then a breath of air, longer for a fuller shot
+    const r = vary();
+    noise(0.022, 0.04 * r.g, 1250 * r.p, r.d, { q: 0.9, att: 0.001, verb: 0.05 });
+    noise(0.12 + 0.12 * c, (0.022 + 0.02 * c) * r.g, 850 * r.p, r.d + 0.01, { to: (1500 + 500 * c) * r.p, q: 0.6, att: 0.03, verb: 0.12 });
+    tone(190 * r.p, 0.07, 'sine', 0.035 * r.g, r.d, 150 * r.p, { att: 0.003 });
+  },
+  // ---- scoring
+  swish() {   // through the net: a soft swish, the net and ball's low thump, then a warm two-note chime
+    const r = vary(0.5);
+    noise(0.4, 0.085 * r.g, 2000 * r.p, 0, { to: 700, q: 0.9, att: 0.025, verb: 0.18 });
+    noise(0.22, 0.04 * r.g, 1300 * r.p, 0.06, { to: 600, q: 1.2, att: 0.02, verb: 0.12 });
+    tone(108, 0.15, 'sine', 0.06, 0.02, 78, { att: 0.004, verb: 0.08 });
+    [0, 2].forEach((n, k) => { tone(PENT[n], 0.6, 'sine', 0.032, 0.11 + k * 0.09, PENT[n], { att: 0.008, verb: 0.4 }); tone(PENT[n] / 2, 0.5, 'sine', 0.016, 0.11 + k * 0.09, PENT[n] / 2, { att: 0.01, verb: 0.3 }); });
+  },
+  perfect() {   // a clean line: a soft bell chord rising over the swish
+    [0, 2, 4].forEach((n, k) => { tone(PENT[n], 0.95, 'sine', 0.036, 0.04 + k * 0.06, PENT[n], { att: 0.012, verb: 0.45 }); tone(PENT[n] * 2, 0.4, 'sine', 0.008, 0.04 + k * 0.06, PENT[n] * 2, { att: 0.012, verb: 0.45 }); });
+  },
+  heat() {   // a heat check: a low warm whoosh and a fuller chord
+    noise(0.7, 0.035, 900, 0, { to: 280, q: 0.6, att: 0.12, verb: 0.3 });
+    [0, 2, 4, 7].forEach((n, k) => tone(PENT[n] / (k < 2 ? 2 : 1), 1.1, 'sine', 0.03, 0.05 + k * 0.05, PENT[n] / (k < 2 ? 2 : 1), { att: 0.02, verb: 0.45 }));
+  },
+  takeoff() { const r = vary(); noise(0.2, 0.035 * r.g, 480 * r.p, 0, { to: 1050 * r.p, q: 0.7, att: 0.04, verb: 0.1 }); },   // going up for a dunk: a soft rush of air
+  dunk(style) {   // the slam: a deep body impact, the rim taking the weight (rounded), the net snapping; a hammer is heavier still
+    const heavy = style === 'hammer', r = vary(0.6);
+    tone((heavy ? 60 : 76) * r.p, heavy ? 0.7 : 0.55, 'sine', (heavy ? 0.34 : 0.28) * r.g, 0, heavy ? 30 : 38, { att: 0.004, glide: 0.35, verb: 0.25 });
+    tone(150 * r.p, 0.18, 'sine', 0.12 * r.g, 0, 88, { att: 0.003, glide: 0.12 });
+    noise(0.05, 0.12 * r.g, 650 * r.p, 0, { type: 'lowpass', q: 0.5, att: 0.0015, verb: 0.15 });
+    ring(470 * r.p, 0.55, 0.05 * r.g, 0.004, 0.25, [1, 2.08, 2.92]);
+    noise(0.35, 0.06 * r.g, 1500, 0.02, { to: 500, q: 0.9, att: 0.012, verb: 0.22 });
+    if (heavy) noise(0.45, 0.09, 320, 0, { to: 110, type: 'lowpass', q: 0.4, att: 0.004, verb: 0.3 });
+  },
+  // ---- defence
+  swat() {   // a dunk swatted: a big leathery slap with weight behind it
+    const r = vary();
+    noise(0.06, 0.15 * r.g, 850 * r.p, 0, { type: 'lowpass', q: 0.6, att: 0.001, verb: 0.18 });
+    tone(158 * r.p, 0.17, 'sine', 0.14 * r.g, 0, 84 * r.p, { att: 0.002, glide: 0.1, verb: 0.15 });
+    noise(0.025, 0.04 * r.g, 1600, 0, { q: 1, att: 0.001 });
+  },
+  intercept() {   // a shot or pass taken out of the air: a tighter slap
+    const r = vary();
+    noise(0.045, 0.1 * r.g, 950 * r.p, 0, { type: 'lowpass', q: 0.6, att: 0.001, verb: 0.12 });
+    tone(188 * r.p, 0.1, 'sine', 0.09 * r.g, 0, 112 * r.p, { att: 0.002, glide: 0.07, verb: 0.08 });
+  },
+  steal() { const r = vary(); noise(0.035, 0.065 * r.g, 1100 * r.p, 0, { type: 'lowpass', q: 0.6, att: 0.001 }); tone(235 * r.p, 0.07, 'sine', 0.05 * r.g, 0, 160 * r.p, { att: 0.002 }); },   // a lighter swipe of the hand
+  block() { sfx.intercept(); },
+  fakebit() { const r = vary(); noise(0.15, 0.03 * r.g, 600 * r.p, 0, { to: 1400 * r.p, q: 0.8, att: 0.03, verb: 0.1 }); },   // a defender sold on a fake: a soft whiff past him
+  // ---- bodies
+  jump(team) {   // a sneaker pushing off: a muted scuff, quiet (both men hop on the one key, so it is heard a lot)
+    if (limited('jump' + team, 0.06)) return; const r = vary(), pan = team ? 0.3 : -0.3;
+    noise(0.06, 0.02 * r.g, 340 * r.p, r.d, { type: 'lowpass', q: 0.5, att: 0.008, pan });
+    noise(0.035, 0.008 * r.g, 1250 * r.p, r.d + 0.004, { q: 1.4, att: 0.004, pan });
+  },
+  land(v) {   // a hard landing: a soft thud through the floor (gentle landings say nothing)
+    if (v < 8 || limited('land', 0.15)) return; const s = clamp01((v - 8) / 8), r = vary();
+    tone(92 * r.p, 0.14, 'sine', (0.04 + 0.07 * s) * r.g, r.d, 58 * r.p, { att: 0.004, glide: 0.1, verb: 0.05 });
+    noise(0.05, (0.02 + 0.035 * s) * r.g, 380 * r.p, r.d, { type: 'lowpass', q: 0.4, att: 0.003 });
+  },
+  // ---- the rim's heat
+  sizzle(h = 1) { if (limited('sizzle', 0.22)) return; noise(0.3, 0.008 + 0.014 * h, 850, 0, { to: 650, q: 0.6, att: 0.08, verb: 0.15 }); },   // a hot rim: a low sizzle that rises with the heat
+  blast() {   // the rim blowing: a deep round boom and a soft crackle settling
+    tone(55, 0.9, 'sine', 0.3, 0, 28, { att: 0.005, glide: 0.6, verb: 0.35 });
+    noise(0.5, 0.11, 600, 0, { to: 150, type: 'lowpass', q: 0.5, att: 0.004, verb: 0.35 });
+    for (let k = 0; k < 6; k++) noise(0.03, 0.02, 1100 + arand() * 600, 0.05 + k * 0.06 + arand() * 0.04, { q: 1.1, att: 0.002, verb: 0.25, pan: arand() * 1.2 - 0.6 });
+  },
+  // ---- the game around it
+  whistle() {   // the referee: a softer, lower blast with the pea's flutter, and a little breath
+    const r = vary(0.5);
+    tone(2050 * r.p, 0.34, 'sine', 0.03, 0, 2090 * r.p, { att: 0.02, verb: 0.22, lp: 3200, detune: 22 });
+    noise(0.3, 0.008, 2300, 0, { q: 2.5, att: 0.02, verb: 0.15 });
+  },
+  cheer(big) {   // the crowd: vowel-like bands that swell and settle at their own pace, and claps scattered through it
+    if (!audio || muted) return;
+    [[520, 1.2, 0.4], [880, 1.4, 0.5], [1600, 1.3, 0.6], [700, 1.0, 0.3]].forEach(([f, q, a], k) => noise(1.6 + arand() * 0.6, (k === 2 ? 0.032 : 0.05) * big, f * (0.95 + arand() * 0.1), 0.03 * k, { q, att: a, verb: 0.35, pan: (k - 1.5) * 0.2, grp: 'crowd' }));
+    for (let k = 0; k < 9; k++) noise(0.04, 0.026 * big, 1200 + arand() * 700, 0.25 + k * 0.08 + arand() * 0.06, { type: 'lowpass', q: 0.8, att: 0.001, verb: 0.3, pan: arand() * 1.6 - 0.8, grp: 'crowd' });
+  },
+  sparks() { noise(0.8, 0.028, 2800, 0, { to: 1400, q: 0.5, att: 0.08, verb: 0.25 }); for (let k = 0; k < 6; k++) tone(PENT[k % 5], 0.14, 'sine', 0.012, 0.06 * k + arand() * 0.04, PENT[k % 5], { att: 0.004, verb: 0.4, pan: arand() * 1.4 - 0.7 }); },   // the spark machines: a soft fizz and a few small glints
+  win() {   // the match won: a warm chord swelling up, then the next one above it, with the crowd
+    [[0, 2, 4], [1, 3, 5]].forEach((ch, c) => ch.forEach((n, k) => {
+      tone(PENT[n], 1.6, 'sine', 0.042, c * 0.55 + k * 0.04, PENT[n], { att: 0.16, detune: 5, verb: 0.5, lp: 2600 });
+      if (k === 0) tone(PENT[n] / 2, 1.8, 'sine', 0.05, c * 0.55, PENT[n] / 2, { att: 0.2, verb: 0.4 });
+    }));
+    sfx.cheer(1);
+  },
+  // ---- the interface: small, round and low
+  click() { const r = vary(0.5); tone(620 * r.p, 0.06, 'sine', 0.06, 0, 520 * r.p, { att: 0.002, verb: 0.06, grp: 'ui' }); noise(0.012, 0.018, 1100, 0, { type: 'lowpass', att: 0.001, grp: 'ui' }); },   // a press: a rounded tok
+  focus() { if (limited('focus', 0.03)) return; tone(880, 0.035, 'sine', 0.02, 0, 860, { att: 0.002, verb: 0.04, grp: 'ui' }); },   // the focus moving: a small tick
+  back() { tone(460, 0.07, 'sine', 0.055, 0, 380, { att: 0.002, verb: 0.06, grp: 'ui' }); noise(0.012, 0.016, 900, 0, { type: 'lowpass', att: 0.001, grp: 'ui' }); },   // backing out: a lower tok
 };
+/**
+ * Each sound's level, set by ear against the floor bounce and checked with tools/sfx-audit.js (perceived loudness, not raw
+ * gain): everyday sounds sit close to the bounce, small ones (dribble, scuffs, menu) a little under it, and the rewards
+ * (a basket, a dunk, the win) a few steps over it. Applied to every voice a sound makes.
+ */
+const LOUDNESS = {
+  bop: 2, dribble: 2, pass: 2.4, catch: 1.6, shoot: 2.1, takeoff: 2.6, jump: 18, fakebit: 3, intercept: 2, steal: 2.4, swat: 1.4,
+  perfect: 0.7, heat: 0.7, dunk: 0.55, blast: 0.65, win: 0.42, cheer: 1.25, click: 1.5, focus: 2,
+};
+for (const k of Object.keys(LOUDNESS)) { const f = sfx[k]; sfx[k] = function (...a) { const prev = sfxGain; sfxGain = prev * LOUDNESS[k]; try { return f.apply(this, a); } finally { sfxGain = prev; } }; }
 
 // ---- Game state -----------------------------------------------------------------------
 // world: the Matter.js world of the current round. Kept out of `state` so state stays plain data.
@@ -276,10 +423,10 @@ function callout(s, team, x, y) {
 }
 function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); puff(ev.x, ev.y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 24 }); return; }
-  if (ev.type === 'dribble') { sfx.bounce(0.2); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
+  if (ev.type === 'dribble') { sfx.catch(0); world.flash.t = 0.25; events.push({ type: 'dribble', team: ev.team }); return; }
   // a pump fake (the engine's: a bounce out of a cocked shot) and a defender biting on it
   if (ev.type === 'pumpfake') { callout('PUMP FAKE!', ev.team, ev.x, ev.y); events.push({ type: 'pumpfake', team: ev.team, airborne: !!ev.airborne, pass: !!ev.pass }); return; }
-  if (ev.type === 'fakebit') { callout('SOLD IT!', ev.team, ev.x, ev.y); world.hype = Math.max(world.hype || 0, 0.3); events.push({ type: 'fakebit', team: ev.team, by: ev.by }); return; }
+  if (ev.type === 'fakebit') { sfx.fakebit(); callout('SOLD IT!', ev.team, ev.x, ev.y); world.hype = Math.max(world.hype || 0, 0.3); events.push({ type: 'fakebit', team: ev.team, by: ev.by }); return; }
   if (ev.type === 'grab' || ev.type === 'steal') {   // the other team's shot, pass or lob taken out of the air
     const what = interception(ev.team);
     if (what) {
@@ -289,7 +436,7 @@ function onPhysEvent(ev) {
       events.push({ type: 'intercept', team: ev.team, what });
     }
   }
-  if (ev.type === 'grab') { sfx.grab(); world.flash.t = 0.25; puff(ev.x, ev.y, 6, { speed: 150, life: 0.3, colors: ['#ffffff', '#ffd23f', Render.TEAM_COLORS[ev.team]], size: 6, g: 200, drag: 0.85 }); events.push({ type: 'grab', team: ev.team }); return; }
+  if (ev.type === 'grab') { sfx.catch(1); world.flash.t = 0.25; puff(ev.x, ev.y, 6, { speed: 150, life: 0.3, colors: ['#ffffff', '#ffd23f', Render.TEAM_COLORS[ev.team]], size: 6, g: 200, drag: 0.85 }); events.push({ type: 'grab', team: ev.team }); return; }
   if (ev.type === 'lob') {   // an alley-oop lob off the board: gold sparks and a call, so the set-up reads
     sfx.shoot(0.7); callout('LOB!', ev.team, ev.x, ev.y); world.hype = Math.max(world.hype || 0, 0.4);
     puff(ev.x, ev.y, 12, { speed: 260, life: 0.5, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 8, g: 200, drag: 0.9 });
@@ -303,12 +450,12 @@ function onPhysEvent(ev) {
     else if (ev.type === 'fadeaway') callout('FADEAWAY!', ev.team, ev.x, ev.y);
     return;
   }
-  if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.bounce(ev.quality === 'clean' ? 0.4 : 0.1); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
+  if (ev.type === 'dribbleout') { puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 80, angle: -Math.PI / 2, cone: 2.2, life: 0.28, colors: [DUST()], size: 6, g: 250, jitter: 30 }); sfx.dribble(ev.quality !== 'sloppy'); state.dribble = { team: ev.team, n: ev.chain, t: 1.2, clean: ev.quality === 'clean', sloppy: ev.sloppy }; events.push({ type: 'dribbleout', team: ev.team, chain: ev.chain }); return; }
   if (ev.type === 'dunkmiss') { sfx.rim(6); puff(ev.x, ev.y, 7, { speed: 220, life: 0.3, colors: ['#ffd23f', '#ffffff'], size: 6, g: 500 }); events.push({ type: 'dunkmiss', team: ev.team, reason: ev.reason, best: ev.best, grounded: ev.grounded, style: ev.style, t: ev.t }); return; }
-  if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.bounce(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
+  if (ev.type === 'bounce') { puff(ev.x, ev.y, 4, { speed: 110, life: 0.3, colors: ['#ffffff', '#7ad0ff'], size: 6, g: 150, drag: 0.88 }); sfx.pass(ev.charge); events.push({ type: 'bounce', team: ev.team, charge: ev.charge }); return; }
   if (ev.type === 'cut') { puff(ev.x, ev.y - 4, 5, { speed: 140, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 16 }); events.push({ type: 'cut', team: ev.team }); return; }
-  if (ev.type === 'dunkstart' && ev.putback) { sfx.grab(); callout('PUTBACK!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 18, { speed: 360, life: 0.6, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 500, drag: 0.92 }); events.push({ type: 'dunkstart', team: ev.team, style: ev.style, putback: true }); return; }
-  if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout(ev.giveGo ? 'GIVE-AND-GO!' : 'ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop, giveGo: !!ev.giveGo }); return; }
+  if (ev.type === 'dunkstart' && ev.putback) { sfx.takeoff(); callout('PUTBACK!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 18, { speed: 360, life: 0.6, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 500, drag: 0.92 }); events.push({ type: 'dunkstart', team: ev.team, style: ev.style, putback: true }); return; }
+  if (ev.type === 'dunkstart') { sfx.takeoff(); if (ev.oop) { callout(ev.giveGo ? 'GIVE-AND-GO!' : 'ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop, giveGo: !!ev.giveGo }); return; }
   if (ev.type === 'dunk') {   // the slam: an impact ring at the rim, a burst of chalk dust, and the view punches in for a moment
     // (a two-hand hammer jam lands heavier: a second, wider ring, more dust thrown down, a deeper punch-in)
     const heavy = ev.style === 'hammer', big = ev.oop || ev.giveGo ? 150 : 110;
@@ -316,11 +463,10 @@ function onPhysEvent(ev) {
     puff(ev.x, ev.y + 30, heavy ? 20 : 10, { speed: heavy ? 300 : 200, angle: Math.PI / 2, cone: 2.2, life: 0.5, colors: ['#ffffff', '#e8e2d6'], size: heavy ? 9 : 7, g: 200, drag: 0.9 });
     state.zoom = { x: ev.x, y: ev.y, t: 0.28, max: 0.28, k: (ev.oop || ev.giveGo || ev.putback ? 0.08 : 0.05) + (heavy ? 0.03 : 0) };
   }
-  if (ev.type === 'dunk') { const heavy = ev.style === 'hammer'; markDunk(ev); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk();
-    if (heavy) { tone(52, 0.9, 'sine', 0.5, 0, 26, { att: 0.002, glide: 0.5, verb: 0.35 }); noise(0.5, 0.26, 480, 0.01, { to: 110, q: 0.7, verb: 0.3 }); }   // the hammer: a deeper boom under the slam
+  if (ev.type === 'dunk') { const heavy = ev.style === 'hammer'; markDunk(ev); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(ev.style);   // (the hammer's deeper body is in sfx.dunk)
     state.shake = tune.shake * (ev.oop ? 1 : 0.6) * (heavy ? tune.hammer_shake : 1); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1) * (heavy ? 1.5 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
-    sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
+    sfx.blast();
     state.shake = Math.max(state.shake, tune.shake * 1.5); state.hitstop = Math.max(state.hitstop, 0.06);
     // a big one: a fireball, a ring of smoke, embers thrown out to the blast's edge, a shockwave ring and a white flash
     puff(ev.x, ev.y, 70, { speed: 900, life: 0.8, colors: ['#ff5a1f', '#ffd23f', '#c4143c', '#ffffff', '#ff9a1f'], size: 11, g: 300, drag: 0.9 });
@@ -338,8 +484,8 @@ function onPhysEvent(ev) {
   if (ev.type === 'steal') reelMark('STEAL', 'steal', ev.team);
   if (ev.type === 'block' && ev.dunk) { sfx.swat(); state.shake = Math.max(state.shake, tune.shake * 0.7); callout('DENIED!', ev.team, ev.x, ev.y); puff(ev.x, ev.y, 14, { speed: 320, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 }); events.push({ type: 'block', team: ev.team, dunk: true }); return; }
   if (CALLOUTS[ev.type]) puff(ev.x, ev.y, 9, { speed: 280, life: 0.4, colors: ['#ffffff', Render.TEAM_COLORS[ev.team], '#ffd23f'], size: 8, g: 300, drag: 0.88 });
-  if (CALLOUTS[ev.type]) { sfx.block(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(ev.intercepted ? 'INTERCEPTED!' : CALLOUTS[ev.type], ev.team, ev.x, ev.y); events.push({ type: ev.type, team: ev.team }); return; }
-  if (ev.type === 'land') { if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
+  if (CALLOUTS[ev.type]) { if (ev.type === 'steal' && !ev.intercepted) sfx.steal(); else sfx.intercept(); state.shake = Math.max(state.shake, tune.shake * 0.4); callout(ev.intercepted ? 'INTERCEPTED!' : CALLOUTS[ev.type], ev.team, ev.x, ev.y); events.push({ type: ev.type, team: ev.team }); return; }
+  if (ev.type === 'land') { sfx.land(ev.speed); if (ev.speed > 4) puff(ev.x, ev.y - 4, 4, { speed: 120, angle: -Math.PI / 2, cone: 2.6, life: 0.35, colors: [DUST()], size: 8, g: 300, jitter: 20 }); return; }
   if (ev.type !== 'hit' || ev.speed < 1.2) return;
   if (ev.on === 'floor' && ev.speed > 3) puff(ev.x, Physics.FLOOR_Y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 14 });
   if (ev.on === 'rim' && ev.speed > 2) puff(ev.x, ev.y, 6, { speed: 220, life: 0.25, colors: ['#ffd23f', '#ffffff'], size: 6, g: 600 });
@@ -441,7 +587,7 @@ function score(hoop) {
   if (own && shot.by !== undefined) {
     const st = state.streak && state.streak.team === team && state.streak.idx === shot.by ? state.streak : { team, idx: shot.by, n: 0 };
     st.n++; state.streak = st;
-    if (st.n >= tune.heat_streak && !(state.hot && state.hot.team === team && state.hot.idx === shot.by)) { state.hot = { team, idx: shot.by }; state.floats.push({ x: Math.max(120, Math.min(W - 120, hoop.cx)), y: hoop.rimY - 80, t: 1.4, max: 1.4, size: 28, text: 'HEAT CHECK!', color: '#ff7a1a' }); events.push({ type: 'hot', team, idx: shot.by }); reelMark('HEAT CHECK', 'heatCheck', team); }
+    if (st.n >= tune.heat_streak && !(state.hot && state.hot.team === team && state.hot.idx === shot.by)) { state.hot = { team, idx: shot.by }; sfx.heat(); state.floats.push({ x: Math.max(120, Math.min(W - 120, hoop.cx)), y: hoop.rimY - 80, t: 1.4, max: 1.4, size: 28, text: 'HEAT CHECK!', color: '#ff7a1a' }); events.push({ type: 'hot', team, idx: shot.by }); reelMark('HEAT CHECK', 'heatCheck', team); }
   }
   state.floats.push({ x: hoop.cx, y: hoop.rimY - 30, t: 1.1, text: '+' + pts, color: pts === 2 ? '#ff9a3c' : '#ffffff' });   // the points float up off the rim
   state.points = pts;
@@ -495,6 +641,7 @@ function puff(x, y, n, o) {
 function sparkShow() { if (world) { world.sparkT = tune.spark_time; world.hype = Math.max(world.hype || 0, 1); } sfx.sparks(); }
 function updateJuice(dt) {
   state.fxTick = (state.fxTick || 0) + 1;
+  if (world && scene === 'play') for (const h of world.hoops) if ((h.heat || 0) > 0.5) sfx.sizzle(h.heat);   // (and sizzles, rising with the heat)
   if (world && state.fxTick % 4 === 0) for (const h of world.hoops) if ((h.heat || 0) > 0.5 || (h.gleam !== undefined && h.gleam !== null)) {   // a hot rim gives off sparks
     puff(h.x1 + rng() * (h.x2 - h.x1), h.rimY - 4, 1, { speed: 60, angle: -Math.PI / 2, cone: 1, life: 0.5, colors: ['#ff7a1a', '#ffd23f', '#c4143c'], size: 5, g: -60, drag: 0.92 });
   }
@@ -799,7 +946,7 @@ const scenes = {
     update(dt) {
       state.t += dt;
       if (menuPress) return;
-      if (pressed('Escape') || pressed('Enter') || pressed('Backspace')) { scene = settingsFrom; return; }
+      if (pressed('Escape') || pressed('Enter') || pressed('Backspace')) { sfx.back(); scene = settingsFrom; return; }
       if (pressed('ArrowDown') || pressed('KeyS')) settingsMove(1);
       if (pressed('ArrowUp') || pressed('KeyW')) settingsMove(-1);
       if (pressed('PageDown')) settingsMove(SET.show);

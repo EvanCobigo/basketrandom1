@@ -13,7 +13,8 @@ const Settings = (() => {
   // Sections by key prefix or name; anything not matched lands in the last one, so a new value
   // added to config.js always shows up somewhere.
   const SECTIONS = [
-    ['MATCH', ['volume', 'win_score', 'game_speed', 'card_time', 'score_time', 'stall_time']],
+    ['SOUND', ['volume', 'sfx_volume', 'crowd_volume', 'ui_volume', 'reverb', 'sfx_warmth', 'sfx_variation']],
+    ['MATCH', ['win_score', 'game_speed', 'card_time', 'score_time', 'stall_time']],
     ['CPU OPPONENT', k => k.startsWith('ai_')],
     ['JUMPING AND MOVING', k => k.startsWith('jump_') || ['hop_reach', 'coyote_time', 'spread_distance', 'spread_push', 'hustle_gap', 'hustle_jump'].includes(k)],
     ['CATCHING', ['regrab_delay', 'palm_offset', 'belly_margin', 'hand_box', 'steal_guard', 'strip_speed', 'block_window', 'block_pop']],
