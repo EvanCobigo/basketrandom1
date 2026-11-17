@@ -503,8 +503,8 @@ const Render = (() => {
       if ((team === 1 && st.cpu) || (team === 0 && st.cpu0)) { const sty = team ? st.cpuStyle : st.cpuStyle0; text(ctx, 'CPU', bx - s * 28, y + (sty ? 58 : 62), 18, '#ffffff', { stroke: 4 }); if (sty) text(ctx, sty, bx - s * 28, y + 76, 12, '#ffffff', { stroke: 3 }); }   // the computer plays this side
       else { keycap(ctx, bx - s * 28 - 18, y + 62, team ? 'up' : 'W', 0.55); keycap(ctx, bx - s * 28 + 14, y + 62, team ? 'down' : 'S', 0.55); }
       const pop = st.pops[team];
-      ctx.save(); ctx.translate(bx + s * 52, y + h / 2); ctx.scale(1 + pop * 0.6, 1 + pop * 0.6);
-      text(ctx, String(st.score[team]), 0, 2, 52, '#ffffff', { weight: 900, stroke: 7 });
+      ctx.save(); ctx.translate(bx + s * (st.score[team] >= 10 ? 60 : 52), y + h / 2); ctx.scale(1 + pop * 0.6, 1 + pop * 0.6);
+      text(ctx, String(st.score[team]), 0, 2, st.score[team] >= 10 ? 38 : 52, '#ffffff', { weight: 900, stroke: 7 });   // (two digits smaller, clear of the name)
       ctx.restore();
       if (st.leader === team) crown(ctx, bx + s * 52, y - 4, 0.9);
     }

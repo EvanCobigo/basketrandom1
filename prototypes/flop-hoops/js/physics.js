@@ -732,7 +732,7 @@ const Physics = (() => {
    */
   function bounce(w, T) {
     const h = w.hold, p = h.p, ball = w.ball, c = h.bcharge;
-    if (h.cocking && h.charge > T.fake_min_charge) pumpFake(w, T, h, c);   // out of a cocked shot: a pump fake (see pumpFake)
+    if (h.cocking && h.charge > T.fake_min_charge && c < T.dribble_threshold) pumpFake(w, T, h, c);   // a dribble out of a cocked shot: a pump fake (see pumpFake). A pass out of one is just a pass
     release(w, T, T.bounce_ignore);   // the bouncer's own legs never kick their own dribble away
     p.grabCD = T.bounce_regrab;
     w.lastBouncer = p;
@@ -785,7 +785,7 @@ const Physics = (() => {
     const foes = w.players.filter(q => q.team !== p.team);
     const near = q => Math.abs(q.torso.position.x - p.torso.position.x) <= T.fake_bit_range;
     // down: the defenders seen on the floor since the fake (one of them leaving it, near the faker, has bitten)
-    const lf = w.lastFake = { team: p.team, p, t: w.time, x, airborne: p.sinceGround > 0.1, pass: c >= T.dribble_threshold, bit: false, by: null,
+    const lf = w.lastFake = { team: p.team, p, t: w.time, x, airborne: p.legs.every(l => l.position.y + Math.abs(Math.cos(l.angle)) * p.dims.legL / 2 < w.floorY - 12), pass: c >= T.dribble_threshold, bit: false, by: null,
       down: new Set(foes.filter(q => q.sinceGround < 0.05)) };
     w.onEvent({ type: 'pumpfake', team: p.team, x, y: w.ball.position.y, airborne: lf.airborne, pass: lf.pass, charge: h.charge });
     const up = foes.find(q => near(q) && q.sinceGround > 0.1 && q.sinceJump <= cockT + 0.05);   // (sinceJump: his own jump, not a knock)

@@ -90,7 +90,13 @@ const Replay = (() => {
     // focus: the frame of the moment itself; also: earlier frames to slow down at too (the pump fake behind a basket)
     const also = p.back !== null && p.back !== undefined && p.back >= start && p.back < p.at - 40 ? [p.back - start] : [];
     clips.push({ w: r.w, nb: r.nb, F: r.F, frames, len, focus: p.at - start, also, label: p.label, score: p.score, kind: p.kind || kindOf(p.label), team: p.team, round: p.round, order: seq++ });
-    if (clips.length > MAX_CLIPS) clips.splice(clips.indexOf(clips.slice().sort((a, b) => a.score - b.score || a.order - b.order)[0]), 1);
+    // full: the clip that goes is the one worth least once its repeats count against it (the same variety the reel uses), so one
+    // common kind of moment (an interception) cannot push every other kind out of the store before the reel is picked
+    if (clips.length > MAX_CLIPS) {
+      const n = {}; for (const c of clips) n[c.label] = (n[c.label] || 0) + 1;
+      const worth = c => c.score - 25 * (n[c.label] - 1);
+      clips.splice(clips.indexOf(clips.slice().sort((a, b) => worth(a) - worth(b) || a.order - b.order)[0]), 1);
+    }
   }
   function flush() { if (rec) for (const p of rec.pending.slice()) finish(p); }
 

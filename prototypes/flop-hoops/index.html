@@ -269,7 +269,10 @@ function interception(team) {
  */
 function callout(s, team, x, y) {
   if (x === undefined || y === undefined) { x = world.ball.position.x; y = world.ball.position.y; }
-  state.floats.push({ x: Math.max(80, Math.min(W - 80, x)), y: Math.max(160, y - 50), t: 0.9, max: 0.9, size: 18, text: s, color: team >= 0 ? Render.TEAM_COLORS[team] : '#ffd23f' });
+  let fy = Math.max(160, y - 50);
+  // (two calls at once stack: a new one goes above any young call already near that spot, never on top of it)
+  for (let k = 0; k < 4 && state.floats.some(f => f.size && f.t > 0.4 && Math.abs(f.x - x) < 160 && Math.abs(f.y - fy) < 26); k++) fy -= 28;
+  state.floats.push({ x: Math.max(80, Math.min(W - 80, x)), y: fy, t: 0.9, max: 0.9, size: 18, text: s, color: team >= 0 ? Render.TEAM_COLORS[team] : '#ffd23f' });
 }
 function onPhysEvent(ev) {
   if (ev.type === 'jump') { sfx.jump(ev.team); puff(ev.x, ev.y - 4, 3, { speed: 90, angle: -Math.PI / 2, cone: 2.4, life: 0.3, colors: [DUST()], size: 7, g: 250, jitter: 24 }); return; }
@@ -937,7 +940,8 @@ const scenes = {
       if (Math.floor(state.t * 2) % 2) { ctx.fillStyle = '#ff3b3b'; ctx.fillRect(40, 26, 18, 18); }
       ptext('REPLAY', 120, 35, 3, '#ffffff'); ptext(`${R.i + 1} / ${R.clips.length}`, W - 110, 35, 3, '#c9c3e0');
       const near = Math.abs(R.f - c.focus) < 50;
-      ptext(c.label, W / 2, H - 38, near ? 5 : 4, Render.TEAM_COLORS[c.team], { outline: true });
+      const lsz = c.label.length > 18 ? (near ? 3 : 3) : c.label.length > 12 ? (near ? 4 : 3) : near ? 5 : 4;   // (long labels smaller: they must clear the ENTER / ESC hint)
+      ptext(c.label, W / 2 - (c.label.length > 12 ? 80 : 0), H - 38, lsz, Render.TEAM_COLORS[c.team], { outline: true });
       ptext(`${Render.TEAM_NAMES[c.team].toUpperCase()} · ROUND ${c.round}`, W / 2, 35, 2, '#c9c3e0');
       ctx.fillStyle = '#ffd23f'; ctx.fillRect(0, H - 6, W * R.f / (c.len - 1), 6);
       ptext('ENTER: NEXT   ESC: SKIP', W - 200, H - 38, 2, '#c9c3e0');
