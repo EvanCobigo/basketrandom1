@@ -96,7 +96,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Settings menu (title and pause): every coefficient in config.js by section, with sliders, keys and mouse; saved in this browser; RESET ALL
 - [x] A live crowd in the stands: heads bobbing on their own beats, on their feet with arms up when the sparks fly and on every basket
 - [x] Menu, pause, victory screen, restart: in the game's own 5x7 pixel font with drop shadows, over a retro sunset-and-grid backdrop on the title; buttons bob, lift with a blinking pointer on hover or focus, and squash when pressed; arrows or W/S and Enter pick
-- [ ] Synth sounds: jump, bounce, rim, swish; mute
+- [x] Synth sounds: jump, bounce, rim, swish; mute (polished in iteration 47: warm soft-clip, reverb pre-delay and darker tail, small pitch variation on impacts)
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
