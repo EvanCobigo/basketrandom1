@@ -98,6 +98,8 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Menu, pause, victory screen, restart: in the game's own 5x7 pixel font with drop shadows, over a retro sunset-and-grid backdrop on the title; buttons bob, lift with a blinking pointer on hover or focus, and squash when pressed; arrows or W/S and Enter pick
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
+- [x] Menu look in the game: the scoreboard and round card use the menus' bevelled panels (team-colour split stripe, studs, slow bob, a gleam sweeping across), and outlined text has the menus' hard drop shadow
+- [x] Stage lights: on a dunk, alley-oop, perfect shot, made fadeaway or long shot, denied dunk, overheat and the win, the house dims round the moment and four truss beams swing in with floor pools (rainbow, gold or fire); STAGE LIGHTS ON/OFF in settings (stage_lights, stage_light_time)
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held

@@ -216,6 +216,8 @@ window.CONFIG = {
   crowd_gaps: { value: 0.12, min: 0, max: 0.9, step: 0.01 },     // share of empty seats
   crowd_hype_time: { value: 2.2, min: 0.3, max: 6, step: 0.1 },  // s the crowd stays on its feet after sparks fly
   fire_time: { value: 1.1, min: 0, max: 3, step: 0.1 },          // s the rim burns after a dunk
+  stage_lights: { value: 1, min: 0, max: 1, step: 1 },             // 1: the arena's stage lights come on for awesome plays (dunks, perfect shots, fadeaways, long shots, blocks, overheats, the win); 0: never
+  stage_light_time: { value: 2.6, min: 0.5, max: 6, step: 0.1 },    // s the stage lights stay on after a big play (the win holds them twice as long)
   spark_time: { value: 1.2, min: 0, max: 3, step: 0.1 },         // s the cold-spark machines fire on a dunk or a made fadeaway
   pixel_size: { value: 3.5, min: 1, max: 6, step: 0.5 },           // screen px per art pixel on the court
   palette_snap: { value: 1, min: 0, max: 1, step: 1 },          // 1: snap every court pixel to the round's retro palette
