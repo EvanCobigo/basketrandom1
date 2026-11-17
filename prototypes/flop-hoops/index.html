@@ -135,28 +135,14 @@ function startAudio() {
       comp.connect(out); head = comp;
     }
     out.connect(ac.destination);
-    const bus = ac.createGain(); bus.gain.value = 1;
-    if (has('createWaveShaper') && has('createBiquadFilter')) {   // polish: a rumble filter, then a soft tanh curve that warms and rounds peaks
-      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 28; hp.Q.value = 0.5;
-      const sh = ac.createWaveShaper(), curve = new Float32Array(1025), drive = 1.35;
-      for (let k = 0; k < curve.length; k++) curve[k] = Math.tanh(((k / 512) - 1) * drive) / Math.tanh(drive);
-      sh.curve = curve; sh.oversample = '2x';
-      bus.connect(sh); sh.connect(hp); hp.connect(head);
-    } else bus.connect(head);
+    const bus = ac.createGain(); bus.gain.value = 1; bus.connect(head);
     let send = null;
     if (has('createConvolver') && has('createBuffer')) {   // a 1.5 s room: decaying, softened noise, different in each ear
       const len = Math.floor(ac.sampleRate * 1.5), ir = ac.createBuffer(2, len, ac.sampleRate);
       let x = 777; for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let lp = 0;
         for (let k = 0; k < len; k++) { x = (x * 1103515245 + 12345) & 0x7fffffff; lp += ((x / 0x3fffffff - 1) - lp) * 0.42; d[k] = lp * Math.pow(1 - k / len, 2.6); } }
       const cv = ac.createConvolver(); cv.buffer = ir; const wet = ac.createGain(); wet.gain.value = 0.34;
-      send = ac.createGain(); send.gain.value = 1;
-      if (has('createDelay') && has('createBiquadFilter')) {   // a 16 ms pre-delay keeps the hit clear of its tail; the send loses lows and harsh highs
-        const pre = ac.createDelay(0.1); pre.delayTime.value = 0.016;
-        const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 260;
-        const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6200;
-        send.connect(pre); pre.connect(hp); hp.connect(lp); lp.connect(cv);
-      } else send.connect(cv);
-      cv.connect(wet); wet.connect(head);
+      send = ac.createGain(); send.gain.value = 1; send.connect(cv); cv.connect(wet); wet.connect(head);
     }
     audio = { ac, out, bus, send, has };
     // one second of noise for the swishes and cheers, from a fixed LCG (sound only, not gameplay)
@@ -184,7 +170,7 @@ function route(node, verb, pan) {
 function tone(freq, dur, type = 'sine', vol = 0.3, delay = 0, to = freq, o = {}) {
   if (!audio || muted) return;
   const ac = audio.ac, t = ac.currentTime + delay, att = o.att ?? 0.006, g = ac.createGain();
-  const peak = Math.max(0.0002, vol), j = pv(); freq *= j; to *= j;
+  const peak = Math.max(0.0002, vol);
   g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + att);
   g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.02, (dur - att) / 4.2));
   let node = g;
@@ -202,7 +188,7 @@ function tone(freq, dur, type = 'sine', vol = 0.3, delay = 0, to = freq, o = {})
 function noise(dur, vol, freq, delay = 0, o = {}) {
   if (!audio || muted) return;
   const ac = audio.ac, t = ac.currentTime + delay, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-  freq *= pv(); src.buffer = audio.noise; src.loop = dur > 0.95; f.type = o.type || 'bandpass'; f.Q.value = o.q ?? 0.9;
+  src.buffer = audio.noise; src.loop = dur > 0.95; f.type = o.type || 'bandpass'; f.Q.value = o.q ?? 0.9;
   f.frequency.setValueAtTime(freq, t); if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(60, o.to), t + dur);
   const att = o.att ?? 0.004; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + att); g.gain.setTargetAtTime(0.0001, t + att, Math.max(0.015, (dur - att) / 4));
   src.connect(f); f.connect(g); route(g, o.verb ?? 0.1, o.pan); src.start(t, arand() * 0.5); src.stop(t + dur + 0.05);
@@ -211,8 +197,6 @@ function noise(dur, vol, freq, delay = 0, o = {}) {
 function ring(freq, dur, vol, delay = 0, verb = 0.3, ratios = [1, 1.62, 2.51, 3.7]) {
   ratios.forEach((r, k) => tone(freq * r, dur * (1 - k * 0.18), 'sine', vol / (1 + k * 0.9), delay, freq * r, { att: 0.002, verb }));
 }
-let varOn = false;   // while an impact sound plays, every voice drifts a few percent in pitch, so repeats are never identical
-const pv = () => varOn ? 1 + (arand() - 0.5) * 0.06 : 1;
 const lastSound = {};
 function limited(key, gap) { const t = state ? state.t : 0; if (lastSound[key] !== undefined && t - lastSound[key] < gap && t >= lastSound[key]) return true; lastSound[key] = t; return false; }
 const PENT = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.7, 1318.5, 1568];   // C major pentatonic, so stacked sounds never clash
@@ -241,9 +225,6 @@ const sfx = {
   },
   sparks() { noise(0.9, 0.07, 6500, 0, { type: 'highpass', q: 0.5, att: 0.05, verb: 0.3 }); for (let k = 0; k < 8; k++) tone(PENT[3 + (k % 5)] * 2, 0.12, 'sine', 0.025, 0.05 * k + arand() * 0.04, PENT[3 + (k % 5)] * 2, { att: 0.002, verb: 0.4, pan: arand() * 1.4 - 0.7 }); },
 };
-for (const k of ['click', 'jump', 'floor', 'bop', 'board', 'rim', 'grab', 'shoot', 'bounce', 'dunk', 'swat', 'block']) {
-  const f = sfx[k]; sfx[k] = function (...a) { varOn = true; try { return f.apply(this, a); } finally { varOn = false; } };
-}
 
 // ---- Game state -----------------------------------------------------------------------
 // world: the Matter.js world of the current round. Kept out of `state` so state stays plain data.
