@@ -1,0 +1,29 @@
+seed 1  score 7-4  rounds 9  clips 16
+  reel: WINDMILL DUNK 75 [dunk] | INTERCEPTED 90 [defence] | PUMP FAKE + SCORE 90 [fake] (+fake slow-mo) | PERFECT LONG SHOT 85 [shot] | INTERCEPTED 90 [defence]
+  marks: STEAL x13, INTERCEPTED x4, LONG SHOT x2, WINDMILL DUNK x1, HEAT CHECK x1, PERFECT SHOT x1, PUMP FAKE + SCORE x1, PERFECT LONG SHOT x1, OVERHEAT x1
+  events: score 8, steal 13, pumpfake 9, fakebit 7, dunk 1, intercept:shot 4, hot 1, fakescore 1, rimblast 1
+seed 2  score 14-8  rounds 13  clips 16
+  reel: PUMP FAKE + LONG SHOT 100 [fake] (+fake slow-mo) | INTERCEPTED 90 [defence] | PUTBACK WINDMILL DUNK 85 [dunk] | PERFECT LONG SHOT 85 [shot] | HEAT CHECK 80 [flashy]
+  marks: STEAL x7, LONG SHOT x6, INTERCEPTED x5, PERFECT LONG SHOT x4, PUMP FAKE + LONG SHOT x2, PUTBACK WINDMILL DUNK x1, HEAT CHECK x1
+  events: score 12, pumpfake 2, fakescore 2, intercept:shot 5, steal 7, dunk 1, hot 1, block 1
+seed 3  score 9-4  rounds 10  clips 16
+  reel: DENIED 80 [defence] | INTERCEPTED 90 [defence] | PUTBACK WINDMILL DUNK 85 [dunk] | PERFECT SHOT 70 [shot] | OVERHEAT 85 [flashy]
+  marks: STEAL x11, LONG SHOT x4, INTERCEPTED x4, OVERHEAT x2, DENIED x1, PUTBACK WINDMILL DUNK x1, PERFECT SHOT x1
+  events: steal 11, score 9, block 1, intercept:shot 4, rimblast 2, dunk 1, pumpfake 2, fakebit 2
+seed 4  score 7-8  rounds 10  clips 16
+  reel: PERFECT LONG SHOT 85 [shot] | INTERCEPTED 90 [defence] | INTERCEPTED 90 [defence] | PUMP FAKE + LONG SHOT 100 [fake] (+fake slow-mo) | OVERHEAT 85 [flashy]
+  marks: STEAL x8, PERFECT LONG SHOT x4, INTERCEPTED x4, LONG SHOT x2, PUMP FAKE + LONG SHOT x1, TOMAHAWK DUNK x1, OVERHEAT x1
+  events: steal 8, pumpfake 5, fakebit 4, score 9, intercept:shot 4, fakescore 1, dunk 1, rimblast 1
+seed 5  score 10-8  rounds 12  clips 16
+  reel: OVERHEAT 85 [flashy] | INTERCEPTED 90 [defence] | INTERCEPTED 90 [defence] | PERFECT LONG SHOT 85 [shot] | PERFECT SHOT 70 [shot]
+  marks: STEAL x9, INTERCEPTED x6, LONG SHOT x4, PERFECT LONG SHOT x3, OVERHEAT x2, PERFECT SHOT x2, PUTBACK WINDMILL DUNK x1, FADEAWAY x1
+  events: steal 9, rimblast 2, intercept:shot 6, dunk 1, score 11, pumpfake 3, fakebit 3, block 1
+seed 6  score 7-5  rounds 9  clips 16
+  reel: INTERCEPTED 90 [defence] | INTERCEPTED 90 [defence] | OVERHEAT 85 [flashy] | ALLEY-OOP WINDMILL DUNK 100 [flashy] | PERFECT SHOT 70 [shot]
+  marks: STEAL x10, INTERCEPTED x6, LONG SHOT x3, OVERHEAT x2, INTERCEPTED PASS x1, PERFECT LONG SHOT x1, HONEY DIP x1, HEAT CHECK x1, ALLEY-OOP WINDMILL DUNK x1, PERFECT SHOT x1
+  events: intercept:shot 6, steal 10, intercept:pass 1, pumpfake 1, fakebit 1, rimblast 2, score 8, dunk 2, hot 1
+TOTAL over 6 matches of 90 s (levels 5 v 5)
+  marks made: STEAL 58, INTERCEPTED 29, LONG SHOT 21, PERFECT LONG SHOT 13, OVERHEAT 8, PERFECT SHOT 5, HEAT CHECK 3, PUMP FAKE + LONG SHOT 3, PUTBACK WINDMILL DUNK 3, WINDMILL DUNK 1, PUMP FAKE + SCORE 1, DENIED 1, TOMAHAWK DUNK 1, FADEAWAY 1, INTERCEPTED PASS 1, HONEY DIP 1, ALLEY-OOP WINDMILL DUNK 1
+  reel picks: INTERCEPTED 10, PERFECT LONG SHOT 4, OVERHEAT 4, PERFECT SHOT 3, PUMP FAKE + LONG SHOT 2, PUTBACK WINDMILL DUNK 2, WINDMILL DUNK 1, PUMP FAKE + SCORE 1, HEAT CHECK 1, DENIED 1, ALLEY-OOP WINDMILL DUNK 1
+  events: steal 58, score 57, intercept:shot 29, pumpfake 22, fakebit 17, rimblast 8, dunk 7, fakescore 4, hot 3, block 3, intercept:pass 1
+  page errors: 0

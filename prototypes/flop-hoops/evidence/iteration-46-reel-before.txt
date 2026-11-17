@@ -1,0 +1,29 @@
+seed 1  score 7-4  rounds 9  clips 14
+  reel: LONG SHOT 55 | WINDMILL DUNK 70 | PERFECT SHOT 70 | PERFECT LONG SHOT 85 | LONG SHOT 55
+  marks: STEAL x13, LONG SHOT x2, WINDMILL DUNK x1, PERFECT SHOT x1, PERFECT LONG SHOT x1
+  events: score 8, steal 13, dunk 1, hot 1, rimblast 1
+seed 2  score 14-8  rounds 13  clips 16
+  reel: LONG SHOT 55 | WINDMILL DUNK 60 | PERFECT LONG SHOT 85 | PERFECT LONG SHOT 85 | PERFECT LONG SHOT 85
+  marks: STEAL x7, LONG SHOT x6, PERFECT LONG SHOT x4, WINDMILL DUNK x1, BLOCK x1
+  events: score 12, steal 7, dunk 1, hot 1, block 1
+seed 3  score 9-4  rounds 10  clips 15
+  reel: LONG SHOT 55 | DENIED 80 | LONG SHOT 55 | WINDMILL DUNK 60 | PERFECT SHOT 70
+  marks: STEAL x11, LONG SHOT x4, DENIED x1, WINDMILL DUNK x1, PERFECT SHOT x1
+  events: steal 11, score 9, block 1, rimblast 2, dunk 1
+seed 4  score 7-8  rounds 10  clips 13
+  reel: PERFECT LONG SHOT 85 | PERFECT LONG SHOT 85 | PERFECT LONG SHOT 85 | LONG SHOT 55 | TOMAHAWK DUNK 60
+  marks: STEAL x8, PERFECT LONG SHOT x4, LONG SHOT x2, TOMAHAWK DUNK x1
+  events: steal 8, score 9, dunk 1, rimblast 1
+seed 5  score 10-8  rounds 12  clips 16
+  reel: WINDMILL DUNK 70 | PERFECT LONG SHOT 85 | FADEAWAY 65 | PERFECT LONG SHOT 85 | PERFECT SHOT 70
+  marks: STEAL x9, LONG SHOT x4, PERFECT LONG SHOT x3, PERFECT SHOT x2, WINDMILL DUNK x1, FADEAWAY x1, BLOCK x1
+  events: steal 9, rimblast 2, dunk 1, score 11, block 1
+seed 6  score 7-5  rounds 9  clips 13
+  reel: LONG SHOT 55 | PERFECT LONG SHOT 85 | HONEY DIP 70 | ALLEY-OOP WINDMILL DUNK 100 | PERFECT SHOT 70
+  marks: STEAL x10, LONG SHOT x3, PERFECT LONG SHOT x1, HONEY DIP x1, ALLEY-OOP WINDMILL DUNK x1, PERFECT SHOT x1
+  events: steal 10, rimblast 2, score 8, dunk 2, hot 1
+TOTAL over 6 matches of 90 s (levels 5 v 5)
+  marks made: STEAL 58, LONG SHOT 21, PERFECT LONG SHOT 13, PERFECT SHOT 5, WINDMILL DUNK 4, BLOCK 2, DENIED 1, TOMAHAWK DUNK 1, FADEAWAY 1, HONEY DIP 1, ALLEY-OOP WINDMILL DUNK 1
+  reel picks: PERFECT LONG SHOT 10, LONG SHOT 7, WINDMILL DUNK 4, PERFECT SHOT 4, DENIED 1, TOMAHAWK DUNK 1, FADEAWAY 1, HONEY DIP 1, ALLEY-OOP WINDMILL DUNK 1
+  events: steal 58, score 57, rimblast 8, dunk 7, hot 3, block 3
+  page errors: 0

@@ -5,7 +5,7 @@
 /**
  * Physics: builds one round's Matter.js world (court, hoops, ball, four ragdolls) and steps it.
  * It drives the ragdolls and the ball's possession from two held / not-held inputs, one per team:
- * rocking, jumps, catches, cock-back shots, fadeaways, dunks, steals and blocks. It never draws and
+ * rocking, jumps, catches, cock-back shots, fadeaways, pump fakes, dunks, steals and blocks. It never draws and
  * never reads the keyboard: input arrives as booleans, sounds and callouts leave through `onEvent`.
  */
 const Physics = (() => {
@@ -630,6 +630,8 @@ const Physics = (() => {
     w.prevBallX = ball.position.x; w.prevBallY = ball.position.y;
     ball.shot = { team: p.team, t: w.time, kind: fade ? 'fade' : 'shot', dir: p.dir, perfect: line.perfect, onTarget: line.onTarget, clean: true,
       crossX: line.crossX, freeFlight: !line.touched, lob, fromX: ball.position.x, by: p.idx };   // where it was released: past the centre line, it is worth two
+    const lf = w.lastFake;   // the first shot of a team within T.fake_window s of its pump fake was set up by it (the fake is used up)
+    if (lf && lf.team === p.team && w.time - lf.t < T.fake_window) { Object.assign(ball.shot, { afterFake: true, fakeBit: lf.bit, fakeT: lf.t }); w.lastFake = null; }
     // white by default; rainbow on a clean perfect line; blue for a fadeaway heading in; settled again at the basket
     w.trail = { pts: [], mode: lob ? 'lob' : line.perfect ? 'rainbow' : fade && line.onTarget ? 'blue' : 'white', t: 0, shot: ball.shot };
     w.onEvent({ type: lob ? 'lob' : fade ? 'fadeaway' : 'shoot', team: p.team, charge: h.charge, perfect: line.perfect, x: ball.position.x, y: ball.position.y });
@@ -702,6 +704,7 @@ const Physics = (() => {
    */
   function bounce(w, T) {
     const h = w.hold, p = h.p, ball = w.ball, c = h.bcharge;
+    if (h.cocking && h.charge > T.fake_min_charge) pumpFake(w, T, h, c);   // out of a cocked shot: a pump fake (see pumpFake)
     release(w, T, T.bounce_ignore);   // the bouncer's own legs never kick their own dribble away
     p.grabCD = T.bounce_regrab;
     w.lastBouncer = p;
@@ -740,6 +743,40 @@ const Physics = (() => {
     Body.setAngularVelocity(ball, p.dir * 0.15);
     if (!dribble) w.pass = { team: p.team, from: p, until: w.time + T.pass_catch_window };
     w.onEvent({ type: dribble ? 'dribbleout' : 'bounce', team: p.team, charge: c, chain: p.dribbleChain || 0, quality: p.lastQuality, sloppy: p.sloppy || 0 });
+  }
+
+  /**
+   * A pump fake: a bounce let go while a shot is cocked (at least T.fake_min_charge of cock-back) throws the ball down and the
+   * shot never leaves. The engine keeps it in w.lastFake for T.fake_window s: the team's next shot in that time is tagged as
+   * set up by it (shoot: afterFake, fakeBit). A defender bit on it if, within T.fake_bit_range px of the faker (sideways), he
+   * leaves the floor in the T.fake_bit_window s after it (stepFake), or jumped while the shot was being cocked and is still up
+   * when the fake comes: he went up at a shot that never left. Called before the throw, so the hold is still there to read.
+   */
+  function pumpFake(w, T, h, c) {
+    const p = h.p, x = p.torso.position.x, cockT = h.charge * T.shot_charge_time;
+    const foes = w.players.filter(q => q.team !== p.team);
+    const near = q => Math.abs(q.torso.position.x - p.torso.position.x) <= T.fake_bit_range;
+    // down: the defenders seen on the floor since the fake (one of them leaving it, near the faker, has bitten)
+    const lf = w.lastFake = { team: p.team, p, t: w.time, x, airborne: p.sinceGround > 0.1, pass: c >= T.dribble_threshold, bit: false, by: null,
+      down: new Set(foes.filter(q => q.sinceGround < 0.05)) };
+    w.onEvent({ type: 'pumpfake', team: p.team, x, y: w.ball.position.y, airborne: lf.airborne, pass: lf.pass, charge: h.charge });
+    const up = foes.find(q => near(q) && q.sinceGround > 0.1 && q.sinceJump <= cockT + 0.05);   // (sinceJump: his own jump, not a knock)
+    if (up) fakeBit(w, lf, up);
+  }
+  /** The pump fake, one step (after possession): who bites on it in its first T.fake_bit_window s; it is dropped once stale or the ball changes hands. */
+  function stepFake(w, T) {
+    const lf = w.lastFake; if (!lf) return;
+    if (w.time - lf.t >= T.fake_window || (w.hold && w.hold.p.team !== lf.team)) { w.lastFake = null; return; }
+    if (lf.bit || w.time - lf.t >= T.fake_bit_window) return;
+    for (const q of w.players) {
+      if (q.team === lf.team) continue;
+      if (lf.down.has(q) && q.sinceGround > 0.1 && Math.abs(q.torso.position.x - lf.p.torso.position.x) <= T.fake_bit_range) { fakeBit(w, lf, q); return; }
+      if (q.sinceGround < 0.05) lf.down.add(q);
+    }
+  }
+  function fakeBit(w, lf, q) {
+    lf.bit = true; lf.by = q;
+    w.onEvent({ type: 'fakebit', team: lf.team, by: q.idx, x: q.torso.position.x, y: q.torso.position.y });
   }
 
   /**
@@ -1142,6 +1179,7 @@ const Physics = (() => {
     }
 
     possession(w, held, bheld, T, dt);
+    stepFake(w, T);   // a pump fake just made: did a defender bite on it
     rimHeat(w, T, dt);
     { const db = w.dribbleBall, cap = db ? w.dribCap[db.team] : 0;   // a capped team's dribbled ball goes no further than dribCap either
       if (cap > 0 && !w.hold && db.x0 !== undefined && (w.ball.position.x + w.ball.velocity.x - db.x0) * db.dir >= cap && w.ball.velocity.x * db.dir > 0) Body.setVelocity(w.ball, { x: 0, y: w.ball.velocity.y }); }
