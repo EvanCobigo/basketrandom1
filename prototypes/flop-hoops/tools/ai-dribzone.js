@@ -34,7 +34,7 @@ const dir = process.argv[2], levels = process.argv[3].split(',').map(Number), se
         for (let i = 0; i < 60 * secs; i++) {
           AIRef.update(atk, world, oT, 1 / 60, { score: game.state.score.slice() });
           game.hold('KeyW', atk.jump); game.hold('KeyS', atk.bounce);
-          const w = world, third = (w.R - w.L) / 3, lo = w.L + third, hi = w.R - third;
+          const w = world, z = w.dribZone && w.dribZone[1], third = (w.R - w.L) / 3, lo = z ? z.lo : w.L + third, hi = z ? z.hi : w.R - third;   // (the zone the world has, else the old middle third)
           const out = x => x < lo ? lo - x : x > hi ? x - hi : 0;
           if (w.dribZone && w.dribZone[1] && (Math.abs(w.dribZone[1].lo - lo) > 0.01 || Math.abs(w.dribZone[1].hi - hi) > 0.01)) o.zoneMismatch++;
           const h0 = w.hold, cocked = !!(h0 && h0.p.team === 1 && h0.cocking), fakeAim = !!(cpu.aim && cpu.aim.fake);

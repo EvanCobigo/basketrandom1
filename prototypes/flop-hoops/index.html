@@ -506,7 +506,7 @@ function buildRound(round) {
   world.dribCap = [mode === 'sim' ? tune.ai_dribble_reach : 0, mode !== '2p' ? tune.ai_dribble_reach : 0];
   world.noDunkAfterDribble = [mode === 'sim' && tune.ai_no_dribble_dunk > 0, mode !== '2p' && tune.ai_no_dribble_dunk > 0];   // and they never dribble into a dunk
   // and they dribble only in the middle third of the court, feet and ball: never down to the rim (people dribble anywhere)
-  const third = (world.R - world.L) / 3, zone = () => (tune.ai_dribble_zone > 0 ? { lo: world.L + third, hi: world.R - third } : null);
+  const gapZ = tune.ai_dribble_rim_gap, zone = () => (tune.ai_dribble_zone > 0 ? { lo: world.L + gapZ, hi: world.R - gapZ } : null);   // (all the court but its two ends, by the baskets)
   world.dribZone = [mode === 'sim' ? zone() : null, mode !== '2p' ? zone() : null];
   // a hot player (a heat check) carries it into the next round, until the other team scores
   world.hot = state.hot ? world.players.find(q => q.team === state.hot.team && q.idx === state.hot.idx) || null : null;

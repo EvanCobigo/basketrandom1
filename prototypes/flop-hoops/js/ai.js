@@ -79,8 +79,8 @@ const AI = (() => {
     { name: 'ROOKIE', skill: 0.15, react: 0.26, aimSpread: 2.5, releaseLag: 6, shotTrust: 0.45, defense: 1 / 16, look: 0, learn: 0, slip: 0.5, noise: 0.5, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'CHASES THE BALL, MISSES A LOT, REACTS SLOWLY. DRIBBLES A LITTLE.' },
     { name: 'AMATEUR', skill: 0.35, react: 0.24, aimSpread: 1.7, releaseLag: 4, shotTrust: 0.6, defense: 1 / 8, look: 4, learn: 0, slip: 0.3, noise: 0.35, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'KNOWS BASIC SHOOTING AND BLOCKING, AND DRIBBLES UPCOURT.' },
     { name: 'PRO', skill: 0.55, react: 0.21, aimSpread: 1.2, releaseLag: 3, shotTrust: 0.72, defense: 1 / 4, look: 10, learn: 0.25, slip: 0.2, noise: 0.22, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'DRIBBLES, PASSES AND DUNKS, SPOTS OPEN CHANCES, HAS A PERSONALITY.' },
-    { name: 'ALL-STAR', skill: 0.75, react: 0.17, aimSpread: 0.8, releaseLag: 2, shotTrust: 0.85, defense: 1 / 2, look: 22, learn: 0.7, slip: 0.12, noise: 0.12, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'PREDICTS FLIGHTS, TIMES STEALS, ADAPTS TO HOW YOU PLAY.' },
-    { name: 'LEGEND', skill: 0.95, react: 0.10, aimSpread: 0.0165, releaseLag: 0, shotTrust: 1, defense: 1, look: 40, learn: 1, slip: 0.06, noise: 0.06, rimLead: 6, sagWithin: 99, rimGuard: 0, guardFrac: 0, does: 'CLEAN LINES, FAST BREAKS, READS YOUR PLAYS. STILL MAKES MISTAKES.' },
+    { name: 'ALL-STAR', skill: 0.75, react: 0.17, aimSpread: 0.8, releaseLag: 2, shotTrust: 0.85, defense: 1 / 2, look: 22, learn: 0.7, slip: 0.12, noise: 0.12, rimLead: 0, sagWithin: 99, rimGuard: 0, guardFrac: 0, selfPass: true, does: 'PREDICTS FLIGHTS, TIMES STEALS, ADAPTS TO HOW YOU PLAY.' },
+    { name: 'LEGEND', skill: 0.95, react: 0.10, aimSpread: 0.0165, releaseLag: 0, shotTrust: 1, defense: 1, look: 40, learn: 1, slip: 0.06, noise: 0.06, rimLead: 6, sagWithin: 99, rimGuard: 0, guardFrac: 0, selfPass: true, does: 'CLEAN LINES, FAST BREAKS, READS YOUR PLAYS. STILL MAKES MISTAKES.' },
     { name: 'MYTHIC', skill: 1, react: 0.02, aimSpread: 0.00275, releaseLag: 0, shotTrust: 1, defense: 2, look: 60, learn: 1.6, slip: 0.025, noise: 0.03, rimLead: 12, sagWithin: 30, rimGuard: 520, guardFrac: 0.62, patience: 3, tame: true, swipeCap: 1, selfPass: true, fakeBase: 0.12, screenP: 0.9, screenR: 220, does: 'SELF-PASS FAST BREAKS, BLOCKS MORE, LEARNS QUICKLY. RARELY SLIPS.' },
   ];
   /**
@@ -136,7 +136,7 @@ const AI = (() => {
    */
   const BUDGETS = [[2, 4], [2, 5], [3, 7], [4, 9], [5, 10], [5, 10]];
   /** How often a cocked shot may turn into a pump fake, by level (from level 2; a level's own fakeBase wins). */
-  const FAKE_BASE = [0, 0.06, 0.1, 0.12, 0.12, 0.12];
+  const FAKE_BASE = [0, 0.1, 0.16, 0.2, 0.2, 0.2];
 
   /**
    * A slip: this play goes wrong on its own, at the level's slip rate times `k`. Counted in c.slips (the
@@ -232,6 +232,19 @@ const AI = (() => {
    * Whether the held ball is under its own rim now or 3 steps from now (the release is decided a step before the ball leaves, and a
    * ball 71 px out drifting in left at 68: iteration 46's own-rim shots, from its own third where it may no longer dribble).
    */
+  /**
+   * A shot from here (at the cock-back it has, or `ch`) flown out: does its path keep clear of the rim and board it DEFENDS? Under
+   * or behind its own basket a shot may go only when it does (a shot that clips its own rim is how the ball falls in its own basket).
+   */
+  function ownShotClear(c, X, p, ch) {
+    const { w, T, dfn } = X, b = w.ball, r = b.r + 10;
+    const v = Physics.shotVelocity(w, T, p, ch ?? (w.hold && w.hold.cocking ? Math.max(0.4, w.hold.charge) : 0.7), b.position);
+    for (const q of Physics.pathFrom(w, T, b.position.x, b.position.y, v.vx * p.dir, -v.vy, 60)) {
+      if (q.x > dfn.x1 - r && q.x < dfn.x2 + r && Math.abs(q.y - dfn.rimY) < r + 6) return false;
+      if (Math.abs(q.x - dfn.boardX) < r && q.y > dfn.boardTop - r && q.y < dfn.boardBot + r) return false;
+    }
+    return true;
+  }
   function ownRimSoon(c, w, T) { const b = w.ball; return underOwnRim(c, w, T, b.position.x) || underOwnRim(c, w, T, b.position.x + b.velocity.x * 3); }
 
   /** Say what it is doing, but not flickering: a line stays on for about half a second. */
@@ -394,7 +407,13 @@ const AI = (() => {
    * zone, the dribble's path clear of defenders (dribbleRisk, at every level: a fake is a dribble) and the feet on the floor (a pump thrown
    * from the air was taken). `air`: everything but the floor, for a pump decided in the air and held through the landing.
    */
-  function canPump(c, X, p, air = false) { return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x) && dribZoneOk(X.w, p) && (air || onFloor(X.w, p)) && dribbleRisk(c, X, p) < 0.5; }
+  function canPump(c, X, p, air = false) {
+    // EMERGENCY COOK RESET: a cock-back about to run out (80% charged, or 80% of the hold limit gone) may pump out of the dribble
+    // zone to start over, as long as it is not over its own rim and the dribble's path is safe (both checked anyway below)
+    const h = X.w.hold, emergency = !!h && h.p === p && (h.charge >= 0.8 || h.t >= 0.8 * X.T.ai_hold_limit);
+    return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x) && !ownRimSoon(c, X.w, X.T)
+      && (dribZoneOk(X.w, p) || emergency) && (air || onFloor(X.w, p)) && dribbleRisk(c, X, p) < 0.5;
+  }
 
   /**
    * How likely a dribble from here is to be taken, 0..1: the dribble's own flight (its speed out of the hand, as bounce() throws
@@ -459,13 +478,14 @@ const AI = (() => {
     a.t += dt;
     if (!hold || hold.p.team !== c.team) { c.aim = null; c.jump = false; return c; }   // the ball is gone
     const p = hold.p, dir = p.dir;
+    if (a.easy) hold.easy = true;   // (set before any preview reads the line: the physics gives the easy shot its full aim help)
     say(c, a.txt);
     // a shot drifting under the basket it defends: never let go there. With the jump still down (the shot stays
     // cocked) it holds the bounce key for a medium pass, then lets both go: the bounce goes first, so the ball is passed out
     // In the air it passes nothing (a pass thrown up there, falling past its own rim, is how the ball went in its own
     // basket): the jump stays down, so the shot stays cocked and nothing leaves the hand, until the feet are down
     // (once it has drifted in it stays committed: a ball hovering at the zone's edge, read outside one step, left from inside the next)
-    if (a.outPass !== undefined || a.ownRim || (hold.cocking && ownRimSoon(c, w, T))) {
+    if (a.outPass !== undefined || a.ownRim || (hold.cocking && ownRimSoon(c, w, T) && !ownShotClear(c, X, p))) {
       if (a.outPass === undefined) { a.ownRim = true; say(c, 'OUTLET PASS FROM UNDER OUR RIM', true); if (p.sinceGround > 0.08) { c.jump = true; c.bounce = false; return c; } a.outPass = Math.round(outletCharge(c, X, p) * T.bounce_charge_time / dt); }
       if (a.outPass-- > 0) { c.jump = true; c.bounce = true; return c; }
       c.aim = null; c.jump = false; c.bounce = false; c.wait = X.react * 0.5; return c;
@@ -530,6 +550,14 @@ const AI = (() => {
     const roomFake = !jumper && closeFoe && !handInFront && a.fakeRoll && !a.fake && !c.faked && canPump(c, X, p, true) && hold.barmed && hold.charge > 0.35 && hold.charge < 0.6;
     const baitFake = jumper && a.fakeRoll && !a.fake && canPump(c, X, p, true) && hold.barmed && hold.charge > 0.2 && hold.charge < 0.85;
     if (roomFake || baitFake) { const why = roomFake ? 'room' : 'jumper'; if (ground) return fakeNow(why); a.fakeLand = why; c.jump = true; return c; }
+    // the easy one: full aim help (physics hold.easy) puts every charge's line on the centre, so what it waits for is the arc: a flat one
+    // clips the front rim from close in. It lets go on a perfect arc, or on one that goes in once it is high enough (read a step ahead, at every level)
+    if (a.easy) {
+      hold.easy = true;
+      const pe = Physics.previewShot(w, T, p, hold.charge, 1);
+      if (hold.charge >= 0.5 && (pe.perfect || (pe.onTarget && (hold.charge >= 0.65 || a.t > 0.9)))) { c.aim = null; c.jump = false; c.wait = react * 0.5; return c; }
+      if (hold.charge < 0.995 && a.t < 1.4) { c.jump = true; return c; }
+    }
     const off = a.slip !== undefined ? a.slip : a.off;   // a slipping Legend aims off like anyone else
     let release = (hold.charge >= 0.995 && !a.pumpLand) || a.t > 2.4;   // (a pump-out waiting for the floor is not let go at full cock)
     // the line on: from just short of its mark to a little past it. Past that (a fade's wait for its lean, a slow read), the
@@ -549,7 +577,7 @@ const AI = (() => {
     }
     if (a.pumpLand && ground) release = true;   // down, and the pump is off now (no dribble left, a defender in its path, out of the zone): the shot goes
     // the level's hands: a lower level lets go up to releaseLag steps after the moment it picked (the cock-back keeps charging, so it goes long)
-    if (release && X.L.releaseLag && hold.charge < 0.995) { if (a.lag === undefined) a.lag = Math.floor(c.rng() * (X.L.releaseLag + 1)); if (a.lag-- > 0) { c.jump = true; return c; } }
+    if (release && X.L.releaseLag && !a.easy && hold.charge < 0.995) { if (a.lag === undefined) a.lag = Math.floor(c.rng() * (X.L.releaseLag + 1)); if (a.lag-- > 0) { c.jump = true; return c; } }
     if (release) { c.aim = null; c.jump = false; c.wait = react * 0.5; return c; }
     c.jump = true; return c;
   }
@@ -577,9 +605,14 @@ const AI = (() => {
       if (waited < waitCap && c.rng() < 0.5 + skill * 0.4) { c.wait = react * 0.3; say(c, 'WAITING OUT THE RIM PROTECTOR'); return c; }
       return dunkNow();
     }
-    if (hold.dunkReady && !protector) return dunkNow();   // at the rim: a tap dunks
+    // at the rim a tap dunks, but not without a look: a showman (flash) or a shooter (range), or an open lob, may take something
+    // flashier instead (the dunk joins the options below with a strong, plain worth; ego decides the rest)
+    const dunkOpt = hold.dunkReady && !protector, ego = (st.flash - 1) + 0.5 * (st.range - 1);
+    if (dunkOpt && ego <= 0.05 && hold.armed) return dunkNow();
+    if (dunkOpt && !hold.armed) return dunkNow();
     // (a Legend or Mythic with a protector there reads its other options below first: see the end)
     if (!hold.armed || !hold.barmed) return c;                                      // let go once after the catch
+    if (dunkOpt) { /* (the dunk is added as an option, see 'dunk' below) */ }
 
     const near = q => Math.min(...foes.map(f => Math.abs(f.torso.position.x - q.torso.position.x)));
     const foeNear = near(p) < 90, foeClose = near(p) < 150;
@@ -617,8 +650,10 @@ const AI = (() => {
     const rimHome = level >= 3 && foes.some(f => Math.abs(f.torso.position.x - atk.cx) < T.contest_range && f.sinceGround < 0.05);
     // under (or beyond) the basket it DEFENDS: it never shoots from there, it always passes the ball out
     const underOwn = underOwnRim(c, w, T, px);
-    const takesShot = inRange && !underOwn;   // every level takes a good shot (no level lines up for a perfect one)
-    const anyTarget = inRange && q >= 1 && !underOwn;            // some line from here can go in
+    // (under its own basket a shot is allowed again when its flight keeps clear of that rim and board: ownShotClear)
+    const ownClear = !underOwn || ownShotClear(c, X, p);
+    const takesShot = inRange && ownClear;   // every level takes a good shot (no level lines up for a perfect one)
+    const anyTarget = inRange && q >= 1 && ownClear;            // some line from here can go in
     const urgS = (level >= 4 && q === 0 ? 0 : 0.4 * urg) + (w.hot === p && q >= 1 ? 0.15 : 0);   // (a hot hand shoots more)   // (from level 4 the clock pushes it to pass or drive, never into a shot with no line)
     const startAim = (kind, txt, forced = false) => () => {
       const noiseOff = (c.rng() * 2 - 1) * span * L.aimSpread;   // the level's own aim: up to aimSpread rim spans off
@@ -659,7 +694,7 @@ const AI = (() => {
       const room = (px - X.dfn.cx) * dir > T.ai_fade_room;
       if (level >= 3 && front.length && room && Xd < 700) {
         const pF = learned('fade', pBase * (1 - 0.2 * press) * 0.92), onIt = Math.min(...front) < 110;
-        add('fade', 0.1 + X.W.shot * pF * pts + 0.18 * (st.flash - 1) + (level >= 5 && !onIt ? 0 : 0.1) + (baited ? 0.35 : 0) + form(c, 'fade', X.K) * 0.3 * learnOf(X) + urgS, startAim('fade', 'FADING AWAY FROM THE DEFENDER'), 'FADE');
+        add('fade', 0.1 + X.W.shot * pF * pts + 0.18 * (st.flash - 1) + (level >= 5 && !onIt ? 0.08 : 0.2) + (baited ? 0.35 : 0) + form(c, 'fade', X.K) * 0.3 * learnOf(X) + urgS, startAim('fade', 'FADING AWAY FROM THE DEFENDER'), 'FADE');
       }
     }
 
@@ -687,17 +722,18 @@ const AI = (() => {
       const dl = c.dribRec, lossRate = dl.n ? dl.lost / dl.n : 0;
       if (foeClose) u -= 0.5 * lossRate * conf(dl.n / 3) * learnOf(X) * (foeNear ? 1 : 0.5);
       u -= dribbleRisk(c, X, p) * (level >= 3 ? 0.6 : 0.3);                                  // (a dribble into a defender's hands: it reads the path first)
+      if (screened) u += 0.25;                                                                 // (pick and roll: off the screen, turn the corner)
       add('dribble', u, () => { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; say(c, gap > zone + 160 ? 'DRIBBLING UPCOURT FOR A DUNK' : 'DRIVING TO THE RIM'); return c; }, 'DRIB', 24);
     }
 
     // ---- the self-pass, from about halfway to the rim: it throws the ball ahead, hops after it, takes it out of the air near the rim
     // itself and dunks (about 7 in 10 from 310-400 px out in the empty-lane test; further out the catch comes too late). It needs a
     // clear lane: the ball is loose on the floor on the way, so nobody may stand between it and the rim.
-    if (X.selfPass && !behind && c.tick > c.selfCool && p.sinceGround < 0.1 && gap >= 310 && gap <= 420 && !foes.some(f => { const fx = (f.torso.position.x - px) * dir; return fx > 20 && fx < gap + 40; })) {
+    if (X.selfPass && !behind && c.tick > c.selfCool && p.sinceGround < 0.1 && gap >= 270 && gap <= 480 && !foes.some(f => { const fx = (f.torso.position.x - px) * dir; return fx > 20 && fx < gap + 40; })) {   // (from level 4, a wider window than the tested 310-420)
       const ss = c.selfStats, rate = ss.tries >= 3 ? ss.dunks / ss.tries : 0.45;   // its own record with the play
       const u = 0.9 + 0.6 * (rate - 0.4) * conf(ss.tries, 2) + 0.2 * (st.flash - 1) + 0.2 * (st.attack - 1);
       add('self', u, () => {
-        const ch = c.selfCharge || 0.8 - 0.05 * clamp((gap - 380) / 40, 0, 1);   // (measured: 0.8 from 310-380 px out, 0.75 a little further; selfCharge lets a test override it)
+        const ch = c.selfCharge || clamp(0.62 + (gap - 270) / 1000, 0.62, 0.86) - 0.05 * clamp((gap - 380) / 40, 0, 1);   // (measured: 0.8 from 310-380 px out, 0.75 a little further; selfCharge lets a test override it)
         c.selfLast = { gap: Math.round(gap), ch };
         c.bounce = true; c.bholdT = ch * T.bounce_charge_time; c.dribs = 0; c.selfCool = c.tick + 120; c.selfStats.tries++;
         c.self = { t0: c.tick, from: p, thrown: false };
@@ -770,7 +806,7 @@ const AI = (() => {
         const lg = L.lobGuard !== undefined ? L.lobGuard : T.ai_lob_guard;
         const lobSafe = !lg || !foes.some(f => Math.abs(f.torso.position.x - atk.cx) < lg);   // a defender under the board would take it
         if (level >= 4 && lobSafe && !underOwn && mateAhead && gap > 160 && Physics.lobPlan(w, T, p, 1, 110) && Physics.lobReceiver(w, T, p)) {
-          add('lob', X.W.lob * (0.78 + 0.35 * open + 0.25 * (st.pass - 1) + 0.25 * (st.flash - 1) + 0.3 * (L.skill - 0.5) + (runner ? 0.15 : 0) + form(c, 'lob', X.K) * 0.4 * learnOf(X)),
+          add('lob', (screened ? 0.3 : 0) + X.W.lob * (0.78 + 0.35 * open + 0.25 * (st.pass - 1) + 0.25 * (st.flash - 1) + 0.3 * (L.skill - 0.5) + (runner ? 0.15 : 0) + form(c, 'lob', X.K) * 0.4 * learnOf(X)),
             () => { c.aim = { t: 0, wait: 0, off: 0, fade: false, pressed: false, lob: true, txt: 'ALLEY-OOP: LOBBING IT OFF THE BOARD' }; c.dribs = 0; return aimStep(c, X); }, 'LOB');
         }
       }
@@ -804,6 +840,17 @@ const AI = (() => {
     // the way out: held too long with nothing but waiting on offer (no line on, nobody to pass to, dribbles used up):
     // with no shot clock to force it, it takes the shot anyway rather than stand there
     if (hold.t > patience + 0.5 && anyTarget && !ops.some(o => o.name !== 'wait')) add('shot', 5, startAim('shot', 'TAKING THE SHOT: NOTHING ELSE IS OPEN', X.m6), 'FORCED');
+    if (dunkOpt) add('dunk', 1.35 - 0.25 * ego, dunkNow, 'DUNK');   // (a routine dunk: strong, but a flashy style may go past it)
+    // ---- the easy one: at or under the rim with no dunk (it dribbled, or the dunk is not there) a soft short shot for 1, aimed
+    // far more tightly than any other shot at every level (see aimStep: a.easy), instead of dribbling up to a dunk it cannot have
+    const nearRim = !behind && gap < zone + 150 && gap >= T.dunk_min_gap && !dunkOpt;
+    // (its line is read with the help the easy shot will get: close in the ordinary preview often has no line at all)
+    const easyLine = () => { if (!w.hold) return false; const was = w.hold.easy; w.hold.easy = true; let ok = false; for (let ch = 0.3; ch <= 1.0001 && !ok; ch += 0.05) ok = Physics.previewShot(w, T, p, ch).onTarget; w.hold.easy = was; return ok; };
+    const easyTime = hold.t < T.ai_hold_limit - 0.32 - 0.7 * T.shot_charge_time - 0.15;   // (time left to cock it to its arc before the hold runs out)
+    if (nearRim && ownClear && easyTime && easyLine()) add('easy', 1.0 + (p.dribbled ? 0.45 : 0.15) + (q >= 1 ? 0.2 : 0) - 0.2 * pressure, () => {
+      c.aim = { t: 0, wait: 0, off: (c.rng() * 2 - 1) * span * L.aimSpread * 0.12, fade: false, pressed: false, txt: 'EASY ONE: SOFT SHOT', fakeRoll: false, easy: true };
+      c.dribs = 0; c.foeReact.cocks++; return aimStep(c, X);
+    }, 'EASY');
     if (behind) say(c, 'BEHIND THE BASKET: GETTING OUT OF IT');
     if (protector) {   // a Legend or Mythic at the rim with a protector up: an open pass, a lob or a shot over him if one is good, else wait him out (for a while), else dunk
       const alt = ops.filter(o => ['pass', 'lob', 'fade', 'shot'].includes(o.name) && o.u > 0.8).sort((a, b) => b.u - a.u)[0];
@@ -1115,13 +1162,13 @@ const AI = (() => {
     let d = c.deadline;
     if (!d) {
       c.aim = null; c.wait = 0; c.holdT = 0; c.bholdT = 0; c.self = null;
-      const kind = hold.dunkReady ? 'dunk' : hold.cocking && !ownRimSoon(c, w, T) ? 'shoot' : 'pass';
+      const kind = hold.dunkReady && !hold.p.dribbled ? 'dunk' : hold.cocking && (!ownRimSoon(c, w, T) || ownShotClear(c, X, hold.p)) ? 'shoot' : 'pass';
       d = c.deadline = { hold, kind, step: 0, n: Math.ceil(Math.max(T.dribble_threshold + 0.05, 0.3) * T.bounce_charge_time / dt) + 1, keepJump: hold.cocking };
       say(c, kind === 'pass' ? 'OUT OF TIME: PASSING' : kind === 'shoot' ? 'OUT OF TIME: SHOOTING' : 'GOING UP FOR THE DUNK', true);
     }
     d.step++;
     if (d.kind === 'dunk') { c.jump = d.step === 2; return c; }       // a fresh tap: up for a step, then down
-    if (d.kind === 'shoot' && ownRimSoon(c, w, T)) d.kind = 'pass';   // (drifted under its own rim since: it passes instead)
+    if (d.kind === 'shoot' && ownRimSoon(c, w, T) && !ownShotClear(c, X, hold.p)) d.kind = 'pass';   // (drifted under its own rim since: it passes instead)
     if (d.kind === 'shoot') { c.jump = false; return c; }             // letting go of a cocked shot shoots it
     if (!hold.barmed && !d.armed) { c.jump = d.keepJump; c.bounce = false; return c; }   // the bounce key must be up once first
     d.armed = true;
@@ -1248,9 +1295,11 @@ const AI = (() => {
       const hd = Physics.handPos(lb), bx = ball.position.x - lb.torso.position.x;
       const catchSoon = ball.velocity.y < 0 && Math.hypot(ball.position.x - hd.x, ball.position.y - hd.y) < T.dribble_reach + ball.r + 30;
       const hopSafe = level < 4 || ((lb.sinceGround > 0.1 || catchSoon) && wrap(lb.torso.angle) * (Math.sign(bx) || lb.dir) > -0.05);
-      if (level >= 3 && hopSafe && mate && f && Math.abs(f.torso.position.x - lb.torso.position.x) < (L.screenR || 170) && c.rng() < (L.screenP || 0.5) * Math.min(1.3, st.read) * L.skill) {
-        const spot = (f.torso.position.x + lb.torso.position.x) / 2, s = Math.sign(spot - mate.torso.position.x) || 1;
-        if (Math.abs(spot - mate.torso.position.x) > 45 && wrap(mate.torso.angle) * s > 0.22 && mate.sinceFoot < 0.1) { c.jump = true; c.holdT = 0.06 + c.rng() * 0.08; say(c, 'SETTING A SCREEN'); }
+      // the screen spot: just in front of the defender, between him and the rim, where it blocks his way back (not halfway between)
+      if (level >= 3 && hopSafe && mate && f && Math.abs(f.torso.position.x - lb.torso.position.x) < (L.screenR || 240) && c.rng() < (L.screenP || 0.75) * Math.min(1.4, st.read) * L.skill) {
+        const screenSpot = f.torso.position.x - lb.dir * 28, distToSpot = screenSpot - mate.torso.position.x, s = Math.sign(distToSpot) || 1;
+        // (it reacts sooner, at a smaller lean, and hops harder so the ragdoll really plants in the defender's lane)
+        if (Math.abs(distToSpot) > 30 && wrap(mate.torso.angle) * s > 0.12 && mate.sinceFoot < 0.12) { c.jump = true; c.holdT = 0.12 + c.rng() * 0.06; say(c, 'SETTING A SCREEN'); }
       }
       return c;
     }
