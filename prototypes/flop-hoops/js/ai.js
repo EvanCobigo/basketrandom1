@@ -40,6 +40,8 @@
  * trust in a sighting after two (not four), a pump fake that follows how its own fakes have fared, a pass that leads the receiver,
  * a rim protector it waits out (1.6 s at most, taking an open pass or lob instead), three seconds of patience (not four) and a way out that takes the best shot left, and the
  * self-pass: from halfway to the rim it throws the ball ahead, hops after it, catches it in the air itself and dunks (selfStep).
+ * Iteration 46: it dribbles only inside its dribble zone (w.dribZone: the middle third of the court, never down to the rim), and pumps
+ * (a fake or a pump-out, both a dribble) only with its feet on the floor: one decided in the air holds the cocked ball through the landing.
  *
  * How it aims: while it holds a cocked shot it asks the physics, every step, where the ball
  * would cross the rim if it let go right now (Physics.previewShot, the engine's own flight maths
@@ -226,6 +228,12 @@ const AI = (() => {
     return Math.abs(x - d.cx) < T.ai_own_rim_zone || (x - d.cx) * (-d.side) < 0;
   }
 
+  /**
+   * Whether the held ball is under its own rim now or 3 steps from now (the release is decided a step before the ball leaves, and a
+   * ball 71 px out drifting in left at 68: iteration 46's own-rim shots, from its own third where it may no longer dribble).
+   */
+  function ownRimSoon(c, w, T) { const b = w.ball; return underOwnRim(c, w, T, b.position.x) || underOwnRim(c, w, T, b.position.x + b.velocity.x * 3); }
+
   /** Say what it is doing, but not flickering: a line stays on for about half a second. */
   function say(c, text, force) {
     c.intentSeen = c.tick;                           // (still saying it: the icon over its head stays up)
@@ -367,8 +375,26 @@ const AI = (() => {
   /** The opponent nearest x. */
   function nearestFoe(w, team, x) { return nearest(w, 1 - team, x); }
 
-  /** A pump (a dribble out of a cocked shot) is allowed: dribbles left in the budget, not sitting, not under its own rim. */
-  function canPump(c, X, p) { return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x) && (X.level < 3 || dribbleRisk(c, X, p) < 0.5); }
+  /**
+   * Whether p may dribble here: a team with a dribble zone (w.dribZone: the CPU's, the middle third) only with its feet `margin` px
+   * inside both edges and the ball inside it (out of the hand: the hand, where the catch puts it). The physics refuses a tap outside.
+   */
+  function dribZoneOk(w, p, margin = 15) {
+    const z = w.dribZone && w.dribZone[p.team]; if (!z) return true;
+    const fx = (p.legs[0].position.x + p.legs[1].position.x) / 2, bx = w.hold && w.hold.p === p ? w.ball.position.x : Physics.handPos(p).x;
+    return fx >= z.lo + margin && fx <= z.hi - margin && bx >= z.lo + 5 && bx <= z.hi - 5;
+  }
+  /**
+   * On the floor: touching something within the last two steps, with a foot (the bottom of a leg) within 8 px of the floor (not standing on a
+   * head or the rim). A little inside what counts as off the floor (0.05 s, 10 px), since the pump leaves the hand a step or two later.
+   */
+  function onFloor(w, p) { return p.sinceGround <= 0.03 && p.legs.some(l => l.position.y + Math.abs(Math.cos(l.angle)) * p.dims.legL / 2 >= w.floorY - 8); }
+  /**
+   * A pump (a dribble out of a cocked shot) is allowed: dribbles left in the budget, not sitting, not under its own rim, inside its dribble
+   * zone, the dribble's path clear of defenders (dribbleRisk, at every level: a fake is a dribble) and the feet on the floor (a pump thrown
+   * from the air was taken). `air`: everything but the floor, for a pump decided in the air and held through the landing.
+   */
+  function canPump(c, X, p, air = false) { return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x) && dribZoneOk(X.w, p) && (air || onFloor(X.w, p)) && dribbleRisk(c, X, p) < 0.5; }
 
   /**
    * How likely a dribble from here is to be taken, 0..1: the dribble's own flight (its speed out of the hand, as bounce() throws
@@ -438,8 +464,9 @@ const AI = (() => {
     // cocked) it holds the bounce key for a medium pass, then lets both go: the bounce goes first, so the ball is passed out
     // In the air it passes nothing (a pass thrown up there, falling past its own rim, is how the ball went in its own
     // basket): the jump stays down, so the shot stays cocked and nothing leaves the hand, until the feet are down
-    if (a.outPass !== undefined || (hold.cocking && underOwnRim(c, w, T, w.ball.position.x))) {
-      if (a.outPass === undefined) { say(c, 'OUTLET PASS FROM UNDER OUR RIM', true); if (p.sinceGround > 0.08) { c.jump = true; c.bounce = false; return c; } a.outPass = Math.round(outletCharge(c, X, p) * T.bounce_charge_time / dt); }
+    // (once it has drifted in it stays committed: a ball hovering at the zone's edge, read outside one step, left from inside the next)
+    if (a.outPass !== undefined || a.ownRim || (hold.cocking && ownRimSoon(c, w, T))) {
+      if (a.outPass === undefined) { a.ownRim = true; say(c, 'OUTLET PASS FROM UNDER OUR RIM', true); if (p.sinceGround > 0.08) { c.jump = true; c.bounce = false; return c; } a.outPass = Math.round(outletCharge(c, X, p) * T.bounce_charge_time / dt); }
       if (a.outPass-- > 0) { c.jump = true; c.bounce = true; return c; }
       c.aim = null; c.jump = false; c.bounce = false; c.wait = X.react * 0.5; return c;
     }
@@ -462,7 +489,7 @@ const AI = (() => {
       // it never came on: the same cock-back becomes a jump shot if a line is there, or it pumps out of it
       hold.lob = false; a.lob = false; a.txt = 'GOING UP FOR A JUMP SHOT'; say(c, 'NO LOB: TAKING THE SHOT', true);
       const pv0 = Physics.previewShot(w, T, p, hold.charge, level >= 5 ? 1 : 0);
-      if (!(pv0.onTarget) && canPump(c, X, p)) { a.abort = 1; c.jump = true; return c; }
+      if (!(pv0.onTarget) && canPump(c, X, p, true)) { if (onFloor(w, p)) a.abort = 1; else a.pumpLand = true; c.jump = true; return c; }   // (up there the pump waits for the floor, see below)
       if (!pv0.onTarget) { c.aim = null; c.jump = false; c.wait = base * 0.4; return c; }   // (no dribble allowed: it goes anyway)
       c.jump = true; return c;
     }
@@ -471,6 +498,12 @@ const AI = (() => {
     c.dbg.shot = { err: pv.err, perfect: pv.perfect, charge: hold.charge };
     if (a.abort) {    // pumping out of a shot: bounce key down for a step, then both up, which dribbles the ball instead of shooting it
       if (a.abort === 1) { a.abort = 2; c.jump = true; c.bounce = true; c.dribs++; return c; }
+      // (the release waits, both keys down, for the feet to be back on the floor: a body lifted meanwhile pumps nothing from the air. Not down
+      // within 8 steps, while the bounce is still a dribble's, it lets the jump go with the bounce still down: the shot goes instead)
+      if (!onFloor(w, p)) {
+        if ((a.floorWait = (a.floorWait || 0) + 1) <= 8) { c.jump = true; c.bounce = true; return c; }
+        c.aim = null; c.jump = false; c.bounce = true; c.wait = react * 0.5; return c;
+      }
       c.aim = null; c.jump = false; c.bounce = false;
       // a fake waits for the defender it baited: until he has gone up and come back down (or, if he never went, 0.25 s), at most 0.5 s
       c.wait = a.fake ? 0.5 : base * 0.5;
@@ -485,10 +518,20 @@ const AI = (() => {
     const closeFoe = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - p.torso.position.x) < 110);
     // (the fake is a dribble, and it goes forward: from level 4 never with a defender's hand right there in front)
     const handInFront = level >= 4 && w.players.some(q => q.team !== c.team && q.sinceGround < 0.1 && (q.torso.position.x - p.torso.position.x) * dir > -10 && (q.torso.position.x - p.torso.position.x) * dir < 70);
-    if (!jumper && closeFoe && !handInFront && a.fakeRoll && !a.fake && !c.faked && canPump(c, X, p) && hold.barmed && hold.charge > 0.35 && hold.charge < 0.6) { c.faked = true; a.fake = true; a.abort = 1; c.jump = true; c.fakeAt = c.tick; say(c, 'PUMP FAKE: MAKING ROOM', true); return c; }
-    if (jumper && a.fakeRoll && !a.fake && canPump(c, X, p) && hold.barmed && hold.charge > 0.2 && hold.charge < 0.85) { a.fake = true; a.abort = 1; c.jump = true; c.fakeAt = c.tick; say(c, 'PUMP FAKE: THE DEFENDER JUMPED', true); return c; }
+    // FEET ON THE FLOOR (iteration 46): a fake thrown down from the air was taken, so a fake decided up there is carried down: the cocked
+    // ball is held through the landing (no release, not even on a line) and the fake goes once the feet are down, if it still may; else the shot goes
+    const ground = onFloor(w, p);
+    const fakeNow = why => { if (why === 'room') c.faked = true; a.fake = true; a.abort = 1; c.jump = true; c.fakeAt = c.tick; say(c, why === 'room' ? 'PUMP FAKE: MAKING ROOM' : 'PUMP FAKE: THE DEFENDER JUMPED', true); return c; };
+    if (a.fakeLand) {
+      if (!ground) { c.jump = true; return c; }
+      const why = a.fakeLand; a.fakeLand = null; a.fakeRoll = false;
+      if (canPump(c, X, p) && (why !== 'room' || !handInFront)) return fakeNow(why);
+    }
+    const roomFake = !jumper && closeFoe && !handInFront && a.fakeRoll && !a.fake && !c.faked && canPump(c, X, p, true) && hold.barmed && hold.charge > 0.35 && hold.charge < 0.6;
+    const baitFake = jumper && a.fakeRoll && !a.fake && canPump(c, X, p, true) && hold.barmed && hold.charge > 0.2 && hold.charge < 0.85;
+    if (roomFake || baitFake) { const why = roomFake ? 'room' : 'jumper'; if (ground) return fakeNow(why); a.fakeLand = why; c.jump = true; return c; }
     const off = a.slip !== undefined ? a.slip : a.off;   // a slipping Legend aims off like anyone else
-    let release = hold.charge >= 0.995 || a.t > 2.4;
+    let release = (hold.charge >= 0.995 && !a.pumpLand) || a.t > 2.4;   // (a pump-out waiting for the floor is not let go at full cock)
     // the line on: from just short of its mark to a little past it. Past that (a fade's wait for its lean, a slow read), the
     // cock-back has carried it long: from level 4 it does not let a sure miss go but pumps out of it while it may dribble
     // (far out a step of cock-back moves the line a long way: a line that jumped over the window inside one step is let go now,
@@ -499,7 +542,12 @@ const AI = (() => {
       if (a.fade) release = fading || a.t > (level >= 5 ? 0.6 : 1.1);   // a fadeaway needs the body drifting or leaning away (from level 5: not for long, then it goes straight up)
       else release = true;
     }
-    if (!release && past && level >= 4 && !a.fake && canPump(c, X, p)) { a.abort = 1; c.jump = true; say(c, 'LINE GONE LONG: PUMPING OUT', true); return c; }
+    // (a pump is a dribble: from the air it is held until the landing, and goes then if it still may; the hold limit shoots it first)
+    if (!release && ((past && level >= 4) || a.pumpLand) && !a.fake && canPump(c, X, p, true)) {
+      if (!ground) { a.pumpLand = true; c.jump = true; say(c, 'LINE GONE LONG: PUMPING OUT', true); return c; }
+      a.abort = 1; c.jump = true; say(c, 'LINE GONE LONG: PUMPING OUT', true); return c;
+    }
+    if (a.pumpLand && ground) release = true;   // down, and the pump is off now (no dribble left, a defender in its path, out of the zone): the shot goes
     // the level's hands: a lower level lets go up to releaseLag steps after the moment it picked (the cock-back keeps charging, so it goes long)
     if (release && X.L.releaseLag && hold.charge < 0.995) { if (a.lag === undefined) a.lag = Math.floor(c.rng() * (X.L.releaseLag + 1)); if (a.lag-- > 0) { c.jump = true; return c; } }
     if (release) { c.aim = null; c.jump = false; c.wait = react * 0.5; return c; }
@@ -625,7 +673,8 @@ const AI = (() => {
     const noDunk = !!p.dribbled;
     if (noDunk && gap < zone + 80 && !behind) say(c, 'NO DUNK OFF THE DRIBBLE: FINDING ANOTHER WAY');
     // a HARD cap: this possession's budget (BUDGETS, rolled when the ball is won), and never from a seated player
-    if (c.dribs < Math.min(maxDribs, c.budget) && gap > zone + 40 && !behind && !underOwn && !Physics.seated(w, p, T)) {   // (under our own rim it passes, never dribbles)
+    // and only inside its dribble zone (the middle third, w.dribZone): outside it the pass, the shot, the lob, the self-pass and the outlet take over
+    if (c.dribs < Math.min(maxDribs, c.budget) && gap > zone + 40 && !behind && !underOwn && !Physics.seated(w, p, T) && dribZoneOk(w, p)) {   // (under our own rim it passes, never dribbles)
       const progress = clamp((gap - zone) / 500, 0, 1);
       const reach = foeNear ? 0.3 : foeClose ? 0.6 : 0.85;
       let u = X.W.dribble + 0.5 * clamp(st.attack * 0.62, 0, 1) * reach * (0.4 + 0.6 * progress);   // the standing taste for it is W.dribble
@@ -1066,13 +1115,13 @@ const AI = (() => {
     let d = c.deadline;
     if (!d) {
       c.aim = null; c.wait = 0; c.holdT = 0; c.bholdT = 0; c.self = null;
-      const kind = hold.dunkReady ? 'dunk' : hold.cocking && !underOwnRim(c, w, T, w.ball.position.x) ? 'shoot' : 'pass';
+      const kind = hold.dunkReady ? 'dunk' : hold.cocking && !ownRimSoon(c, w, T) ? 'shoot' : 'pass';
       d = c.deadline = { hold, kind, step: 0, n: Math.ceil(Math.max(T.dribble_threshold + 0.05, 0.3) * T.bounce_charge_time / dt) + 1, keepJump: hold.cocking };
       say(c, kind === 'pass' ? 'OUT OF TIME: PASSING' : kind === 'shoot' ? 'OUT OF TIME: SHOOTING' : 'GOING UP FOR THE DUNK', true);
     }
     d.step++;
     if (d.kind === 'dunk') { c.jump = d.step === 2; return c; }       // a fresh tap: up for a step, then down
-    if (d.kind === 'shoot' && underOwnRim(c, w, T, w.ball.position.x)) d.kind = 'pass';   // (drifted under its own rim since: it passes instead)
+    if (d.kind === 'shoot' && ownRimSoon(c, w, T)) d.kind = 'pass';   // (drifted under its own rim since: it passes instead)
     if (d.kind === 'shoot') { c.jump = false; return c; }             // letting go of a cocked shot shoots it
     if (!hold.barmed && !d.armed) { c.jump = d.keepJump; c.bounce = false; return c; }   // the bounce key must be up once first
     d.armed = true;
@@ -1141,7 +1190,9 @@ const AI = (() => {
       const over = q.legs.every(l => l.position.y < w.floorY - 40) && b.position.x > dfn.x1 - 12 && b.position.x < dfn.x2 + 12 && b.position.y < dfn.rimY + 2 && b.position.y > dfn.rimY - 150;
       if (over || c.clearing) {
         if (!c.clearing) { c.clearing = 1; c.clears++; c.aim = null; c.wait = 0; c.holdT = 0; c.bholdT = 0; c.self = null; c.deadline = null; say(c, 'CLEARING IT FROM OVER OUR RIM', true); }
-        if (hold.cocking) { c.jump = false; c.clearing = 0; return c; }          // letting go of a cocked shot shoots it
+        // (a bounce already started, an out-of-time pass say, stays down: let go now it would dribble the ball out from up there)
+        c.bounce = !!hold.bouncing;
+        if (hold.cocking) { c.jump = false; c.clearing = 0; return c; }          // letting go of a cocked shot shoots it (the bounce key down: the shot goes first)
         c.jump = hold.armed; return c;                                           // (not armed: the key goes up first; armed: the press)
       }
     } else c.clearing = 0;
@@ -1186,7 +1237,7 @@ const AI = (() => {
     const lb = w.lastBouncer;
     if (!hold && lb && lb.team === c.team && lb.dribbleT > 0) {
       // past the budget it mostly catches it and thinks again (a taste, not a cap)
-      const keepOn = (X.atk.cx - lb.torso.position.x) * lb.dir > T.dunk_ground_x && c.dribs < maxDribsOf(level) && !lb.queued && c.dribs < c.budget && (level < 3 || dribbleRisk(c, X, lb) < 0.75);   // (the hard cap; and not on into a defender)
+      const keepOn = (X.atk.cx - lb.torso.position.x) * lb.dir > T.dunk_ground_x && c.dribs < maxDribsOf(level) && !lb.queued && c.dribs < c.budget && dribZoneOk(w, lb) && (level < 3 || dribbleRisk(c, X, lb) < 0.75);   // (the hard cap; not out of its zone; and not on into a defender)
       // level 4+ taps in rhythm, as the ball rises (a slip taps it on the way down: a sloppy one); below that it taps whenever
       if (keepOn && (level >= 4 ? ball.velocity.y < -0.5 || (ball.velocity.y > 0.5 && slip(c, X, 0.08)) : c.rng() < 0.12)) { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; }
       // a screen: from level 4, with the ball up, the teammate hops toward the defender to cut him off from the carrier

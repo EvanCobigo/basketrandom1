@@ -14,6 +14,7 @@ window.CONFIG = {
   ai_hold_limit: { value: 2.5, min: 1, max: 5, step: 0.1 },    // s the CPU may hold the ball before it must shoot, dunk or pass (people have no limit)
   ai_own_rim_zone: { value: 70, min: 0, max: 300, step: 10 },  // px either side of the rim it defends where the CPU never shoots (it passes out instead)
   ai_dribble_reach: { value: 20, min: 0, max: 200, step: 5 },  // px: the most one CPU dribble carries the ball and the dribbler toward the rim it attacks (0: no limit)
+  ai_dribble_zone: { value: 1, min: 0, max: 1, step: 1 },      // 1: the CPU dribbles only in the middle third of the court (feet and ball), never down to the rim (0: anywhere)
   ai_no_dribble_dunk: { value: 1, min: 0, max: 1, step: 1 },   // 1: a CPU player who has dribbled may not dunk until the ball leaves him (a pass, a self-pass, a shot)
   ai_fade_room: { value: 260, min: 0, max: 600, step: 10 },     // px the CPU needs between it and the rim it defends to fade away (the fade drifts back)
   ai_lob_guard: { value: 150, min: 0, max: 400, step: 10 },     // px: a defender this near the board stops a CPU alley-oop lob (levels 4+)
