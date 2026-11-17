@@ -36,26 +36,32 @@ const Settings = (() => {
   // read the value. Everything else stays in the full list behind ADVANCED.
   const pct = (v, k) => Math.round(v / defaults[k] * 100) + '%';
   const level = v => v <= 0 ? 'OFF' : v <= 0.75 ? 'LOW' : v <= 1.5 ? 'NORMAL' : 'LOTS';
+  // Three tabs, each a short list with big controls. A row is { key, label, desc, fmt, tab }; fmt turns the value into plain words
+  // (an ON/OFF switch needs none: any 0-or-1 value is drawn as a switch).
+  const TABS = ['MATCH', 'FEEL', 'LOOK AND SOUND'];
+  const styleName = v => v <= 0 ? 'RANDOM' : (typeof AI !== 'undefined' && AI.STYLES[v - 1] ? AI.STYLES[v - 1].name : String(v));
   const SIMPLE = [
-    { key: 'volume', label: 'SOUND VOLUME', desc: 'HOW LOUD THE GAME IS.', fmt: v => Math.round(v * 100) + '%' },
-    { key: 'win_score', label: 'POINTS TO WIN', desc: 'FIRST TEAM TO THIS MANY POINTS WINS. LONG SHOTS ARE WORTH 2.', fmt: v => String(v) },
-    { key: 'ai_level', label: 'CPU LEVEL', desc: 'HOW GOOD THE COMPUTER IS IN A VS CPU MATCH (1 ROOKIE TO 6 MYTHIC).', fmt: v => ['ROOKIE', 'AMATEUR', 'PRO', 'ALL-STAR', 'LEGEND', 'MYTHIC'][v - 1] || String(v) },
-    { key: 'game_speed', label: 'GAME SPEED', desc: 'SLOWER IS EASIER TO FOLLOW, FASTER IS MORE FRANTIC.', fmt: (v, k) => pct(v, k) },
-    { key: 'jump_height', label: 'JUMP POWER', desc: 'HOW HIGH A FULL JUMP GOES.', fmt: (v, k) => pct(v, k) },
-    { key: 'dunk_reach_x', label: 'DUNK REACH', desc: 'HOW CLOSE TO THE RIM YOU NEED TO BE TO DUNK. SMALLER IS HARDER.', fmt: (v, k) => pct(v, k) },
-    { key: 'fold_stiffness', label: 'BODY STIFFNESS', desc: 'HOW STIFF THE HIPS ARE. HIGHER FOLDS LESS AND SPRINGS BACK LESS, LOWER IS FLOPPIER.', fmt: v => Math.round(v * 100) + '%' },
-    { key: 'dribble_rock', label: 'DRIBBLE WOBBLE', desc: 'HOW MUCH THE BODY ROCKS WHILE DRIBBLING. 0% HOLDS IT STEADY, 100% IS THE NORMAL ROCK.', fmt: v => Math.round(v * 100) + '%' },
-    { key: 'particles', label: 'PARTICLES', desc: 'HOW MANY SPARKS, DUST PUFFS AND CONFETTI THE EFFECTS MAKE.', fmt: level },
-    { key: 'shake', label: 'SCREEN SHAKE', desc: 'HOW HARD THE SCREEN SHAKES ON BIG PLAYS.', fmt: v => v <= 0 ? 'OFF' : v <= 8 ? 'LOW' : v <= 20 ? 'NORMAL' : 'HIGH' },
-    { key: 'crowd_rows', label: 'CROWD SIZE', desc: 'HOW MANY ROWS OF FANS WATCH THE GAME.', fmt: v => v <= 0 ? 'NONE' : v + (v === 1 ? ' ROW' : ' ROWS') },
-    { key: 'pixel_size', label: 'PIXEL SIZE', desc: 'BIGGER MEANS CHUNKIER, MORE RETRO GRAPHICS.', fmt: v => v.toFixed(1) },
-    { key: 'scanlines', label: 'SCANLINES', desc: 'THE FAINT TV LINES OVER THE COURT.', fmt: v => v <= 0 ? 'OFF' : Math.round(v / 0.5 * 100) + '%' },
+    { tab: 0, key: 'win_score', label: 'POINTS TO WIN', desc: 'FIRST TEAM TO THIS MANY POINTS WINS. LONG SHOTS ARE WORTH 2.', fmt: v => v + ' POINTS' },
+    { tab: 0, key: 'game_speed', label: 'GAME SPEED', desc: 'SLOWER IS EASIER TO FOLLOW, FASTER IS MORE FRANTIC.', fmt: (v, k) => pct(v, k) },
+    { tab: 0, key: 'ai_level', label: 'CPU LEVEL', desc: 'HOW GOOD THE COMPUTER IS IN A VS CPU MATCH, FROM ROOKIE TO MYTHIC.', fmt: v => ['ROOKIE', 'AMATEUR', 'PRO', 'ALL-STAR', 'LEGEND', 'MYTHIC'][v - 1] || String(v) },
+    { tab: 0, key: 'ai_style', label: 'CPU STYLE', desc: 'HOW THE COMPUTER LIKES TO PLAY. RANDOM PICKS A NEW STYLE EACH MATCH; STREET BALL GOES FOR FLASHY PLAYS.', fmt: styleName },
+    { tab: 0, key: 'ai_air_miss', label: 'CPU AIM IN THE AIR', desc: 'HOW MUCH THE COMPUTER MISSES SHOTS TAKEN HIGH IN A JUMP. A SHOT FROM THE FLOOR IS ITS BEST ONE. 0 TURNS IT OFF.', fmt: v => v <= 0 ? 'OFF' : v <= 35 ? 'LOW' : v <= 75 ? 'NORMAL' : 'HIGH' },
+    { tab: 1, key: 'jump_height', label: 'JUMP POWER', desc: 'HOW HIGH A FULL JUMP GOES.', fmt: (v, k) => pct(v, k) },
+    { tab: 1, key: 'dunk_reach_x', label: 'DUNK REACH', desc: 'HOW CLOSE TO THE RIM YOU NEED TO BE TO DUNK. SMALLER IS HARDER.', fmt: (v, k) => pct(v, k) },
+    { tab: 1, key: 'fold_stiffness', label: 'BODY STIFFNESS', desc: 'HOW STIFF THE HIPS ARE. HIGHER FOLDS LESS, LOWER IS FLOPPIER.', fmt: v => Math.round(v * 100) + '%' },
+    { tab: 1, key: 'dribble_rock', label: 'DRIBBLE WOBBLE', desc: 'HOW MUCH THE BODY ROCKS WHILE DRIBBLING. 0% HOLDS IT STEADY, 100% IS THE NORMAL ROCK.', fmt: v => Math.round(v * 100) + '%' },
+    { tab: 2, key: 'volume', label: 'SOUND VOLUME', desc: 'HOW LOUD THE GAME IS. THE M KEY MUTES IT.', fmt: v => v <= 0 ? 'OFF' : Math.round(v * 100) + '%' },
+    { tab: 2, key: 'particles', label: 'PARTICLES', desc: 'HOW MANY SPARKS, DUST PUFFS AND CONFETTI THE EFFECTS MAKE.', fmt: level },
+    { tab: 2, key: 'shake', label: 'SCREEN SHAKE', desc: 'HOW HARD THE SCREEN SHAKES ON BIG PLAYS.', fmt: v => v <= 0 ? 'OFF' : v <= 8 ? 'LOW' : v <= 20 ? 'NORMAL' : 'HIGH' },
+    { tab: 2, key: 'crowd_rows', label: 'CROWD SIZE', desc: 'HOW MANY ROWS OF FANS WATCH THE GAME.', fmt: v => v <= 0 ? 'NONE' : v + (v === 1 ? ' ROW' : ' ROWS') },
+    { tab: 2, key: 'pixel_size', label: 'PIXEL SIZE', desc: 'BIGGER MEANS CHUNKIER, MORE RETRO GRAPHICS.', fmt: v => v.toFixed(1) },
+    { tab: 2, key: 'scanlines', label: 'SCANLINES', desc: 'THE FAINT TV LINES OVER THE COURT.', fmt: v => v <= 0 ? 'OFF' : Math.round(v / 0.5 * 100) + '%' },
   ];
   const simpleOf = k => SIMPLE.find(x => x.key === k);
 
   /** Rows for the menu: section headers and value rows, in order (or just the short list). */
-  function rows(simple) {
-    if (simple) return SIMPLE.filter(x => tunable(x.key)).map(x => ({ key: x.key }));
+  function rows(simple, tab = 0) {
+    if (simple) return SIMPLE.filter(x => x.tab === tab && tunable(x.key)).map(x => ({ key: x.key }));
     const left = new Set(Object.keys(defaults)), out = [];
     for (const [title, test] of SECTIONS) {
       const keys = [...left].filter(k => Array.isArray(test) ? test.includes(k) : test(k));
@@ -72,6 +78,14 @@ const Settings = (() => {
   const describe = k => simpleOf(k) ? simpleOf(k).desc : EXTRA_DESC[k] || '';
   /** The value in plain words, for the short list. */
   const showSimple = k => simpleOf(k).fmt(CONFIG[k].value, k);
+  /** A 0-or-1 value is an ON/OFF switch. */
+  const isToggle = k => CONFIG[k].min === 0 && CONFIG[k].max === 1 && CONFIG[k].step === 1;
+  /** A value with a few named stops (not a smooth range): the bar is drawn with a notch at each. */
+  const stops = k => { const c = CONFIG[k], n = Math.round((c.max - c.min) / c.step); return n >= 1 && n <= 12 ? n + 1 : 0; };
+  /** The value as words wherever there are words for it: the short list's, an ON/OFF for a switch, else the number. */
+  const plain = k => simpleOf(k) ? showSimple(k) : isToggle(k) ? (CONFIG[k].value >= 1 ? 'ON' : 'OFF') : show(k);
+  const defaultShare = k => (defaults[k] - CONFIG[k].min) / (CONFIG[k].max - CONFIG[k].min || 1);
+  const defaultText = k => { const v = CONFIG[k].value; CONFIG[k].value = defaults[k]; const t = plain(k); CONFIG[k].value = v; return t; };
 
   /** The value as the menu shows it: whole numbers plain, otherwise to the step's decimals. */
   function show(k) {
@@ -107,5 +121,5 @@ const Settings = (() => {
   function reset() { for (const k of Object.keys(defaults)) CONFIG[k].value = defaults[k]; save(); dispatchEvent(new Event('tune')); }
   const changed = k => CONFIG[k].value !== defaults[k];
 
-  return { rows, label, describe, showSimple, show, set, nudge, share, load, reset, changed };
+  return { TABS, rows, label, describe, showSimple, plain, isToggle, stops, defaultShare, defaultText, show, set, nudge, share, load, reset, changed };
 })();

@@ -79,7 +79,7 @@ const BOUNCE_KEYS = ['KeyS', 'ArrowDown']; // with the ball: hold to wind up, le
 addEventListener('keydown', e => {
   startAudio();
   if (!e.repeat) { down.add(e.code); hit.add(e.code); }
-  if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+  if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault();
 });
 addEventListener('keyup', e => down.delete(e.code));
 addEventListener('blur', () => down.clear());
@@ -108,6 +108,7 @@ canvas.addEventListener('pointermove', e => {
   if (i >= 0) menuFocus = i;
   if (dragKey === 'ai_level' && e.buttons && scene === 'title') Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (mouse.x - LEVEL.x) / LEVEL.w)) * (AI.LEVELS.length - 1)));
   else if (dragKey && e.buttons && scene === 'settings') settingsSlide(dragKey, mouse.x);
+  else if (scene === 'settings') settingsHover(mouse.x, mouse.y);
 });
 /** Press a button: it squashes for a moment, then its action runs (on the game step, not a timer). */
 function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14, action: b.action, label: b.label }; }
@@ -699,12 +700,17 @@ function levelClick(x, y) {
   return true;
 }
 
-// ---- Settings menu: every coefficient in config.js, by section ----------------------------
-const SET_ADV = { x: 120, y: 150, w: 1040, rowH: 28, show: 15, sliderX: 760, sliderW: 340 };
-const SET_SIMPLE = { x: 160, y: 150, w: 960, rowH: 35, show: 12, sliderX: 650, sliderW: 330 };
-let settingsAdvanced = false, SET = SET_SIMPLE;   // opens on the short, plain list; ADVANCED shows every coefficient
-let settingsRows = Settings.rows(true), settingsSel = 0, settingsTop = 0, settingsFrom = 'title', repeatT = 0;
-function setSettingsMode(adv) { settingsAdvanced = adv; SET = adv ? SET_ADV : SET_SIMPLE; settingsRows = Settings.rows(!adv); settingsSel = adv ? 1 : 0; settingsTop = 0; }
+// ---- Settings menu ----------------------------------------------------------------------
+// Opens on three tabs (MATCH, FEEL, LOOK AND SOUND) of big rows: arrows either side of a bar, the value in words, a switch for anything
+// ON/OFF, and a plain note about the highlighted row. ADVANCED lists every coefficient in config.js, by section.
+const SET_ADV = { x: 120, y: 150, w: 1040, rowH: 28, show: 15, sliderX: 760, sliderW: 340, top: 0 };
+const SET_SIMPLE = { x: 160, y: 178, w: 960, rowH: 56, show: 6, sliderX: 560, sliderW: 220, top: 0 };
+const MENU_INK_C = '#0c0818';
+const SET_TAB = i => ({ x: 160 + i * 330, y: 116, w: 300, h: 42 });
+let settingsAdvanced = false, settingsTab = 0, SET = SET_SIMPLE;   // opens on the short, plain tabs; ADVANCED shows every coefficient
+let settingsRows = Settings.rows(true, 0), settingsSel = 0, settingsTop = 0, settingsFrom = 'title', repeatT = 0;
+function setSettingsMode(adv) { settingsAdvanced = adv; SET = adv ? SET_ADV : SET_SIMPLE; settingsRows = Settings.rows(!adv, settingsTab); settingsSel = adv ? 1 : 0; settingsTop = 0; }
+function setSettingsTab(n) { settingsTab = (n + Settings.TABS.length) % Settings.TABS.length; settingsRows = Settings.rows(true, settingsTab); settingsSel = 0; settingsTop = 0; sfx.click(); }
 function openSettings() { settingsFrom = scene; setSettingsMode(settingsAdvanced); scene = 'settings'; }
 function settingsMove(n) {
   let i = settingsSel;
@@ -720,11 +726,57 @@ function settingsSlide(k, x) {
   const c = CONFIG[k], t = Math.max(0, Math.min(1, (x - SET.sliderX) / SET.sliderW));
   Settings.set(k, c.min + t * (c.max - c.min));
 }
+/** The row under a point (an index into settingsRows), or -1. */
+function settingsRowAt(x, y) {
+  const n = Math.floor((y - SET.y - SET.top) / SET.rowH), i = settingsTop + n;
+  if (y < SET.y + SET.top || n < 0 || n >= SET.show || i >= settingsRows.length || settingsRows[i].header || x < SET.x || x > SET.x + SET.w) return -1;
+  return i;
+}
+function settingsHover(x, y) {   // the pointer lights the row it is over
+  if (!settingsAdvanced) { const t = [0, 1, 2].find(t => { const r = SET_TAB(t); return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; }); if (t !== undefined) return; }
+  const i = settingsRowAt(x, y); if (i >= 0) settingsSel = i;
+}
 function settingsClick(x, y) {
-  const i = settingsTop + Math.floor((y - SET.y) / SET.rowH);
-  if (y < SET.y || i < settingsTop || i >= Math.min(settingsRows.length, settingsTop + SET.show) || settingsRows[i].header) return;
-  settingsSel = i;
-  if (x >= SET.sliderX - 10 && x <= SET.sliderX + SET.sliderW + 10) { dragKey = settingsRows[i].key; settingsSlide(dragKey, x); }
+  if (!settingsAdvanced) {
+    const t = [0, 1, 2].find(t => { const r = SET_TAB(t); return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; });
+    if (t !== undefined) { if (t !== settingsTab) setSettingsTab(t); return; }
+  }
+  const i = settingsRowAt(x, y); if (i < 0) return;
+  settingsSel = i; const k = settingsRows[i].key;
+  if (!settingsAdvanced) {
+    if (Settings.isToggle(k)) { if (x >= SET.sliderX - 50) { Settings.nudge(k, CONFIG[k].value >= 1 ? -1 : 1); sfx.click(); } return; }
+    if (x >= SET.sliderX - 52 && x < SET.sliderX - 6) { Settings.nudge(k, -1); sfx.click(); return; }                         // the left arrow
+    if (x > SET.sliderX + SET.sliderW + 6 && x <= SET.sliderX + SET.sliderW + 52) { Settings.nudge(k, 1); sfx.click(); return; }   // the right arrow
+  } else if (Settings.isToggle(k) && x >= SET.sliderX - 10 && x <= SET.sliderX + SET.sliderW + 10) { Settings.nudge(k, CONFIG[k].value >= 1 ? -1 : 1); sfx.click(); return; }
+  if (x >= SET.sliderX - 10 && x <= SET.sliderX + SET.sliderW + 10) { dragKey = k; settingsSlide(k, x); }
+}
+/** One simple-list row: a highlight, the name, [<] a bar with a notch per stop and a tick at the default [>], and the value in words. */
+function drawSettingRow(k, y, sel) {
+  const X = SET.x, changed = Settings.changed(k), on = CONFIG[k].value >= 1;
+  if (sel) { ctx.fillStyle = '#3d3175'; ctx.fillRect(X + 8, y - SET.rowH / 2 + 3, SET.w - 16, SET.rowH - 6); ctx.fillStyle = '#ffd23f'; ctx.fillRect(X + 8, y - SET.rowH / 2 + 3, 5, SET.rowH - 6); }
+  ptext(Settings.label(k, true), X + 44, y, 3, '#ffffff', { align: 'left', shadow: 2 });
+  if (changed) { ctx.fillStyle = '#ff9a3c'; ctx.fillRect(X + 28, y - 4, 8, 8); }   // an orange dot: not the default
+  const val = Settings.plain(k);
+  ptext(val, X + SET.w - 28, y, 3, changed ? '#ffd23f' : '#fff1a8', { align: 'right', shadow: 2 });
+  if (Settings.isToggle(k)) {   // a switch
+    const sx = SET.sliderX + SET.sliderW / 2 - 44, sy = y - 16;
+    ctx.fillStyle = '#0a0618'; ctx.fillRect(sx - 4, sy - 4, 96, 40);
+    ctx.fillStyle = on ? '#1fc2b1' : '#4a4466'; ctx.fillRect(sx, sy, 88, 32);
+    ctx.fillStyle = on ? '#7ff0e0' : '#6a6488'; ctx.fillRect(sx, sy, 88, 4);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(on ? sx + 52 : sx + 4, sy + 4, 32, 24);
+    ctx.fillStyle = '#c9c3e0'; ctx.fillRect(on ? sx + 52 : sx + 4, sy + 24, 32, 4);
+    return;
+  }
+  const bx = SET.sliderX, bw = SET.sliderW, sh = Settings.share(k), st = Settings.stops(k), hot = sel ? '#ffd23f' : '#8a83a8';
+  for (const [ax, dir] of [[bx - 40, -1], [bx + bw + 10, 1]]) {   // the arrows
+    ctx.fillStyle = hot; ctx.beginPath(); ctx.moveTo(ax + (dir < 0 ? 0 : 22), y); ctx.lineTo(ax + (dir < 0 ? 22 : 0), y - 13); ctx.lineTo(ax + (dir < 0 ? 22 : 0), y + 13); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = '#0a0618'; ctx.fillRect(bx - 3, y - 11, bw + 6, 22);
+  ctx.fillStyle = '#2a2350'; ctx.fillRect(bx, y - 8, bw, 16);
+  ctx.fillStyle = sel ? '#1fc2b1' : '#5d6480'; ctx.fillRect(bx, y - 8, bw * sh, 16);
+  if (st) { ctx.fillStyle = 'rgba(10,6,24,0.55)'; for (let q = 1; q < st - 1; q++) ctx.fillRect(Math.round(bx + bw * q / (st - 1)) - 1, y - 8, 2, 16); }   // a notch at each stop
+  if (changed) { const dx = bx + bw * Settings.defaultShare(k); ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(dx) - 1, y - 14, 3, 6); }   // where the default is
+  ctx.fillStyle = sel ? '#ffffff' : '#c9c3e0'; ctx.fillRect(Math.round(bx + bw * sh) - 6, y - 14, 12, 28);
 }
 
 // ---- Scenes ---------------------------------------------------------------------------
@@ -916,15 +968,23 @@ const scenes = {
         .forEach(([label, sub, icon, accent, fn], i) => btn(label, 132 + i * 348, 214, 320, 100, fn, '', 4, { kind: 'primary', icon, sub, accent }));
       // CPU difficulty: a segmented bar with a glowing knob, the level's name and what it does
       const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1], n = AI.LEVELS.length;
-      Render.panel(ctx, 132, 344, 498, 214, { title: 'CPU LEVEL', accent: '#ffd23f' });
+      Render.panel(ctx, 132, 344, 498, 272, { title: 'CPU LEVEL AND STYLE', accent: '#ffd23f' });
       ptext(`${lv} / ${n}`, 610, 374, 2, '#c9c3e0', { align: 'right' });
       ptext(L.name, LEVEL.x + LEVEL.w / 2, 410, 4, Render.levelColor(lv, n), { shadow: 3 });
       btn('<', 139, 428, 40, 48, () => Settings.set('ai_level', lv - 1), '', 4, { kind: 'secondary', icon: 'left', glyphOnly: true });
       btn('>', 583, 428, 40, 48, () => Settings.set('ai_level', lv + 1), '', 4, { kind: 'secondary', icon: 'right', glyphOnly: true });
       Render.levelBar(ctx, LEVEL.x, LEVEL.y, LEVEL.w, lv, n, state.t);
       wrapText(L.does, 38).slice(0, 2).forEach((l, i) => ptext(l, LEVEL.x + LEVEL.w / 2, 504 + i * 24, 2, '#e6ddff', { shadow: 2 }));
+      // the CPU's style: pick one (or RANDOM, a new one each match) with the arrows or by clicking
+      const sv = tune.ai_style, sn = sv <= 0 ? 'RANDOM' : AI.STYLES[sv - 1].name, sd = sv <= 0 ? 'A DIFFERENT STYLE EACH MATCH' : AI.STYLES[sv - 1].does;
+      ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(152, 536, 458, 2);
+      const cycleStyle = d => { Settings.set('ai_style', (CONFIG.ai_style.value + d + 10) % 10); };
+      btn('<', 139, 544, 40, 48, () => cycleStyle(-1), '', 4, { kind: 'secondary', icon: 'left', glyphOnly: true });
+      btn('>', 583, 544, 40, 48, () => cycleStyle(1), '', 4, { kind: 'secondary', icon: 'right', glyphOnly: true });
+      ptext(sn, 381, 566, 3, sv === 9 ? '#ff9a3c' : sv <= 0 ? '#c9c3e0' : '#ffd23f', { shadow: 3 });
+      ptext(sd, 381, 602, 1.5, '#e6ddff', { shadow: 1 });
       // the controls: each team's two keys, then the finer points
-      Render.panel(ctx, 650, 344, 498, 214, { title: 'CONTROLS', accents: Render.TEAM_COLORS });
+      Render.panel(ctx, 650, 344, 498, 272, { title: 'CONTROLS', accents: Render.TEAM_COLORS });
       for (const team of [0, 1]) {
         const x0 = team ? 916 : 672, col = Render.TEAM_COLORS[team];
         ctx.fillStyle = col; ctx.fillRect(x0, 394, 8, 12);
@@ -933,12 +993,12 @@ const scenes = {
         Render.keycap(ctx, x0 + 20, 476, team ? 'down' : 'S', 0.62); ptext('BOUNCE / PASS', x0 + 50, 478, 2, '#ffffff', { align: 'left', shadow: 2 });
       }
       ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(898, 392, 2, 100);
-      ptext('HOLD JUMP, LET GO TO SHOOT · TAP NEAR THE RIM TO DUNK', 899, 518, 1.5, '#b9b1d6', { shadow: 1 });
-      ptext('TAP BOUNCE TO DRIBBLE · HOLD IT TO PASS', 899, 538, 1.5, '#b9b1d6', { shadow: 1 });
+      ptext('HOLD JUMP, LET GO TO SHOOT · TAP NEAR THE RIM TO DUNK', 899, 530, 1.5, '#b9b1d6', { shadow: 1 });
+      ptext('TAP BOUNCE TO DRIBBLE · HOLD IT TO PASS', 899, 552, 1.5, '#b9b1d6', { shadow: 1 });
       // secondary actions
-      btn('SETTINGS', W / 2 - 274, 590, 260, 54, openSettings, '', 3, { kind: 'secondary', icon: 'gear' });
-      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W / 2 + 14, 590, 260, 54, () => setMuted(!muted), '', 3, { kind: 'secondary', icon: muted ? 'mute' : 'sound' });
-      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  M MUTES  ·  ARROWS + ENTER PICK`, W / 2, H - 30, 1.5, '#b3acd2', { shadow: 1 });
+      btn('SETTINGS', W / 2 - 274, 626, 260, 54, openSettings, '', 3, { kind: 'secondary', icon: 'gear' });
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W / 2 + 14, 626, 260, 54, () => setMuted(!muted), '', 3, { kind: 'secondary', icon: muted ? 'mute' : 'sound' });
+      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  M MUTES  ·  ARROWS + ENTER PICK`, W / 2, H - 20, 1.5, '#b3acd2', { shadow: 1 });
       ctx.restore();
     },
   },
@@ -949,11 +1009,17 @@ const scenes = {
       if (pressed('Escape') || pressed('Enter') || pressed('Backspace')) { sfx.back(); scene = settingsFrom; return; }
       if (pressed('ArrowDown') || pressed('KeyS')) settingsMove(1);
       if (pressed('ArrowUp') || pressed('KeyW')) settingsMove(-1);
-      if (pressed('PageDown')) settingsMove(SET.show);
-      if (pressed('PageUp')) settingsMove(-SET.show);
+      if (!settingsAdvanced) {   // tabs: Tab or Q / E (PageUp / PageDown too)
+        if (pressed('Tab') || pressed('KeyE') || pressed('PageDown')) setSettingsTab(settingsTab + 1);
+        if (pressed('KeyQ') || pressed('PageUp')) setSettingsTab(settingsTab - 1);
+      } else {
+        if (pressed('PageDown')) settingsMove(SET.show);
+        if (pressed('PageUp')) settingsMove(-SET.show);
+      }
       const row = settingsRows[settingsSel], l = down.has('ArrowLeft') || down.has('KeyA'), r = down.has('ArrowRight') || down.has('KeyD');
       if (row && row.key) {
-        if (pressed('ArrowLeft') || pressed('KeyA')) { Settings.nudge(row.key, -1); repeatT = 0.35; }
+        if (pressed('Space') && Settings.isToggle(row.key)) Settings.nudge(row.key, CONFIG[row.key].value >= 1 ? -1 : 1);
+        else if (pressed('ArrowLeft') || pressed('KeyA')) { Settings.nudge(row.key, -1); repeatT = 0.35; }
         else if (pressed('ArrowRight') || pressed('KeyD')) { Settings.nudge(row.key, 1); repeatT = 0.35; }
         else if (l || r) { repeatT -= dt; if (repeatT <= 0) { Settings.nudge(row.key, r ? 1 : -1); repeatT = 0.04; } }   // held: keeps stepping
       }
@@ -963,31 +1029,52 @@ const scenes = {
       else { drawGame(); }
       overlay(0.55);
       ptext('SETTINGS', W / 2, 62, 8, '#ffd23f', { outline: true, shadow: 6 });
-      ptext(settingsAdvanced ? 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE (HOLD TO RUN)  ·  CLICK OR DRAG A SLIDER  ·  WHEEL SCROLLS' : 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE  ·  OR CLICK A BAR', W / 2, 112, 2, '#e6ddff');
-      const sm = !settingsAdvanced, fs = sm ? 3 : 2, bh = sm ? 12 : 8;
-      Render.panel(ctx, SET.x, SET.y - 14, SET.w, SET.rowH * SET.show + 20, { accent: '#ffd23f' });
-      for (let n = 0; n < SET.show; n++) {
-        const i = settingsTop + n, row = settingsRows[i]; if (!row) break;
-        const y = SET.y + n * SET.rowH + SET.rowH / 2;
-        if (row.header) { ptext(row.header, SET.x + 24, y, 3, '#ffd23f', { align: 'left' }); continue; }
-        const k = row.key, sel = i === settingsSel;
-        if (sel) { ctx.fillStyle = '#3d3175'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, SET.w - 12, SET.rowH - 4); ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, 4, SET.rowH - 4); }
-        ptext(Settings.label(k, sm), SET.x + 44, y, fs, !sm && Settings.changed(k) ? '#ff9a3c' : '#ffffff', { align: 'left', shadow: 2 });
-        ptext(sm ? Settings.showSimple(k) : Settings.show(k), SET.sliderX - 24, y, fs, '#fff1a8', { align: 'right', shadow: 2 });
-        ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW, bh);
-        ctx.fillStyle = sel ? '#1fc2b1' : '#5d6480'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW * Settings.share(k), bh);
-        ctx.fillStyle = sel ? '#ffffff' : '#c9c3e0'; ctx.fillRect(SET.sliderX + SET.sliderW * Settings.share(k) - 5, y - bh, 10, bh * 2);
-        if (sel && Math.floor(state.t * 4) % 2) { ctx.fillStyle = '#ffffff'; for (let q = 0; q < 3; q++) ctx.fillRect(SET.x + 18 + q * 3, y - (3 - q) * 3, 3, (3 - q) * 6); }
-      }
-      if (settingsAdvanced) {   // scroll bar for the long list
-        const total = settingsRows.length, barH = SET.rowH * SET.show;
+      const sm = !settingsAdvanced;
+      if (sm) {
+        ptext('UP / DOWN PICK  ·  LEFT / RIGHT CHANGE  ·  TAB OR Q / E SWITCHES TAB  ·  OR USE THE MOUSE', W / 2, 100, 2, '#c9c3e0');
+        for (let t = 0; t < Settings.TABS.length; t++) {   // the tabs
+          const r = SET_TAB(t), on = t === settingsTab;
+          ctx.fillStyle = MENU_INK_C; ctx.fillRect(r.x - 4, r.y - 4, r.w + 8, r.h + 4);
+          ctx.fillStyle = on ? '#ffd23f' : '#2c2354'; ctx.fillRect(r.x, r.y, r.w, r.h);
+          ctx.fillStyle = on ? '#fff1a8' : '#41367a'; ctx.fillRect(r.x, r.y, r.w, 4);
+          ptext(Settings.TABS[t], r.x + r.w / 2, r.y + r.h / 2 + 2, 3, on ? '#1d1a2b' : '#c9c3e0', { shadow: on ? 0 : 2 });
+        }
+        Render.panel(ctx, SET.x, 166, SET.w, 360, { accent: '#ffd23f' });
+        for (let n = 0; n < SET.show; n++) { const i = settingsTop + n, row = settingsRows[i]; if (!row) break; drawSettingRow(row.key, SET.y + n * SET.rowH + SET.rowH / 2, i === settingsSel); }
+        // a plain note about the highlighted row, and what the default was if it has been changed
+        const row = settingsRows[settingsSel];
+        Render.panel(ctx, SET.x, 540, SET.w, 64, { accent: '#1fc2b1' });
+        if (row) {
+          wrapText(Settings.describe(row.key), 78).slice(0, 2).forEach((ln, q) => ptext(ln, SET.x + 28, 566 + q * 24, 2, '#e6ddff', { align: 'left', shadow: 2 }));
+          if (Settings.changed(row.key)) ptext('DEFAULT: ' + Settings.defaultText(row.key), SET.x + SET.w - 24, 554, 1.5, '#ff9a3c', { align: 'right', shadow: 1 });
+        }
+      } else {
+        ptext('UP/DOWN PICK  ·  LEFT/RIGHT CHANGE (HOLD TO RUN)  ·  CLICK OR DRAG A SLIDER  ·  WHEEL SCROLLS', W / 2, 110, 2, '#c9c3e0');
+        Render.panel(ctx, SET.x, SET.y - 14, SET.w, SET.rowH * SET.show + 20, { accent: '#ffd23f' });
+        for (let n = 0; n < SET.show; n++) {
+          const i = settingsTop + n, row = settingsRows[i]; if (!row) break;
+          const y = SET.y + n * SET.rowH + SET.rowH / 2;
+          if (row.header) { ptext(row.header, SET.x + 24, y, 3, '#ffd23f', { align: 'left' }); continue; }
+          const k = row.key, sel = i === settingsSel, bh = 8, tog = Settings.isToggle(k);
+          if (sel) { ctx.fillStyle = '#3d3175'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, SET.w - 12, SET.rowH - 4); ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, 4, SET.rowH - 4); }
+          ptext(Settings.label(k, false), SET.x + 44, y, 2, Settings.changed(k) ? '#ff9a3c' : '#ffffff', { align: 'left', shadow: 2 });
+          ptext(Settings.plain(k), SET.sliderX - 24, y, 2, '#fff1a8', { align: 'right', shadow: 2 });
+          if (tog) {   // a switch
+            const on = CONFIG[k].value >= 1; ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX - 2, y - 11, 64, 22);
+            ctx.fillStyle = on ? '#1fc2b1' : '#4a4466'; ctx.fillRect(SET.sliderX, y - 9, 60, 18); ctx.fillStyle = '#ffffff'; ctx.fillRect(on ? SET.sliderX + 34 : SET.sliderX + 2, y - 7, 24, 14);
+          } else {
+            ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW, bh);
+            ctx.fillStyle = sel ? '#1fc2b1' : '#5d6480'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW * Settings.share(k), bh);
+            if (Settings.changed(k)) { ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(SET.sliderX + SET.sliderW * Settings.defaultShare(k)) - 1, y - bh, 3, 5); }
+            ctx.fillStyle = sel ? '#ffffff' : '#c9c3e0'; ctx.fillRect(SET.sliderX + SET.sliderW * Settings.share(k) - 5, y - bh, 10, bh * 2);
+          }
+          if (sel && Math.floor(state.t * 4) % 2) { ctx.fillStyle = '#ffffff'; for (let q = 0; q < 3; q++) ctx.fillRect(SET.x + 18 + q * 3, y - (3 - q) * 3, 3, (3 - q) * 6); }
+        }
+        const total = settingsRows.length, barH = SET.rowH * SET.show;   // scroll bar for the long list
         ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8, 8, barH);
         ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + SET.w - 14, SET.y - 8 + barH * settingsTop / total, 8, Math.max(16, barH * SET.show / total));
         const sel = settingsRows[settingsSel], note = sel && sel.key ? Settings.describe(sel.key) : '';   // a setting with a plain line of its own says it here
         ptext(note || 'ORANGE NAMES ARE CHANGED FROM THE DEFAULT. SIZES OF BODIES AND COURT APPLY FROM THE NEXT ROUND.', W / 2, 600, 2, note ? '#e6ddff' : '#c9c3e0');
-      } else {                  // a plain line about the highlighted setting
-        const row = settingsRows[settingsSel];
-        if (row) ptext(Settings.describe(row.key), W / 2, 596, 2, '#e6ddff');
       }
       buttons = [];
       btn('BACK', 210, 628, 260, 58, () => { scene = settingsFrom; }, '', 3, { kind: 'primary', icon: 'back' });

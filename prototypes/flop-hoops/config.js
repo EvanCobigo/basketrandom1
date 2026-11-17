@@ -17,10 +17,16 @@ window.CONFIG = {
   // ---- Match ----
   win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
   ai_level: { value: 3, min: 1, max: 6, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend, 6 Mythic (what each does is in js/ai.js)
+  ai_style: { value: 0, min: 0, max: 9, step: 1 },              // the CPU's style: 0 random each match, 1-9 one of AI.STYLES (9 is STREET BALL)
+  ai_air_miss: { value: 50, min: 0, max: 160, step: 5 },        // px of aim error a CPU shot can have at the top of a full jump (none from the floor); more the higher it is
+  ai_ground_assist: { value: 0.95, min: 0, max: 1, step: 0.05 }, // the aim help (0..1) a CPU shot gets planted on the floor (people get shot_assist)
+  ai_air_assist: { value: 0.4, min: 0, max: 1, step: 0.05 },    // the aim help a CPU shot gets at the top of a full jump; in between it slides from the ground's value
+  ai_hop_air: { value: 0.65, min: 0.3, max: 1, step: 0.05 },    // how long the CPU holds its movement hops, against the old 1 (shorter: less time in the air; its guarding jumps are not changed)
+  ai_hop_rest: { value: 0.5, min: 0, max: 1.5, step: 0.05 },    // s the CPU stays on the floor after landing before its next plain movement hop (0: hops at once, as before); closeouts, recoveries and guarding jumps do not wait
   ai_hold_limit: { value: 2.5, min: 1, max: 5, step: 0.1 },    // s the CPU may hold the ball before it must shoot, dunk or pass (people have no limit)
   ai_own_rim_zone: { value: 70, min: 0, max: 300, step: 10 },  // px either side of the rim it defends where the CPU never shoots (it passes out instead)
   ai_dribble_reach: { value: 20, min: 0, max: 200, step: 5 },  // px: the most one CPU dribble carries the ball and the dribbler toward the rim it attacks (0: no limit)
-  ai_dribble_zone: { value: 1, min: 0, max: 1, step: 1 },      // 1: the CPU dribbles anywhere but near a basket (ai_dribble_rim_gap), never down to the rim (0: anywhere)
+  ai_dribble_zone: { value: 0, min: 0, max: 1, step: 1 },      // 0: the CPU dribbles anywhere on the court (under its own rim it still passes); 1: only away from the baskets (ai_dribble_rim_gap)
   ai_dribble_rim_gap: { value: 230, min: 0, max: 500, step: 10 }, // px from either end of the court (where the baskets are) the CPU does not dribble into
   ai_no_dribble_dunk: { value: 1, min: 0, max: 1, step: 1 },   // 1: a CPU player who has dribbled may not dunk until the ball leaves him (a pass, a self-pass, a shot)
   ai_fade_room: { value: 260, min: 0, max: 600, step: 10 },     // px the CPU needs between it and the rim it defends to fade away (the fade drifts back)

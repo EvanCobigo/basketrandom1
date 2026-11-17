@@ -90,15 +90,17 @@ const AI = (() => {
    * .. 1 bold), wild (how erratic its choices are). They tilt the scores; they never dictate a play.
    */
   const STYLES = [
-    { name: 'AGGRESSIVE', attack: 1.6, range: 0.7, pass: 0.7, flash: 1.0, guard: 1.0, scav: 1.0, read: 0.8, risk: 0.65, wild: 1.0 },
-    { name: 'SNIPER', attack: 0.6, range: 1.9, pass: 0.9, flash: 0.8, guard: 0.9, scav: 0.9, read: 1.0, risk: 0.5, wild: 0.8 },
-    { name: 'PLAYMAKER', attack: 1.0, range: 0.7, pass: 1.9, flash: 0.7, guard: 0.9, scav: 1.0, read: 1.1, risk: 0.4, wild: 0.8 },
-    { name: 'SHOWBOAT', attack: 1.2, range: 1.3, pass: 0.6, flash: 1.9, guard: 0.7, scav: 0.8, read: 0.6, risk: 0.7, wild: 1.2 },
-    { name: 'DEFENSIVE', attack: 0.8, range: 0.8, pass: 0.9, flash: 0.5, guard: 1.9, scav: 1.2, read: 1.2, risk: 0.3, wild: 0.7 },
-    { name: 'RECKLESS', attack: 1.3, range: 1.2, pass: 0.8, flash: 1.3, guard: 1.0, scav: 1.0, read: 0.4, risk: 1.0, wild: 2.4 },
-    { name: 'TACTICIAN', attack: 1.0, range: 1.0, pass: 1.1, flash: 0.8, guard: 1.1, scav: 1.0, read: 2.0, risk: 0.5, wild: 0.6 },
-    { name: 'OPPORTUNIST', attack: 1.1, range: 0.9, pass: 1.0, flash: 0.9, guard: 1.2, scav: 1.9, read: 1.0, risk: 0.55, wild: 1.0 },
+    { name: 'AGGRESSIVE', does: 'DRIVES AT THE RIM AND DUNKS A LOT', attack: 1.6, range: 0.7, pass: 0.7, flash: 1.0, guard: 1.0, scav: 1.0, read: 0.8, risk: 0.65, wild: 1.0 },
+    { name: 'SNIPER', does: 'LOVES THE LONG SHOT', attack: 0.6, range: 1.9, pass: 0.9, flash: 0.8, guard: 0.9, scav: 0.9, read: 1.0, risk: 0.5, wild: 0.8 },
+    { name: 'PLAYMAKER', does: 'PASSES AND SETS UP ALLEY-OOPS', attack: 1.0, range: 0.7, pass: 1.9, flash: 0.7, guard: 0.9, scav: 1.0, read: 1.1, risk: 0.4, wild: 0.8 },
+    { name: 'SHOWBOAT', does: 'FADEAWAYS AND SHOWY PLAYS', attack: 1.2, range: 1.3, pass: 0.6, flash: 1.9, guard: 0.7, scav: 0.8, read: 0.6, risk: 0.7, wild: 1.2 },
+    { name: 'DEFENSIVE', does: 'LOCKS DOWN THE RIM AND STEALS', attack: 0.8, range: 0.8, pass: 0.9, flash: 0.5, guard: 1.9, scav: 1.2, read: 1.2, risk: 0.3, wild: 0.7 },
+    { name: 'RECKLESS', does: 'WILD AND UNPREDICTABLE', attack: 1.3, range: 1.2, pass: 0.8, flash: 1.3, guard: 1.0, scav: 1.0, read: 0.4, risk: 1.0, wild: 2.4 },
+    { name: 'TACTICIAN', does: 'STUDIES YOUR HABITS AND ADAPTS', attack: 1.0, range: 1.0, pass: 1.1, flash: 0.8, guard: 1.1, scav: 1.0, read: 2.0, risk: 0.5, wild: 0.6 },
+    { name: 'OPPORTUNIST', does: 'PROWLS FOR REBOUNDS AND LOOSE BALLS', attack: 1.1, range: 0.9, pass: 1.0, flash: 0.9, guard: 1.2, scav: 1.9, read: 1.0, risk: 0.55, wild: 1.0 },
+    { name: 'STREET BALL', does: 'FLASHY: DRIBBLE MOVES, FAKES, LOBS, SELF-PASSES', street: true, attack: 1.3, range: 1.2, pass: 1.4, flash: 2.6, guard: 0.85, scav: 0.9, read: 0.5, risk: 0.9, wild: 1.5 },
   ];
+  // (STYLES carries street: true on STREET BALL: flashy play. It dribbles more and anywhere, self-passes from level 3, lobs and fakes more, and gambles for steals)
   const BALANCED = { name: '', attack: 1, range: 1, pass: 1, flash: 1, guard: 1, scav: 1, read: 1, risk: 0.5, wild: 1 };
   const levelOf = T => clamp(Math.round(T.ai_level), 1, LEVELS.length);
   const MYTHIC = 6;   // the level that has every refinement below (X.m6)
@@ -158,7 +160,8 @@ const AI = (() => {
    * @param {number} [level] play at this level whatever the tuning says (two computers of different levels can play each other)
    */
   function create(team, rng, T, matchNo = 0, weights = null, level = 0) {
-    const style = T && (level || levelOf(T)) >= 3 ? STYLES[(Math.floor(rng() * STYLES.length) + matchNo) % STYLES.length] : BALANCED;
+    const picked = T && T.ai_style >= 1 ? STYLES[Math.min(STYLES.length, Math.round(T.ai_style)) - 1] : null;   // the menu's STYLE: 0 is random
+    const style = picked || (T && (level || levelOf(T)) >= 3 ? STYLES[(Math.floor(rng() * STYLES.length) + matchNo) % STYLES.length] : BALANCED);
     return {
       team, rng, style, lv: level, w: Object.assign({}, DEFAULT_WEIGHTS, weights), jump: false, bounce: false, wait: 0, holdT: 0, bholdT: 0, dribs: 0, aim: null, rolls: {},
       tick: 0, intent: '', intentAt: -99, intentSeen: -99, plan: null, press: 0, err: 0, looseOn: false, qCache: null,
@@ -289,7 +292,7 @@ const AI = (() => {
     const moodTilt = c.mood > 0 ? 0.12 * c.mood : 0.12 * -c.mood * (st.risk - 0.5) * 2;
     sit.lateness = lateness;
     return {
-      c, w, T, dt, info, level, L, st, sit, m6, K: m6 ? 2 : 4, swipeCap: L.swipeCap || 9, selfPass: !!L.selfPass, W: c.w, skill: L.skill, hold: w.hold, ball: w.ball, prof: c.profile,
+      c, w, T, dt, info, level, L, st, sit, m6, K: m6 ? 2 : 4, swipeCap: L.swipeCap || 9, selfPass: !!L.selfPass || (st.street && level >= 3), W: c.w, skill: L.skill, hold: w.hold, ball: w.ball, prof: c.profile,
       def: clamp(L.defense * (sit.foeToWin <= 2 ? 1.25 : 1), 0, L.defense > 1 ? 2.5 : 1),      // (past 1 every answer is already certain: reach and speed stop growing at 1, where a longer lunge only loses position)
       lag: 0.32 * Math.max(0, 1 - L.defense),
       react: L.react, base: L.react,
@@ -513,6 +516,10 @@ const AI = (() => {
       if (!pv0.onTarget) { c.aim = null; c.jump = false; c.wait = base * 0.4; return c; }   // (no dribble allowed: it goes anyway)
       c.jump = true; return c;
     }
+    // HEIGHT (iteration 49): airK is 0 planted on the floor, 1 at the top of a full jump. The aim help the physics gives this shot (hold.assist) runs
+    // from ai_ground_assist down to ai_air_assist, so a shot taken high is a worse shot and one taken from the floor a better one (the preview reads the same help)
+    const airK = clamp((Math.max(0, w.floorY - Math.max(...p.legs.map(l => l.position.y + Math.abs(Math.cos(l.angle)) * p.dims.legL / 2))) - 8) / Math.max(40, T.jump_height), 0, 1);
+    if (!a.easy && !a.lob) hold.assist = lerp(T.ai_ground_assist, T.ai_air_assist, airK);
     const pv = Physics.previewShot(w, T, p, hold.charge, level >= 5 ? 1 : 0);   // a Legend reads the line from where the ball will be when it leaves
     const fading = p.sinceGround > 0.1 && (p.torso.velocity.x * dir < -T.fade_speed || wrap(p.torso.angle) * dir < -T.fade_lean);
     c.dbg.shot = { err: pv.err, perfect: pv.perfect, charge: hold.charge };
@@ -558,7 +565,9 @@ const AI = (() => {
       if (hold.charge >= 0.5 && (pe.perfect || (pe.onTarget && (hold.charge >= 0.65 || a.t > 0.9)))) { c.aim = null; c.jump = false; c.wait = react * 0.5; return c; }
       if (hold.charge < 0.995 && a.t < 1.4) { c.jump = true; return c; }
     }
-    const off = a.slip !== undefined ? a.slip : a.off;   // a slipping Legend aims off like anyone else
+    let off = a.slip !== undefined ? a.slip : a.off;   // a slipping Legend aims off like anyone else
+    // ...and a.airNoise (this shot's own luck, -1 short .. +1 long) adds up to ai_air_miss px of aim error at the top of a jump, none from the floor
+    if (!a.easy && !a.lob) { if (a.airNoise === undefined) a.airNoise = c.rng() * 2 - 1; off += a.airNoise * airK * T.ai_air_miss; }
     let release = (hold.charge >= 0.995 && !a.pumpLand) || a.t > 2.4;   // (a pump-out waiting for the floor is not let go at full cock)
     // the line on: from just short of its mark to a little past it. Past that (a fade's wait for its lean, a slow read), the
     // cock-back has carried it long: from level 4 it does not let a sure miss go but pumps out of it while it may dribble
@@ -665,7 +674,7 @@ const AI = (() => {
       // (a Legend or Mythic also counts how many of its fakes got to a shot at all: a fake is a dribble, and one that keeps
       // losing the ball is made less, down to a fifth as often)
       const reach = level >= 5 && fk.fakes >= 4 ? clamp(1.5 * fk.shots / fk.fakes, 0.2, 1) : 1;
-      const fakeP = level >= 2 ? reach * X.W.fake * clamp((L.fakeBase || FAKE_BASE[level - 1]) + 0.6 * rate * seen + 0.2 * (st.flash - 1) + 0.1 * (X.risk - 0.5) + fakeForm, 0, 0.85) : 0;
+      const fakeP = level >= 2 ? reach * X.W.fake * clamp((L.fakeBase || FAKE_BASE[level - 1]) + 0.6 * rate * seen + 0.2 * (st.flash - 1) + (st.street ? 0.2 : 0) + 0.1 * (X.risk - 0.5) + fakeForm, 0, 0.85) : 0;
       c.aim = { t: 0, wait: 0, off: noiseOff + (slipped ? (c.rng() < 0.5 ? -1 : 1) * span * 0.4 : 0), fade: kind === 'fade', pressed: false, txt, fakeRoll: c.rng() < fakeP, forced };
       if (level >= 5 && slipped) c.aim.slip = (c.rng() < 0.5 ? -1 : 1) * 16;
       c.dribs = 0;
@@ -701,7 +710,7 @@ const AI = (() => {
     // ---- under or behind the basket: nothing works from there (no dunk, no shot), so it gets the ball out to the teammate
     const behind = gap < T.dunk_min_gap + 10;
     // ---- the dribble: it likes it. It brings the ball upcourt toward a dunk and keeps defenders guessing
-    const maxDribs = maxDribsOf(level);
+    const maxDribs = maxDribsOf(level) + (st.street ? 2 : 0);
     const zone = T.dunk_ground_x;
     // NO DUNK OFF THE DRIBBLE: once it has dribbled, the physics gives it no dunk until the ball leaves it (a pass, a self-pass,
     // a shot). So nothing here plays for one: no waiting at the rim, no driving at it for a dunk; near the rim it shoots or gives it up
@@ -709,7 +718,7 @@ const AI = (() => {
     if (noDunk && gap < zone + 80 && !behind) say(c, 'NO DUNK OFF THE DRIBBLE: FINDING ANOTHER WAY');
     // a HARD cap: this possession's budget (BUDGETS, rolled when the ball is won), and never from a seated player
     // and only inside its dribble zone (the middle third, w.dribZone): outside it the pass, the shot, the lob, the self-pass and the outlet take over
-    if (c.dribs < Math.min(maxDribs, c.budget) && gap > zone + 40 && !behind && !underOwn && !Physics.seated(w, p, T) && dribZoneOk(w, p)) {   // (under our own rim it passes, never dribbles)
+    if (c.dribs < Math.min(maxDribs, c.budget) && !underOwn && !Physics.seated(w, p, T) && dribZoneOk(w, p)) {   // (anywhere on the court, the rim included, but under its own rim it passes, never dribbles)
       const progress = clamp((gap - zone) / 500, 0, 1);
       const reach = foeNear ? 0.3 : foeClose ? 0.6 : 0.85;
       let u = X.W.dribble + 0.5 * clamp(st.attack * 0.62, 0, 1) * reach * (0.4 + 0.6 * progress);   // the standing taste for it is W.dribble
@@ -717,13 +726,15 @@ const AI = (() => {
       u -= 0.015 * c.dribs + 0.5 * urg;
       if (X.protect) u += 0.1;                                                                  // ahead near the end: run the clock
       u += (role > 0 ? roleTilt : 0) + 0.25 * form(c, 'dunk') * learnOf(X) - (rimHome ? 0.1 : 0);    // the front man drives; my dunks going in (or not) move it
+      if (behind) u -= 0.25;                                                                    // (behind the basket a dribble goes nowhere)
+      if (st.street) u += 0.3;                                                                  // (street ball: the handle is the show)
       if (noDunk) u -= 0.3 * (1 - progress) + 0.15;                                              // (no dunk at the end of this drive: dribbling on is worth less, the nearer the rim the less)
       // dribbles of mine lost near a defender: dribbling into one is worth less (learned)
       const dl = c.dribRec, lossRate = dl.n ? dl.lost / dl.n : 0;
       if (foeClose) u -= 0.5 * lossRate * conf(dl.n / 3) * learnOf(X) * (foeNear ? 1 : 0.5);
       u -= dribbleRisk(c, X, p) * (level >= 3 ? 0.6 : 0.3);                                  // (a dribble into a defender's hands: it reads the path first)
       if (screened) u += 0.25;                                                                 // (pick and roll: off the screen, turn the corner)
-      add('dribble', u, () => { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; say(c, gap > zone + 160 ? 'DRIBBLING UPCOURT FOR A DUNK' : 'DRIVING TO THE RIM'); return c; }, 'DRIB', 24);
+      add('dribble', u, () => { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; say(c, st.street && gap < zone + 160 ? 'STREET BALL: SHOWING OFF THE HANDLE' : gap > zone + 160 ? 'DRIBBLING UPCOURT FOR A DUNK' : 'DRIVING TO THE RIM'); return c; }, 'DRIB', 24);
     }
 
     // ---- the self-pass, from about halfway to the rim: it throws the ball ahead, hops after it, takes it out of the air near the rim
@@ -731,7 +742,7 @@ const AI = (() => {
     // clear lane: the ball is loose on the floor on the way, so nobody may stand between it and the rim.
     if (X.selfPass && !behind && c.tick > c.selfCool && p.sinceGround < 0.1 && gap >= 270 && gap <= 480 && !foes.some(f => { const fx = (f.torso.position.x - px) * dir; return fx > 20 && fx < gap + 40; })) {   // (from level 4, a wider window than the tested 310-420)
       const ss = c.selfStats, rate = ss.tries >= 3 ? ss.dunks / ss.tries : 0.45;   // its own record with the play
-      const u = 0.9 + 0.6 * (rate - 0.4) * conf(ss.tries, 2) + 0.2 * (st.flash - 1) + 0.2 * (st.attack - 1);
+      const u = 0.9 + 0.6 * (rate - 0.4) * conf(ss.tries, 2) + 0.2 * (st.flash - 1) + 0.2 * (st.attack - 1) + (st.street ? 0.35 : 0);
       add('self', u, () => {
         const ch = c.selfCharge || clamp(0.62 + (gap - 270) / 1000, 0.62, 0.86) - 0.05 * clamp((gap - 380) / 40, 0, 1);   // (measured: 0.8 from 310-380 px out, 0.75 a little further; selfCharge lets a test override it)
         c.selfLast = { gap: Math.round(gap), ch };
@@ -806,7 +817,7 @@ const AI = (() => {
         const lg = L.lobGuard !== undefined ? L.lobGuard : T.ai_lob_guard;
         const lobSafe = !lg || !foes.some(f => Math.abs(f.torso.position.x - atk.cx) < lg);   // a defender under the board would take it
         if (level >= 4 && lobSafe && !underOwn && mateAhead && gap > 160 && Physics.lobPlan(w, T, p, 1, 110) && Physics.lobReceiver(w, T, p)) {
-          add('lob', (screened ? 0.3 : 0) + X.W.lob * (0.78 + 0.35 * open + 0.25 * (st.pass - 1) + 0.25 * (st.flash - 1) + 0.3 * (L.skill - 0.5) + (runner ? 0.15 : 0) + form(c, 'lob', X.K) * 0.4 * learnOf(X)),
+          add('lob', (screened ? 0.3 : 0) + X.W.lob * (0.78 + 0.35 * open + 0.25 * (st.pass - 1) + 0.25 * (st.flash - 1) + (st.street ? 0.25 : 0) + 0.3 * (L.skill - 0.5) + (runner ? 0.15 : 0) + form(c, 'lob', X.K) * 0.4 * learnOf(X)),
             () => { c.aim = { t: 0, wait: 0, off: 0, fade: false, pressed: false, lob: true, txt: 'ALLEY-OOP: LOBBING IT OFF THE BOARD' }; c.dribs = 0; return aimStep(c, X); }, 'LOB');
         }
       }
@@ -1019,12 +1030,14 @@ const AI = (() => {
     const atRim = (X.dfn.cx - foe.torso.position.x) * foe.dir < T.dunk_reach_x * 1.5 && th.dunk !== null && th.dunk <= L.sagWithin || hold.dunkReady;
     // its own swipes (learned): ones that keep missing leave it out of position, so it swipes less; ones that work, more
     const sw = c.swipes, swRate = sw.tries ? sw.won / sw.tries : 0.2;
-    const swipeK = lerp(1, clamp(0.5 + 2.5 * swRate, 0.5, 1.4), conf(sw.tries / 2, X.K) * Math.min(1, X.L.learn));
+    const swipeK = lerp(1, clamp(0.5 + 2.5 * swRate, 0.5, 1.4), conf(sw.tries / 2, X.K) * Math.min(1, X.L.learn)) * (st.street ? 1.3 : 1);   // (street ball gambles for the steal)
     // (from level 5 only a ball its arm can reach, and not one the carrier holds on the far side of his body: a swing at that only loses position)
     const sq = mine.slice().sort((a1, b1) => Math.abs(a1.torso.position.x - foe.torso.position.x) - Math.abs(b1.torso.position.x - foe.torso.position.x))[0];
     const bpos = w.ball.position, sh = { x: sq.torso.position.x, y: sq.torso.position.y - sq.dims.torsoH / 2 + 10 };
     const reachable = X.level < 5 || (Math.hypot(bpos.x - sh.x, bpos.y - sh.y) < sq.dims.armL + T.hand_box / 2 + w.ball.r + 6
       && !((foe.torso.position.x - sq.torso.position.x) * (bpos.x - foe.torso.position.x) > 0 && Math.abs(bpos.x - foe.torso.position.x) > 12));
+    // STRIP THE CATCH (iteration 49): a ball only just picked up is not yet protected, so a hand right there goes for it at once
+    if (X.level >= 3 && defend(c, w, 'strip', hold.t < 0.4 && gap < 95 && !atRim && reachable, Math.min(def, X.swipeCap) * 0.85 * st.guard * press * swipeK, lag, X)) { sw.tries++; c.swipeAt = c.tick; return jumpUp(0.22, 'STRIPPING THE CATCH'); }
     if (defend(c, w, 'swipe', gap < 60 + 50 * Math.min(def, 1) && !atRim && reachable, Math.min(def, X.swipeCap) * 0.7 * st.guard * press * swipeK, lag, X)) { sw.tries++; c.swipeAt = c.tick; return jumpUp(0.22, 'GOING FOR THE STEAL'); }
     return false;
   }
@@ -1049,6 +1062,22 @@ const AI = (() => {
       if (Math.abs(b.x - q.torso.position.x) < 55 && b.y < w.floorY - 110 && b.y > w.floorY - 330) hit = true;
     }
     if (defend(c, w, 'timed', hit, Math.min(def, X.swipeCap) * 0.9 * st.guard * (1 + c.press * 0.6), lag, X)) { c.jump = true; c.holdT = 0.2; say(c, 'TIMING THE STEAL', true); return true; }
+    return false;
+  }
+
+  /**
+   * DEFLECT THE PASS (iteration 49): their pass is in the air and out of its guard time (they cannot be caught for a moment after it
+   * leaves the hand). Fly its path; jump when a hand raised from now meets it, so the pass is knocked down or taken.
+   */
+  function deflectPass(c, X) {
+    const { w, T, def, lag, st } = X, g = w.passGuard, q = nearest(w, c.team, w.ball.position.x);
+    if (!q) return false;
+    const path = Physics.ballPath(w, T, 26), hr = handRise(X, q, 26), reach = T.hand_box / 2 + w.ball.r + 4;
+    const k0 = Math.max(3, g && g.team !== c.team ? Math.ceil((g.until - w.time) * 60) : 3);   // (nothing counts before the guard is over)
+    let hit = false;
+    for (let k = k0; k <= 26 && !hit; k++) { const b = path[k], h = hr[k]; if (b && h && Math.abs(b.x - h.x) < reach && Math.abs(b.y - h.y) < reach) hit = true; }
+    c.dbg.path = path.filter((_, i) => i % 3 === 0); c.dbg.deflect = { k0, hit };
+    if (defend(c, w, 'deflect', hit, Math.min(def, X.swipeCap) * 0.8 * st.guard, lag, X)) { c.jump = true; c.holdT = 0.24; say(c, 'DEFLECTING THE PASS', true); return true; }
     return false;
   }
 
@@ -1143,11 +1172,18 @@ const AI = (() => {
       if (defend(c, w, 'board', !!highBall, (0.3 + 0.7 * def) * (0.9 + 0.1 * st.scav), lag, X)) { c.jump = true; c.holdT = 0.32; say(c, 'GOING UP FOR THE BOARD', true); return c; }   // a full jump for a high ball
     }
     if (hold && Math.abs(target - p.torso.position.x) < dead) { c.wait = react * 0.25; return c; }   // in position: stand
+    // (a loose ball coming down right over it: stand and let it come, no hop at all, so it is not left in the air for nothing; a low ball is not waited for)
+    if (!hold && ball.position.y < w.floorY - 70 && Math.abs(target - p.torso.position.x) < dead * 0.7 && T.ai_hop_rest > 0) { c.wait = react * 0.25; return c; }
     const leaningToward = a * s > 0.22 && p.sinceFoot < 0.1;                    // the swing is tipping toward it
     // a closeout is a sprint: it goes on the first sign of the swing turning its way, in longer hops that cover more floor
-    const sprint = hold && c.closeout && Math.abs(target - p.torso.position.x) > 110;
-    if (sprint && a * s > 0.08 && p.sinceFoot < 0.1) { c.jump = true; c.holdT = 0.16 + c.rng() * 0.06; return c; }
-    if (leaningToward) { c.jump = true; c.holdT = 0.06 + c.rng() * 0.08; return c; }
+    // RECOVERY (iteration 49): a carrier who has got past this man toward our rim is chased in the same long hops: it hustles back first
+    const sRim = Math.sign(dfn.cx - p.torso.position.x) || 1;
+    const beaten = hold && level >= 3 && (hold.p.torso.position.x - p.torso.position.x) * sRim > 40 && Math.abs(dfn.cx - hold.p.torso.position.x) < Math.abs(dfn.cx - p.torso.position.x);
+    const sprint = hold && (c.closeout || beaten) && Math.abs(target - p.torso.position.x) > 110;
+    const hopK = T.ai_hop_air;   // (iteration 49: a movement hop is a little lower and shorter, so the CPU spends less of the match in the air; guarding jumps are not scaled)
+    if (sprint && a * s > 0.08 && p.sinceFoot < 0.1) { if (beaten) say(c, 'RECOVERING: BEATEN OFF THE DRIBBLE', true); c.jump = true; c.holdT = (0.16 + c.rng() * 0.06) * hopK; return c; }
+    // (a plain hop waits ai_hop_rest seconds on the floor after landing: the CPU walks the floor in fewer, lower hops; a closeout or a recovery does not wait)
+    if (leaningToward && c.tick - (p.aiAirTick === undefined ? -999 : p.aiAirTick) >= T.ai_hop_rest * 60) { c.jump = true; c.holdT = (0.06 + c.rng() * 0.08) * hopK; return c; }
     c.wait = (hold ? base * Math.max(0.2, 1.7 - 1.5 * Math.min(def, 1)) : react) * 0.25;           // closing a carrier down: quicker the better the defence
     return c;
   }
@@ -1214,17 +1250,18 @@ const AI = (() => {
    */
   function update(c, w, T, dt, info) {
     c.tick++;
+    for (const q of w.players) if (q.team === c.team && q.sinceGround > 0.08) q.aiAirTick = c.tick;   // (when each of its men was last in the air: a hop's rest counts from the landing)
     const X = frame(c, w, T, dt, info), { hold, ball, level, L, st, tap } = X;
     observe(c, X);
     c.jump = false; c.bounce = false;
     c.dbg = { path: null, target: null, ops: null, threat: null, shot: null };
     if (hold) c.looseOn = false;
-    if (!(hold && hold.p.team !== c.team)) { for (const k of ['swat', 'rim', 'contest', 'lcontest', 'swipe']) delete c.rolls[k]; c.threat = null; c.closeout = null; }   // the opponent lost the ball: the next incident is rolled fresh
+    if (!(hold && hold.p.team !== c.team)) { for (const k of ['swat', 'rim', 'contest', 'lcontest', 'swipe', 'strip']) delete c.rolls[k]; c.threat = null; c.closeout = null; }   // the opponent lost the ball: the next incident is rolled fresh
 
     // a new possession (we hold it, or our dribble or pass is up, after they had it or it was loose): roll its dribble budget
     const lb0 = w.lastBouncer;
     const ours = (hold && hold.p.team === c.team) || (!hold && ((lb0 && lb0.team === c.team && lb0.dribbleT > 0) || (w.pass && w.pass.team === c.team)));
-    if (ours && !c.hadBall) { const [lo, hi] = BUDGETS[Math.min(level, BUDGETS.length) - 1]; c.budget = lo + Math.floor(c.rng() * (hi - lo + 1)); c.dribs = 0; c.faked = false; c.possN++; }
+    if (ours && !c.hadBall) { const [lo, hi] = BUDGETS[Math.min(level, BUDGETS.length) - 1]; c.budget = lo + Math.floor(c.rng() * (hi - lo + 1)) + (c.style.street ? 2 : 0); c.dribs = 0; c.faked = false; c.possN++; }
     c.hadBall = !!ours;
     // a self-pass has left the hand once its pass is in the air (a catch the very next step is still its own catch)
     if (c.self && !c.self.thrown && !hold && w.pass && w.pass.from === c.self.from) c.self.thrown = true;
@@ -1284,7 +1321,7 @@ const AI = (() => {
     const lb = w.lastBouncer;
     if (!hold && lb && lb.team === c.team && lb.dribbleT > 0) {
       // past the budget it mostly catches it and thinks again (a taste, not a cap)
-      const keepOn = (X.atk.cx - lb.torso.position.x) * lb.dir > T.dunk_ground_x && c.dribs < maxDribsOf(level) && !lb.queued && c.dribs < c.budget && dribZoneOk(w, lb) && (level < 3 || dribbleRisk(c, X, lb) < 0.75);   // (the hard cap; not out of its zone; and not on into a defender)
+      const keepOn = (X.atk.cx - lb.torso.position.x) * lb.dir > T.dunk_min_gap && c.dribs < maxDribsOf(level) + (st.street ? 2 : 0) && !lb.queued && c.dribs < c.budget && dribZoneOk(w, lb) && (level < 3 || dribbleRisk(c, X, lb) < 0.75);   // (the hard cap; not out of its zone; and not on into a defender)
       // level 4+ taps in rhythm, as the ball rises (a slip taps it on the way down: a sloppy one); below that it taps whenever
       if (keepOn && (level >= 4 ? ball.velocity.y < -0.5 || (ball.velocity.y > 0.5 && slip(c, X, 0.08)) : c.rng() < 0.12)) { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; }
       // a screen: from level 4, with the ball up, the teammate hops toward the defender to cut him off from the carrier
@@ -1307,6 +1344,9 @@ const AI = (() => {
     // ---- they dribble in the air: a timed steal (level 4+)
     if (!hold && lb && lb.team !== c.team && lb.dribbleT > 0 && level >= 4 && timedSteal(c, X)) return c;
 
+    // ---- their pass is in the air: a hand up to deflect it (level 3+)
+    if (!hold && w.pass && w.pass.team !== c.team && !w.pass.lob && level >= 3 && deflectPass(c, X)) return c;
+
     if (hold && hold.p.team !== c.team && defense(c, X)) return c;        // ---- they have it
     return chase(c, X);
   }
@@ -1320,7 +1360,7 @@ const AI = (() => {
     if (!text) return null;
     if (/PUMP FAKE/.test(text)) return 'fake';
     if (/SCREEN/.test(text)) return 'screen';
-    if (/STEAL/.test(text)) return 'steal';
+    if (/STEAL|STRIPPING|DEFLECTING/.test(text)) return 'steal';
     if (/SWATTING|CONTESTING|PROTECTING THE RIM|GUARDING THE RIM|DEFENDING DEEP|STANDING BETWEEN|PRESSURING|READING THE DUNK|WATCHING THE PASS/.test(text)) return 'shield';
     if (/GOING UP TO DUNK/.test(text)) return 'dunk';
     if (/LOB/.test(text)) return 'lob';
@@ -1338,7 +1378,7 @@ const AI = (() => {
   const BRIEF = [
     [/OUT OF TIME/, 'OUT OF TIME'], [/TAKING A GOOD ONE/, 'JUMP SHOT'], [/PUMP FAKE/, 'PUMP FAKE'], [/SELF-PASS/, 'SELF-PASS'], [/OFF THE WALL/, 'WALL PASS'], [/OUTLET/, 'OUTLET PASS'],
     [/GIVE-AND-GO/, 'GIVE-AND-GO'], [/PUTBACK/, 'PUTBACK'], [/HOT HAND/, 'HOT HAND'], [/FAST BREAK/, 'FAST BREAK'], [/ALLEY-OOP: GOING UP/, 'ALLEY-OOP'], [/LOB/, 'LOB'], [/WATCHING THE PASS/, 'READING PASS'],
-    [/MEETING THE PASS/, 'CATCHING'], [/PASS/, 'PASS'], [/SCREEN/, 'SCREEN'], [/STEAL/, 'STEAL'], [/SWATTING/, 'SWAT'],
+    [/MEETING THE PASS/, 'CATCHING'], [/DEFLECTING/, 'DEFLECT'], [/STRIPPING/, 'STRIP'], [/RECOVERING/, 'RECOVER'], [/STREET BALL/, 'STREET BALL'], [/PASS/, 'PASS'], [/SCREEN/, 'SCREEN'], [/STEAL/, 'STEAL'], [/SWATTING/, 'SWAT'],
     [/NO DUNK OFF THE DRIBBLE/, 'NO DUNK'], [/CLOSING OUT/, 'CLOSEOUT'], [/CONTESTING THE LONG/, 'CONTEST 2'], [/CONTESTING/, 'CONTEST'], [/THINKING/, 'THINKING'], [/OPEN: TAKING/, 'OPEN 2'], [/READING THE DUNK|PROTECTING THE RIM|GUARDING THE RIM/, 'RIM GUARD'], [/DEFENDING DEEP/, 'DEEP D'],
     [/PRESSURING/, 'PRESSURE'], [/STANDING BETWEEN/, 'GUARDING'], [/RIM PROTECTOR|WAITING FOR THE DUNK/, 'WAITING'],
     [/GOING UP FOR THE DUNK/, 'DUNK'], [/FADING/, 'FADEAWAY'], [/LONG SHOT/, 'LONG SHOT'], [/CLEARING/, 'CLEARING IT'], [/PUMPING OUT/, 'PUMP FAKE'], [/NO LOB/, 'JUMP SHOT'],

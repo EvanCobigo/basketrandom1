@@ -57,6 +57,9 @@ After play: improve the AI intelligence allowing for more flashy plays that play
 
 After play: improve the AI intelligence allowing for more flashy plays that players will enjoy to work around. improve AI targetting. Improve ball trajectory computation to remove some errors for rainbow proccing incorrectly. Dunks should be performed only when the player is either on the ground or is moving in a direction leaning towards the rim, if the player is falling backwards, the dunk shouldn't be available. change the font to Departure Mono. add gleam to the buttons when you hover over them, like a small white flash that flashes around the menu button. Change the sound effects to sound more premium. The dunk animation should actually just be a small jump that alligns perfectly with the height required to dunk. The arms should be doing the aiming, but if the arms miss, the ball hits the rim and flies out of the hand. impliment blocking of a dunk, where the defender's hand will stand straight and swat the ball out of the rim bounds, if the ball hits their hand or head.
 
+After play: Shots should be more inaccurate the higher they are in the air while more accurate on ground (CPU only), allow dribbling anywhere on the court. AI's should spend a bit less time in the air but keep their guarding ability. Add a third archetype of AI called street ball which attempts flashier plays. Add more defensive maneuvers. Allow the AI archetype to be chosen in the secondary menu. Improve settings to be more legible and more user friendly.
+Answers: Archetype: add STREET BALL as a 9th style and make all styles pickable. Shot accuracy: CPU only. Dribble zone: remove both limits, near-rim dribbles allowed too. Settings: grouped sections, clearer values and toggles, description and preview, mouse friendly.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -98,6 +101,13 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Menu, pause, victory screen, restart: in the game's own 5x7 pixel font with drop shadows, over a retro sunset-and-grid backdrop on the title; buttons bob, lift with a blinking pointer on hover or focus, and squash when pressed; arrows or W/S and Enter pick
 - [ ] Synth sounds: jump, bounce, rim, swish; mute
 - [x] Fixed physics timestep, requestAnimationFrame render, responsive canvas
+- [x] CPU shots are less accurate the higher the shooter is: a planted shot gets the aim help `ai_ground_assist` (0.95), a shot at the top of a jump `ai_air_assist` (0.4) plus up to `ai_air_miss` px of aim error (50); people are not affected
+- [x] The CPU dribbles anywhere on the court, the rims included (`ai_dribble_zone` 0), except under its own rim, where it still passes; people already could
+- [x] The CPU spends less of the match in the air: movement hops are shorter (`ai_hop_air`) and rest on the floor after landing (`ai_hop_rest`); closeouts, recoveries and every guarding jump are unchanged (measured: about 46% of steps airborne down to about 36-40% at Pro, guard jumps not reduced)
+- [x] STREET BALL, a ninth CPU style: dribbles much more (anywhere, 2 extra dribbles a possession), pump fakes, alley-oop lobs and self-passes more, gambles for steals; flashier and looser than the rest
+- [x] More defensive moves: STRIP THE CATCH (a hand goes for a ball only just picked up), RECOVER (a carrier who got past it is chased in long hops), DEFLECT THE PASS (a hand up to meet a pass in the air), and street ball's steal gambles
+- [x] The CPU's style is picked on the title screen under the level (arrows or click: RANDOM, then the nine styles, each with a plain line) and in settings (CPU STYLE)
+- [x] Settings opens on three tabs (MATCH, FEEL, LOOK AND SOUND) of big rows: arrows each side of a bar, notches for named stops, a tick where the default is, an orange dot on changed rows, ON/OFF switches for anything 0/1, the value in words, a plain note and the default under the list; Tab or Q/E switch tabs, the mouse hovers, clicks arrows and tabs, drags bars
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held

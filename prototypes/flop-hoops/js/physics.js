@@ -552,7 +552,7 @@ const Physics = (() => {
       if (sol !== null) return { vx: sol, vy };
     }
     // (a hot player gets more help; the CPU's easy close shot, hold.easy, gets it all: a soft shot from under the rim is not a gamble)
-    const assist = w.hold && w.hold.p === p && w.hold.easy ? 1 : w.hot === p ? Math.max(T.shot_assist, T.heat_assist) : T.shot_assist;   // a hot player (a heat check) gets more help
+    const assist = w.hold && w.hold.p === p && w.hold.easy ? 1 : w.hold && w.hold.p === p && w.hold.assist !== undefined ? w.hold.assist : w.hot === p ? Math.max(T.shot_assist, T.heat_assist) : T.shot_assist;   // a hot player (a heat check) gets more help
     if (assist > 0 && (hoop.cx - from.x) * p.dir > 30) {
       // a ball dropped on the exact centre clips the front rim on a shallow arc, so the help aims a little toward the board
       const sol = solveVx(w, T, hoop, from.x, from.y, vy, p.dir, hoop.cx + p.dir * T.aim_bias);
