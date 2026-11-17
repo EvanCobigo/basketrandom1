@@ -15,7 +15,7 @@ window.CONFIG = {
   sfx_variation: { value: 1, min: 0, max: 2, step: 0.1 },       // how much repeats of a sound differ in pitch, level and timing
 
   // ---- Match ----
-  win_score: { value: 12, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
+  win_score: { value: 15, min: 1, max: 30, step: 1 },         // points to win (long shots score 2, everything else 1)
   ai_level: { value: 3, min: 1, max: 6, step: 1 },               // CPU difficulty: 1 Rookie, 2 Amateur, 3 Pro, 4 All-Star, 5 Legend, 6 Mythic (what each does is in js/ai.js)
   ai_hold_limit: { value: 2.5, min: 1, max: 5, step: 0.1 },    // s the CPU may hold the ball before it must shoot, dunk or pass (people have no limit)
   ai_own_rim_zone: { value: 70, min: 0, max: 300, step: 10 },  // px either side of the rim it defends where the CPU never shoots (it passes out instead)
@@ -143,7 +143,7 @@ window.CONFIG = {
   dribble_chain_time: { value: 1.2, min: 0.3, max: 3, step: 0.05 }, // s between dribbles that still counts as one chain
   dribble_error: { value: 0.9, min: 0, max: 3, step: 0.05 },      // px/step of random bounce error per unit of sloppiness
   dribble_safe_chain: { value: 6, min: 1, max: 20, step: 1 },     // dribbles in a row before the chain itself adds wobble
-  dribble_rock: { value: 1, min: 0, max: 1.5, step: 0.1 },         // how big the planted swing is while dribbling (1 = as standing, 0 = steady, 1.5 = big wobble; much past that tips the body over)
+  dribble_rock: { value: 0.2, min: 0, max: 1.5, step: 0.1 },         // how big the planted swing is while dribbling (1 = as standing, 0 = steady, 1.5 = big wobble; much past that tips the body over)
   dribble_sway: { value: 1.6, min: 0, max: 5, step: 0.1 },        // how much sloppy taps sway the body in the air
   perfect_window: { value: 0.25, min: 0.02, max: 0.5, step: 0.01 }, // share of rim width from centre that counts as a perfect line
   perfect_graze: { value: 3, min: 0, max: 15, step: 1 },         // px a perfect shot may overlap the rim or board (a soft kiss) and still count
@@ -179,7 +179,7 @@ window.CONFIG = {
   upright_damp: { value: 3.5, min: 0, max: 15, step: 0.5 },    // 1/s damping on torso spin
   leg_stiffness: { value: 0.22, min: 0, max: 1, step: 0.01 },  // how hard legs swing back under the hips
   leg_follow: { value: 0.3, min: 0, max: 1, step: 0.05 },      // 0 floppy legs, 1 rigid legs
-  fold_stiffness: { value: 1.35, min: 0.5, max: 3, step: 0.05 }, // how stiff the hips are: above 1 the body folds less and springs back less
+  fold_stiffness: { value: 2.85, min: 0.5, max: 3, step: 0.05 }, // how stiff the hips are: above 1 the body folds less and springs back less
   hand_floor_px: { value: 3, min: 0, max: 20, step: 1 },        // px: a hand this close to the floor pushes off it
   hand_push: { value: 0.1, min: 0, max: 0.3, step: 0.01 },     // rad/step: the push a hand on the floor gives, turning the wobble the other way
   seat_margin: { value: 4, min: 0, max: 20, step: 1 },
@@ -222,7 +222,7 @@ window.CONFIG = {
 
   // ---- Look and juice ----
   particles: { value: 1.5, min: 0, max: 3, step: 0.25 },          // how many particles every effect makes (0 turns them off)
-  crowd_rows: { value: 3, min: 0, max: 5, step: 1 },              // rows of fans in the stands
+  crowd_rows: { value: 4, min: 0, max: 5, step: 1 },              // rows of fans in the stands
   crowd_gaps: { value: 0.12, min: 0, max: 0.9, step: 0.01 },     // share of empty seats
   crowd_hype_time: { value: 2.2, min: 0.3, max: 6, step: 0.1 },  // s the crowd stays on its feet after sparks fly
   fire_time: { value: 1.1, min: 0, max: 3, step: 0.1 },          // s the rim burns after a dunk
@@ -232,5 +232,5 @@ window.CONFIG = {
   scanlines: { value: 0.12, min: 0, max: 0.5, step: 0.01 },     // darkness of the CRT scanlines
   vignette: { value: 0.35, min: 0, max: 0.8, step: 0.05 },        // darkness of the screen corners
   dunk_hitstop: { value: 4, min: 0, max: 12, step: 1 },           // frames frozen on a dunk's slam
-  shake: { value: 16, min: 0, max: 40, step: 1 },              // px screen shake on a basket
+  shake: { value: 2, min: 0, max: 40, step: 1 },              // px screen shake on a basket
 };
