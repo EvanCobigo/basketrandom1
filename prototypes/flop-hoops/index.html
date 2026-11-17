@@ -545,7 +545,7 @@ function checkStall(dt) {
 }
 
 // The CPU difficulty slider on the title: click or drag along it to pick a level.
-const LEVEL = { x: W / 2 - 150, y: 548, w: 300 };
+const LEVEL = { x: 226, y: 452, w: 310 };   // the title's CPU level bar: first stop, row, span to the last stop
 function levelClick(x, y) {
   if (Math.abs(y - LEVEL.y) > 22 || x < LEVEL.x - 14 || x > LEVEL.x + LEVEL.w + 14) return false;
   Settings.set('ai_level', 1 + Math.round(Math.max(0, Math.min(1, (x - LEVEL.x) / LEVEL.w)) * (AI.LEVELS.length - 1))); sfx.click();
@@ -701,11 +701,22 @@ function drawGame(opts = {}) {
   }
 }
 function overlay(a = 0.55) { ctx.fillStyle = `rgba(20,16,36,${a})`; ctx.fillRect(0, 0, W, H); }
-function btn(label, x, y, w, h, action, hint, scale) {
-  const i = buttons.length, b = { label, x, y, w, h, action, hint, scale, i, t: state.t + i * 0.4,
-    hot: menuFocus === i, pressT: menuPress && menuPress.label === label ? menuPress.t : 0 };
+/** A menu button. `o` (optional) adds the look: { kind: 'primary'|'secondary', icon, sub, accent, glyphOnly }. */
+function btn(label, x, y, w, h, action, hint, scale, o) {
+  const i = buttons.length, b = Object.assign({ label, x, y, w, h, action, hint, scale, i, t: state.t + i * 0.4,
+    hot: menuFocus === i, pressT: menuPress && menuPress.label === label ? menuPress.t : 0 }, o);
   buttons.push(b); Render.button(ctx, b);
 }
+/** Split `s` into lines of at most `n` characters, at spaces. */
+function wrapText(s, n) {
+  const out = []; let line = '';
+  for (const w of String(s).split(' ')) { if (line && (line + ' ' + w).length > n) { out.push(line); line = w; } else line = line ? line + ' ' + w : w; }
+  if (line) out.push(line);
+  return out;
+}
+// The title's intro clock: the logo slides in over its first 0.8 s. Reduced motion skips it.
+const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+let introT = REDUCED_MOTION ? 1 : 0;
 /** Pixel-font text with a drop shadow, for the menus. */
 function ptext(s, x, y, scale, color, o = {}) { return PixelFont.draw(ctx, s, x, y, Object.assign({ scale, color, shadow: Math.max(2, scale) }, o)); }
 
@@ -742,46 +753,46 @@ const scenes = {
       physStep(state.attract.map(a => a > 0));
       if (state.stall > 3) Physics.dropBall(world, tune);
       checkStall(dt); state.toastT = 0;
+      introT += dt; if (hit.size) introT = Math.max(introT, 0.8);   // any key skips the intro
       menuKeys();
     },
     draw() {
       drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
-      // the title, bobbing gently, in the pixel font with an outline and a hard shadow
-      const bob = Math.round(Math.sin(state.t * 2) * 4);
-      ptext('FLOP', W / 2 - 18, 118 + bob, 14, '#ff9a3c', { align: 'right', outline: true, shadow: 10 });
-      ptext('HOOPS', W / 2 + 18, 118 - bob, 14, '#1fc2b1', { align: 'left', outline: true, shadow: 10 });
-      ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 196, 3, '#fff1a8');
-      // the controls, one slim panel: each team's name and its two keys
-      ctx.fillStyle = Render.INK; ctx.fillRect(W / 2 - 384, 232, 768, 94);
-      ctx.fillStyle = '#21183f'; ctx.fillRect(W / 2 - 380, 236, 760, 86);
-      for (const team of [0, 1]) {
-        const x = W / 2 + (team ? 190 : -190);
-        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 190 + (team ? 4 : 0), 236, 186, 6);
-        ptext(Render.TEAM_NAMES[team].toUpperCase(), x, 258, 2, Render.TEAM_COLORS[team]);
-        Render.keycap(ctx, x - 80, 284, team ? 'up' : 'W', 0.6); ptext('JUMP / SHOOT', x - 80, 308, 1, '#c9c3e0');
-        Render.keycap(ctx, x + 80, 284, team ? 'down' : 'S', 0.6); ptext('BOUNCE / PASS', x + 80, 308, 1, '#c9c3e0');
-      }
+      Render.menuLogo(ctx, W, 100, state.t, introT, REDUCED_MOTION);
+      ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, (introT - 0.3) / 0.45));   // the rest fades in behind the logo
+      ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 184, 3, '#fff1a8');
       buttons = [];
-      btn('VS CPU', W / 2 - 420, 356, 260, 72, () => newMatch('cpu'), 'YOU VS COMPUTER', 4);
-      btn('2 PLAYERS', W / 2 - 130, 356, 260, 72, () => newMatch('2p'), 'ONE KEYBOARD', 4);
-      btn('WATCH CPU', W / 2 + 160, 356, 260, 72, () => { scene = 'watch'; }, 'COMPUTER VS COMPUTER', 4);
-      // CPU difficulty: a six-step slider with what the level does written under it
-      const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1];
-      btn('<', LEVEL.x - 64, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv - 1), '', 4);
-      btn('>', LEVEL.x + LEVEL.w + 20, LEVEL.y - 22, 44, 44, () => Settings.set('ai_level', lv + 1), '', 4);
-      ptext(`CPU LEVEL ${lv}: ${L.name}`, W / 2, LEVEL.y - 34, 3, '#ffd23f');
-      ctx.fillStyle = '#0a0618'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w, 10);
-      ctx.fillStyle = '#1fc2b1'; ctx.fillRect(LEVEL.x, LEVEL.y - 5, LEVEL.w * (lv - 1) / (AI.LEVELS.length - 1), 10);
-      for (let n = 1; n <= AI.LEVELS.length; n++) {   // the stops; the current one is the knob
-        const x = LEVEL.x + LEVEL.w * (n - 1) / (AI.LEVELS.length - 1), on = n === lv;
-        ctx.fillStyle = Render.INK; ctx.fillRect(x - (on ? 11 : 7), LEVEL.y - (on ? 15 : 9), on ? 22 : 14, on ? 30 : 18);
-        ctx.fillStyle = on ? '#ffffff' : n < lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - (on ? 8 : 4), LEVEL.y - (on ? 12 : 6), on ? 16 : 8, on ? 24 : 12);
+      // the modes: one strong primary row
+      [['VS CPU', 'YOU VS COMPUTER', 'controller', Render.TEAM_COLORS[0], () => newMatch('cpu')],
+        ['2 PLAYERS', 'ONE KEYBOARD', 'players', '#ffd23f', () => newMatch('2p')],
+        ['WATCH CPU', 'CPU VS CPU', 'screen', Render.TEAM_COLORS[1], () => { scene = 'watch'; }]]
+        .forEach(([label, sub, icon, accent, fn], i) => btn(label, 132 + i * 348, 214, 320, 100, fn, '', 4, { kind: 'primary', icon, sub, accent }));
+      // CPU difficulty: a segmented bar with a glowing knob, the level's name and what it does
+      const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1], n = AI.LEVELS.length;
+      Render.panel(ctx, 132, 344, 498, 214, { title: 'CPU LEVEL', accent: '#ffd23f' });
+      ptext(`${lv} / ${n}`, 610, 374, 2, '#c9c3e0', { align: 'right' });
+      ptext(L.name, LEVEL.x + LEVEL.w / 2, 410, 4, Render.levelColor(lv, n), { shadow: 3 });
+      btn('<', 139, 428, 40, 48, () => Settings.set('ai_level', lv - 1), '', 4, { kind: 'secondary', icon: 'left', glyphOnly: true });
+      btn('>', 583, 428, 40, 48, () => Settings.set('ai_level', lv + 1), '', 4, { kind: 'secondary', icon: 'right', glyphOnly: true });
+      Render.levelBar(ctx, LEVEL.x, LEVEL.y, LEVEL.w, lv, n, state.t);
+      wrapText(L.does, 38).slice(0, 2).forEach((l, i) => ptext(l, LEVEL.x + LEVEL.w / 2, 504 + i * 24, 2, '#e6ddff', { shadow: 2 }));
+      // the controls: each team's two keys, then the finer points
+      Render.panel(ctx, 650, 344, 498, 214, { title: 'CONTROLS', accents: Render.TEAM_COLORS });
+      for (const team of [0, 1]) {
+        const x0 = team ? 916 : 672, col = Render.TEAM_COLORS[team];
+        ctx.fillStyle = col; ctx.fillRect(x0, 394, 8, 12);
+        ptext(Render.TEAM_NAMES[team].toUpperCase(), x0 + 16, 400, 2, col, { align: 'left', shadow: 2 });
+        Render.keycap(ctx, x0 + 20, 438, team ? 'up' : 'W', 0.62); ptext('JUMP / SHOOT', x0 + 50, 440, 2, '#ffffff', { align: 'left', shadow: 2 });
+        Render.keycap(ctx, x0 + 20, 476, team ? 'down' : 'S', 0.62); ptext('BOUNCE / PASS', x0 + 50, 478, 2, '#ffffff', { align: 'left', shadow: 2 });
       }
-      ptext(L.does, W / 2, LEVEL.y + 32, 2, '#ffffff');
-      ptext('HOLD JUMP, LET GO TO SHOOT (TAP NEAR THE RIM TO DUNK)  ·  TAP BOUNCE TO DRIBBLE, HOLD IT TO PASS', W / 2, 616, 1, '#8f88ad');
-      btn('SETTINGS', 40, H - 84, 200, 50, openSettings, '', 3);
-      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 240, H - 84, 200, 50, () => setMuted(!muted), 'M', 3);
-      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  ARROWS + ENTER PICK`, W / 2, H - 14, 1, '#8f88ad');
+      ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(898, 392, 2, 100);
+      ptext('HOLD JUMP, LET GO TO SHOOT · TAP NEAR THE RIM TO DUNK', 899, 518, 1.5, '#b9b1d6', { shadow: 1 });
+      ptext('TAP BOUNCE TO DRIBBLE · HOLD IT TO PASS', 899, 538, 1.5, '#b9b1d6', { shadow: 1 });
+      // secondary actions
+      btn('SETTINGS', W / 2 - 274, 590, 260, 54, openSettings, '', 3, { kind: 'secondary', icon: 'gear' });
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W / 2 + 14, 590, 260, 54, () => setMuted(!muted), '', 3, { kind: 'secondary', icon: muted ? 'mute' : 'sound' });
+      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  M MUTES  ·  ARROWS + ENTER PICK`, W / 2, H - 30, 1.5, '#b3acd2', { shadow: 1 });
+      ctx.restore();
     },
   },
   settings: {
@@ -807,15 +818,13 @@ const scenes = {
       ptext('SETTINGS', W / 2, 62, 8, '#ffd23f', { outline: true, shadow: 6 });
       ptext(settingsAdvanced ? 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE (HOLD TO RUN)  ·  CLICK OR DRAG A SLIDER  ·  WHEEL SCROLLS' : 'UP/DOWN PICK  ·  LEFT/RIGHT CHANGE  ·  OR CLICK A BAR', W / 2, 112, 2, '#e6ddff');
       const sm = !settingsAdvanced, fs = sm ? 3 : 2, bh = sm ? 12 : 8;
-      ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.x + 8, SET.y - 8, SET.w, SET.rowH * SET.show + 16);
-      ctx.fillStyle = Render.INK; ctx.fillRect(SET.x - 4, SET.y - 16, SET.w + 8, SET.rowH * SET.show + 24);
-      ctx.fillStyle = '#21183f'; ctx.fillRect(SET.x, SET.y - 12, SET.w, SET.rowH * SET.show + 16);
+      Render.panel(ctx, SET.x, SET.y - 14, SET.w, SET.rowH * SET.show + 20, { accent: '#ffd23f' });
       for (let n = 0; n < SET.show; n++) {
         const i = settingsTop + n, row = settingsRows[i]; if (!row) break;
         const y = SET.y + n * SET.rowH + SET.rowH / 2;
         if (row.header) { ptext(row.header, SET.x + 24, y, 3, '#ffd23f', { align: 'left' }); continue; }
         const k = row.key, sel = i === settingsSel;
-        if (sel) { ctx.fillStyle = '#3a2d6a'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, SET.w - 12, SET.rowH - 4); }
+        if (sel) { ctx.fillStyle = '#3d3175'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, SET.w - 12, SET.rowH - 4); ctx.fillStyle = '#ffd23f'; ctx.fillRect(SET.x + 6, y - SET.rowH / 2 + 2, 4, SET.rowH - 4); }
         ptext(Settings.label(k, sm), SET.x + 44, y, fs, !sm && Settings.changed(k) ? '#ff9a3c' : '#ffffff', { align: 'left', shadow: 2 });
         ptext(sm ? Settings.showSimple(k) : Settings.show(k), SET.sliderX - 24, y, fs, '#fff1a8', { align: 'right', shadow: 2 });
         ctx.fillStyle = '#0a0618'; ctx.fillRect(SET.sliderX, y - bh / 2, SET.sliderW, bh);
@@ -834,9 +843,9 @@ const scenes = {
         if (row) ptext(Settings.describe(row.key), W / 2, 596, 2, '#e6ddff');
       }
       buttons = [];
-      btn('BACK', 210, 628, 260, 58, () => { scene = settingsFrom; }, '', 4);
-      btn(settingsAdvanced ? 'SIMPLE' : 'ADVANCED', 510, 628, 260, 58, () => setSettingsMode(!settingsAdvanced), '', 4);
-      btn('RESET ALL', 810, 628, 260, 58, () => Settings.reset(), '', 4);
+      btn('BACK', 210, 628, 260, 58, () => { scene = settingsFrom; }, '', 3, { kind: 'primary', icon: 'back' });
+      btn(settingsAdvanced ? 'SIMPLE' : 'ADVANCED', 510, 628, 260, 58, () => setSettingsMode(!settingsAdvanced), '', 3, { kind: 'secondary', icon: 'sliders' });
+      btn('RESET ALL', 810, 628, 260, 58, () => Settings.reset(), '', 3, { kind: 'secondary', icon: 'restart', accent: '#ff7a6a' });
     },
   },
   card: { // the round card: physics frozen while it flips in
@@ -883,24 +892,21 @@ const scenes = {
     update(dt) { state.t += dt; menuKeys(); if (pressed('Escape')) scene = 'title'; },
     draw() {
       drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
-      ptext('WATCH CPU', W / 2, 110, 9, '#ffd23f', { outline: true, shadow: 6 });
-      ptext('PICK HOW STRONG EACH COMPUTER IS', W / 2, 180, 3, '#ffffff');
+      ptext('WATCH CPU', W / 2, 96, 9, '#ffd23f', { outline: true, shadow: 6 });
+      ptext('PICK HOW STRONG EACH COMPUTER IS', W / 2, 166, 3, '#ffffff');
       buttons = [];
       for (const team of [0, 1]) {
-        const x = W / 2 + (team ? 250 : -250), y = 300, lv = watchLv[team], L = AI.LEVELS[lv - 1];
-        ctx.fillStyle = Render.INK; ctx.fillRect(x - 220, y - 70, 440, 270);
-        ctx.fillStyle = '#21183f'; ctx.fillRect(x - 216, y - 66, 432, 262);
-        ctx.fillStyle = Render.TEAM_COLORS[team]; ctx.fillRect(x - 216, y - 66, 432, 8);
-        ptext(Render.TEAM_NAMES[team].toUpperCase(), x, y - 36, 3, Render.TEAM_COLORS[team]);
-        ptext(`LEVEL ${lv}: ${L.name}`, x, y + 20, 3, '#ffd23f');
-        btn('<', x - 200, y + 50, 50, 50, () => { watchLv[team] = Math.max(1, lv - 1); }, '', 4);
-        btn('>', x + 150, y + 50, 50, 50, () => { watchLv[team] = Math.min(AI.LEVELS.length, lv + 1); }, '', 4);
-        for (let n = 1; n <= AI.LEVELS.length; n++) { ctx.fillStyle = n <= lv ? '#1fc2b1' : '#5d6480'; ctx.fillRect(x - 100 + (n - 1) * 36, y + 66, 28, 18); }
-        const cut = L.does.lastIndexOf(' ', 38) > 0 ? L.does.lastIndexOf(' ', 38) : 38;   // wrap at a word
-        ptext(L.does.slice(0, cut), x, y + 130, 1, '#c9c3e0'); ptext(L.does.slice(cut).trim(), x, y + 148, 1, '#c9c3e0');
+        const x = W / 2 + (team ? 250 : -250), lv = watchLv[team], L = AI.LEVELS[lv - 1], n = AI.LEVELS.length;
+        Render.panel(ctx, x - 220, 214, 440, 270, { title: Render.TEAM_NAMES[team].toUpperCase(), accent: Render.TEAM_COLORS[team] });
+        ptext(`LEVEL ${lv}`, x + 200, 244, 2, '#c9c3e0', { align: 'right' });
+        ptext(L.name, x, 300, 4, Render.levelColor(lv, n), { shadow: 3 });
+        btn('<', x - 206, 330, 44, 48, () => { watchLv[team] = Math.max(1, lv - 1); }, '', 4, { kind: 'secondary', icon: 'left', glyphOnly: true });
+        btn('>', x + 162, 330, 44, 48, () => { watchLv[team] = Math.min(AI.LEVELS.length, lv + 1); }, '', 4, { kind: 'secondary', icon: 'right', glyphOnly: true });
+        Render.levelBar(ctx, x - 125, 354, 250, lv, n, state.t + team, { h: 20 });
+        wrapText(L.does, 32).slice(0, 3).forEach((l, i) => ptext(l, x, 420 + i * 26, 2, '#e6ddff', { shadow: 2 }));
       }
-      btn('START', W / 2 - 150, 548, 300, 70, () => newMatch('sim', watchLv.slice()), 'ENTER', 5);
-      btn('BACK', 40, H - 84, 200, 50, () => { scene = 'title'; }, 'ESC', 3);
+      btn('START', W / 2 - 160, 532, 320, 78, () => newMatch('sim', watchLv.slice()), 'ENTER', 5, { kind: 'primary', icon: 'play' });
+      btn('BACK', 40, H - 88, 200, 52, () => { scene = 'title'; }, 'ESC', 3, { kind: 'secondary', icon: 'back' });
     },
   },
   pause: {
@@ -912,14 +918,15 @@ const scenes = {
     },
     draw() {
       drawGame(); overlay(0.6);
-      ptext('PAUSED', W / 2, 200, 12, '#ffd23f', { outline: true, shadow: 8 });
-      ptext(`${Render.TEAM_NAMES[0]} ${state.score[0]} - ${state.score[1]} ${Render.TEAM_NAMES[1]}`, W / 2, 280, 4, '#ffffff');
+      ptext('PAUSED', W / 2, 176, 10, '#ffd23f', { outline: true, shadow: 8 });
+      ptext(`${Render.TEAM_NAMES[0]} ${state.score[0]} - ${state.score[1]} ${Render.TEAM_NAMES[1]}`, W / 2, 244, 3, '#ffffff');
+      Render.panel(ctx, W / 2 - 200, 280, 400, 380, { accents: Render.TEAM_COLORS });
       buttons = [];
-      btn('RESUME', W / 2 - 150, 320, 300, 60, () => { scene = pauseFrom; }, 'P OR ESC', 5);
-      btn('RESTART', W / 2 - 150, 430, 300, 60, newMatch, 'R', 5);
-      btn('MAIN MENU', W / 2 - 150, 540, 300, 60, toMenu, 'Q', 4);
-      btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3);
-      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 250, H - 120, 220, 54, () => setMuted(!muted), 'M', 3);
+      btn('RESUME', W / 2 - 160, 310, 320, 68, () => { scene = pauseFrom; }, 'P OR ESC', 4, { kind: 'primary', icon: 'play' });
+      btn('RESTART', W / 2 - 160, 424, 320, 64, newMatch, 'R', 4, { kind: 'secondary', icon: 'restart' });
+      btn('MAIN MENU', W / 2 - 160, 534, 320, 64, toMenu, 'Q', 4, { kind: 'secondary', icon: 'home' });
+      btn('SETTINGS', 30, H - 120, 220, 54, openSettings, '', 3, { kind: 'secondary', icon: 'gear' });
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W - 270, H - 120, 240, 54, () => setMuted(!muted), 'M', 3, { kind: 'secondary', icon: muted ? 'mute' : 'sound' });
     },
   },
   replay: { // the best moments of the match, in slow motion around the big moment
@@ -966,9 +973,9 @@ const scenes = {
       ptext(`${state.score[0]} - ${state.score[1]}`, W / 2, 320, 8, '#ffffff', { outline: true });
       ptext(`AFTER ${state.round} ROUNDS`, W / 2, 370, 3, '#c9c3e0');
       buttons = [];
-      btn('REMATCH', W / 2 - 300, 430, 270, 74, newMatch, 'ENTER OR SPACE', 4);
-      btn('MAIN MENU', W / 2 + 30, 430, 270, 74, toMenu, 'Q OR ESC', 4);
-      if (Replay.count() > 0 && tune.replay_clips > 0) btn('HIGHLIGHTS', W / 2 - 135, 565, 270, 56, () => startReel('results'), 'H', 3);
+      btn('REMATCH', W / 2 - 300, 430, 270, 74, newMatch, 'ENTER OR SPACE', 4, { kind: 'primary', icon: 'restart' });
+      btn('MAIN MENU', W / 2 + 30, 430, 270, 74, toMenu, 'Q OR ESC', 4, { kind: 'secondary', icon: 'home' });
+      if (Replay.count() > 0 && tune.replay_clips > 0) btn('HIGHLIGHTS', W / 2 - 135, 565, 270, 56, () => startReel('results'), 'H', 3, { kind: 'secondary', icon: 'star' });
     },
   },
 };
@@ -987,7 +994,9 @@ function endReel() { Replay.giveBack(); scene = reelState.then; reelState = null
 function step() {
   if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
   if (pressed('KeyI')) { state.aiDebug = !state.aiDebug; hit.delete('KeyI'); }   // AI vision: what the CPU thinks will happen
-  if (scene !== menuScene) { menuScene = scene; menuFocus = scene === 'settings' ? -1 : 0; }   // in settings the list has the keys; buttons light on hover
+  if (scene !== menuScene) {
+    if (scene === 'title' && menuScene !== 'settings' && menuScene !== 'watch') introT = REDUCED_MOTION ? 1 : 0;   // coming back from a match replays the intro
+    menuScene = scene; menuFocus = scene === 'settings' ? -1 : 0; }   // in settings the list has the keys; buttons light on hover
   if (menuPress) { menuPress.t -= STEP; if (menuPress.t <= 0) { const a = menuPress.action; menuPress = null; a(); } }
   scenes[scene].update(STEP); hit.clear();
 }

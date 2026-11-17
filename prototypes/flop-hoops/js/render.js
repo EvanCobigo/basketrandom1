@@ -544,74 +544,434 @@ const Render = (() => {
     ctx.restore();
   }
 
+  const colMemo = new Map();   // colours as hex, so mixed colours can be mixed again
+  const toHex = c => { if (c[0] === '#') return c; let h = colMemo.get(c); if (!h) { h = '#' + c.match(/\d+/g).slice(0, 3).map(v => (+v).toString(16).padStart(2, '0')).join(''); colMemo.set(c, h); } return h; };
+  const mx = (a, b, k) => mix(toHex(a), toHex(b), k), sd = (c, k) => shade(toHex(c), k);
+  // ---- Menus: polished retro arcade ----------------------------------------------------------
+  const MENU_INK = '#0c0818';
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  /** A block with its corners stepped in by n px: the pixel-art "rounded" corner. */
+  function notch(ctx, x, y, w, h, n = 4) { ctx.fillRect(x + n, y, w - 2 * n, h); ctx.fillRect(x, y + n, w, h - 2 * n); }
+
+  /** A pixel-stepped glow halo round a box: rings of the colour, fading outward (cheaper than a blur). */
+  function glow(ctx, x, y, w, h, col, k = 1) {
+    const ga = ctx.globalAlpha; ctx.fillStyle = col;
+    for (let i = 3; i >= 1; i--) { ctx.globalAlpha = ga * k * 0.16; notch(ctx, x - i * 4, y - i * 4, w + i * 8, h + i * 8, Math.min(12, 4 + i * 2)); }
+    ctx.globalAlpha = ga;
+  }
+  /** Pixel icon glyphs for buttons: '#' cells are drawn, '.' cells stay clear (the face shows through). */
+  const ICONS = {
+    controller: ['..#########..', '.###########.', '##.#######.##', '#...#####.#.#', '##.#######.##', '#############', '####.....####', '.##.......##.'],
+    players: ['..###...###..', '.#####.#####.', '.#####.#####.', '..###...###..', '.............', '.#####.#####.', '######.######', '######.######'],
+    screen: ['#############', '#...........#', '#...#####...#', '#..#..#..#..#', '#...#####...#', '#...........#', '#############', '.....###.....', '...#######...'],
+    gear: ['...###...', '.#.###.#.', '.#######.', '####.####', '###...###', '####.####', '.#######.', '.#.###.#.', '...###...'],
+    sound: ['....#...#..', '...##....#.', '#####.#..#.', '#####..#..#', '#####..#..#', '#####..#..#', '#####.#..#.', '...##....#.', '....#...#..'],
+    mute: ['....#......', '...##......', '#####.#...#', '#####..#.#.', '#####...#..', '#####..#.#.', '#####.#...#', '...##......', '....#......'],
+    play: ['#.....', '##....', '###...', '####..', '#####.', '####..', '###...', '##....', '#.....'],
+    restart: ['...####.#', '.##....##', '.#....###', '#........', '#........', '#.......#', '.#.....#.', '.##...##.', '...###...'],
+    home: ['....#....', '...###...', '..#####..', '.#######.', '#########', '.###.###.', '.###.###.', '.###.###.', '.###.###.'],
+    back: ['...#.....', '..##.....', '.########', '#########', '.########', '..##.....', '...#.....'],
+    left: ['....#', '...##', '..##.', '.##..', '##...', '.##..', '..##.', '...##', '....#'],
+    star: ['....#....', '....#....', '...###...', '#########', '.#######.', '..#####..', '..##.##..', '.##...##.', '.#.....#.'],
+    sliders: ['..#......', '#########', '..#......', '.........', '......#..', '#########', '......#..'],
+  };
+  ICONS.right = ICONS.left.map(r => r.split('').reverse().join(''));
+  /** Draw icon `name` centred on (cx, cy) in cells of `c` px, with a one-cell drop shadow under it. */
+  function icon(ctx, name, cx, cy, c, color, shadow) {
+    const g = ICONS[name]; if (!g) return 0;
+    const w = g[0].length * c, h = g.length * c, x0 = Math.round(cx - w / 2), y0 = Math.round(cy - h / 2);
+    const paint = (dx, dy, col) => { ctx.fillStyle = col; for (let r = 0; r < g.length; r++) for (let k = 0; k < g[r].length; k++) if (g[r][k] === '#') ctx.fillRect(x0 + k * c + dx, y0 + r * c + dy, c, c); };
+    if (shadow) paint(0, Math.max(2, c / 2), shadow);
+    paint(0, 0, color);
+    return w;
+  }
+  const iconW = (name, c) => ICONS[name] ? ICONS[name][0].length * c : 0;
+
   /**
-   * A retro menu button in the pixel font: a square block with a hard drop shadow. b.t drives an
-   * idle bob, b.hot lifts it with a blinking pointer, b.pressT squashes it for a moment.
+   * A polished arcade menu button. Backward compatible with { label, x, y, w, h, hint, scale, t, hot, pressT }.
+   * The face is a bevelled slab sitting on the bottom edge of the hit box: light top edge, dark bottom
+   * edge, an inner highlight line, stepped bands, a crisp ink outline and a soft drop shadow. Hot (hover
+   * or keyboard focus) lifts it with an accent glow, a sweeping sheen and a focus ring of corner brackets;
+   * pressing sinks it and pulls the shadow in.
+   * Optional: b.kind 'primary' | 'secondary', b.icon (an ICONS name), b.sub (a second line on the face),
+   * b.accent (face colour for primary, ring colour for secondary), b.glyphOnly (icon without the label).
    */
-  function button(ctx, b, accent) {
-    const t = b.t || 0, hot = !!b.hot, press = Math.max(0, b.pressT || 0) / 0.14;
-    const bob = Math.round(Math.sin(t * 3 + (b.i || 0) * 1.3) * 2), lift = hot ? -4 : 0, squash = press > 0 ? 4 : 0;
-    const x = b.x, y = b.y + bob + lift + squash, w = b.w, h = b.h - squash;
-    ctx.fillStyle = '#0a0618'; ctx.fillRect(x + 7, b.y + bob + 7, w, b.h);        // hard drop shadow
-    ctx.fillStyle = INK; ctx.fillRect(x - 4, y - 4, w + 8, h + 8);                   // pixel border
-    ctx.fillStyle = hot ? '#fff1a8' : (accent || '#ffd23f'); ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(x, y, w, 5);               // top light
-    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x, y + h - 6, w, 6);             // bottom shade
-    const sc = b.scale || 4;
-    PixelFont.draw(ctx, b.label, x + w / 2, y + h / 2, { scale: sc, color: INK, shadow: Math.max(1, sc / 2), shadowColor: 'rgba(0,0,0,0.25)' });
-    if (hot) { // the gleam: a bright glint circling the button's border, and a sheen sweeping over its face
-      const per = 2 * (w + h + 8), sp = (t * 220) % per, seg = 22;
-      const at = d => { d = ((d % per) + per) % per; const W2 = w + 8, H2 = h + 8;
-        if (d < W2) return [x - 4 + d, y - 4]; d -= W2; if (d < H2) return [x + w + 4, y - 4 + d]; d -= H2; if (d < W2) return [x + w + 4 - d, y + h + 4]; d -= W2; return [x - 4, y + h + 4 - d]; };
-      for (let k = 0; k < seg; k += 2) { const [gx, gy] = at(sp - k); ctx.globalAlpha = 1 - k / seg; ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(gx) - 3, Math.round(gy) - 3, 6, 6); }
-      ctx.globalAlpha = 1;
-      const sweep = ((t * 0.9) % 1.6) / 1.6;   // every 1.6 s a slanted white band slides left to right across the face
-      if (sweep < 1) { ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        const bx = x - 30 + sweep * (w + 60); ctx.beginPath(); ctx.moveTo(bx, y); ctx.lineTo(bx + 14, y); ctx.lineTo(bx - 6, y + h); ctx.lineTo(bx - 20, y + h); ctx.closePath(); ctx.fill(); ctx.restore(); }
+  function buttonPart(ctx, b, accent, part) {
+    const U = part === 'under', S = part === 'static', O = part === 'over';
+    const t = b.t || 0, hot = !!b.hot, pressed = (b.pressT || 0) > 0;
+    const prim = (b.kind || 'primary') === 'primary';
+    const acc = b.accent || accent || (prim ? '#ffd23f' : '#7ad7ff');
+    const face = prim ? acc : '#3a2f6e';
+    const x = Math.round(b.x), w = Math.round(b.w), base = Math.round(b.y + b.h);
+    const rest = prim ? 8 : 6, depth = pressed ? 2 : hot ? rest + 4 : rest;
+    const fh = Math.round(b.h) - rest, fy = base - depth - fh, P = 4;
+    ctx.save();
+    // soft drop shadow: stacked, widening, fading blocks; it spreads when lifted and tucks in when pressed
+    const f = hot ? mx(face, '#ffffff', 0.12) : face;
+    if (S) {
+    const sOff = pressed ? 2 : hot ? 12 : 7, sGrow = pressed ? 1 : hot ? 4 : 3;
+    for (let k = 2; k >= 1; k--) { ctx.fillStyle = 'rgba(4,2,12,0.2)'; notch(ctx, x - k * sGrow, fy + sOff - k * sGrow + 4, w + 2 * k * sGrow, base - fy + 2 * k * sGrow, 6); }
+    ctx.fillStyle = 'rgba(4,2,12,0.45)'; notch(ctx, x - 2, fy + sOff, w + 4, base - fy + 2, 4);
     }
-    if (hot && Math.floor(t * 4) % 2) { // the blinking pointer
-      const px = x - 26, py = y + h / 2, s = 4;
+    if (hot && U) { // the accent glow halo, breathing
+      glow(ctx, x - 4, fy - 4, w + 8, base - fy + 8, acc, 0.85 + Math.sin(t * 5) * 0.15);
+    }
+    if (S) {
+    ctx.fillStyle = MENU_INK; notch(ctx, x - 4, fy - 4, w + 8, base - fy + 8, 4);   // crisp outline
+    // the slab's side (its thickness), darker at the very bottom
+    ctx.fillStyle = sd(face, -0.45); ctx.fillRect(x, fy + fh, w, depth);
+    ctx.fillStyle = sd(face, -0.62); ctx.fillRect(x, base - 2, w, 2);
+    // the face: stepped bands, then bevel edges
+    ctx.fillStyle = f; ctx.fillRect(x, fy, w, fh);
+    ctx.fillStyle = mx(f, '#ffffff', 0.2); ctx.fillRect(x, fy, w, Math.round(fh * 0.22));
+    ctx.fillStyle = mx(f, '#ffffff', 0.1); ctx.fillRect(x, fy + Math.round(fh * 0.22), w, Math.round(fh * 0.22));
+    ctx.fillStyle = sd(f, -0.08); ctx.fillRect(x, fy + Math.round(fh * 0.7), w, Math.round(fh * 0.3));
+    ctx.fillStyle = mx(f, '#ffffff', 0.6); ctx.fillRect(x, fy, w, P);                    // light top edge
+    ctx.fillStyle = mx(f, '#ffffff', 0.3); ctx.fillRect(x, fy + P, P, fh - 2 * P);         // light left edge
+    ctx.fillStyle = sd(f, -0.18); ctx.fillRect(x + w - P, fy + P, P, fh - 2 * P);        // dark right edge
+    ctx.fillStyle = sd(f, -0.3); ctx.fillRect(x, fy + fh - P, w, P);                     // dark bottom edge
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(x + 3 * P, fy + P + 3, w - 6 * P, 2);   // inner highlight line
+    ctx.fillStyle = MENU_INK; for (const [cx, cy] of [[x, fy], [x + w - P, fy], [x, base - P], [x + w - P, base - P]]) ctx.fillRect(cx, cy, P, P);   // stepped corners
+    if (!prim) { ctx.fillStyle = hot ? acc : sd(acc, -0.35); ctx.fillRect(x + P, fy + fh - P, w - 2 * P, P); }   // a secondary button's accent lip
+    if (pressed) { ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.fillRect(x, fy, w, fh); }
+    }
+    if (hot && O) { // the sheen: a stepped, slanted pair of bands sweeping across the face every 1.5 s
+      const k = ((t * 0.95) % 1.5) / 1.1;
+      if (k < 1) {
+        ctx.save(); ctx.beginPath(); ctx.rect(x + P, fy + P, w - 2 * P, fh - 2 * P); ctx.clip();
+        const sx = x - 40 + k * (w + 80);
+        for (let r = 0; r < fh; r += P) { const dx = Math.round((fh - r) * 0.45 / P) * P;
+          ctx.fillStyle = 'rgba(255,255,255,0.38)'; ctx.fillRect(sx + dx, fy + r, 16, P);
+          ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(sx + dx + 22, fy + r, 6, P); }
+        ctx.restore();
+      }
+    }
+    // content: icon, label and an optional second line, centred as one block
+    if (S) {
+    const sc = b.scale || 4, ink = prim ? INK : '#f4f0ff';
+    const emb = prim ? mx(f, '#ffffff', 0.55) : MENU_INK;                       // label shadow: an engraved light edge on primaries
+    const cx = x + w / 2, cy = fy + fh / 2;
+    const ic = b.icon ? (b.iconCell || (sc >= 4 ? 4 : 3)) : 0, iw = b.icon ? iconW(b.icon, ic) : 0;
+    if (b.icon && b.glyphOnly) icon(ctx, b.icon, cx, cy, ic, ink, prim ? emb : MENU_INK);
+    else {
+      const ss = 2, lw = PixelFont.width(b.label, sc), sw = b.sub ? PixelFont.width(b.sub, ss) : 0, tw = Math.max(lw, sw);
+      const gap = b.icon ? Math.round(sc * 3.5) : 0, x0 = cx - (iw + gap + tw) / 2, tx = x0 + iw + gap + tw / 2;
+      const ly = b.sub ? cy - fh * 0.15 : cy, sy = cy + fh * 0.24;
+      if (b.icon) icon(ctx, b.icon, x0 + iw / 2, cy, ic, ink, prim ? sd(f, -0.25) : MENU_INK);
+      PixelFont.draw(ctx, b.label, tx, ly, { scale: sc, color: ink, shadow: Math.max(1, sc / 2), shadowColor: emb });
+      if (b.sub) PixelFont.draw(ctx, b.sub, tx, sy, { scale: ss, color: prim ? sd(f, -0.62) : '#c9c3e0', shadow: 0 });
+    }
+    }
+    if (hot && O) { // keyboard focus ring: white corner brackets just outside the outline, pulsing
+      const g = 8 + Math.round((Math.sin(t * 6) + 1) * 1.5), L = 14, T = 4;
+      const l = x - 4 - g, r = x + w + 4 + g, tp = fy - 4 - g, bt = base + 4 + g;
       ctx.fillStyle = '#ffffff';
-      for (let i = 0; i < 4; i++) ctx.fillRect(px + i * s, py - (3 - i) * s, s, (3 - i) * 2 * s);
+      ctx.fillRect(l, tp, L, T); ctx.fillRect(l, tp, T, L); ctx.fillRect(r - L, tp, L, T); ctx.fillRect(r - T, tp, T, L);
+      ctx.fillRect(l, bt - T, L, T); ctx.fillRect(l, bt - L, T, L); ctx.fillRect(r - L, bt - T, L, T); ctx.fillRect(r - T, bt - L, T, L);
     }
-    if (b.hint) PixelFont.draw(ctx, b.hint, x + w / 2, b.y + b.h + 22, { scale: 2, color: '#e6ddff' });
+    if (S && b.hint) PixelFont.draw(ctx, b.hint, x + w / 2, base + 24, { scale: 2, color: hot ? '#ffffff' : '#c9c3e0', shadow: 2 });
+    ctx.restore();
+  }  // Each button's still image (shadow, slab, face, content, hint) is cached per state; only the glow,
+  // the sheen and the focus ring are drawn live.
+  const btnCache = new Map();
+  function button(ctx, b, accent) {
+    const k = Math.max(1, Math.min(3, ctx.getTransform().a)), pad = 28;
+    const key = [b.label, b.w, b.h, b.hint, b.scale, b.kind, b.accent || accent, b.icon, b.sub, b.glyphOnly, b.iconCell, !!b.hot, (b.pressT || 0) > 0, k, window.FONT_OK ? 1 : 0].join('|');
+    const ox = Math.round(b.x) - pad, oy = Math.round(b.y) - pad, cw = Math.round(b.w) + 2 * pad, ch = Math.round(b.h) + 2 * pad + 24;
+    let c = btnCache.get(key);
+    if (!c) {
+      if (btnCache.size > 160) btnCache.clear();
+      c = document.createElement('canvas'); c.width = Math.ceil(cw * k); c.height = Math.ceil(ch * k);
+      const g = c.getContext('2d'); g.setTransform(k, 0, 0, k, -ox * k, -oy * k);
+      buttonPart(g, b, accent, 'static'); btnCache.set(key, c);
+    }
+    buttonPart(ctx, b, accent, 'under');
+    ctx.drawImage(c, ox, oy, cw, ch);
+    buttonPart(ctx, b, accent, 'over');
   }
 
-  /** The menu backdrop: banded dusk sky with stars, a striped setting sun, a scrolling neon grid
-   *  floor, and a little pixel basketball bouncing along it. Drawn small and scaled up. */
+
+  /** A menu panel: soft shadow, ink outline, a dark banded body with bevel edges, an accent stripe
+   *  (one colour, or o.accents for a split) and an optional title tab. */
+  function panel(ctx, x, y, w, h, o = {}) {
+    const acc = o.accent || '#ffd23f', P = 4;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,2,12,0.22)'; notch(ctx, x - 12, y + 2, w + 24, h + 22, 12);
+    ctx.fillStyle = 'rgba(4,2,12,0.4)'; notch(ctx, x - 4, y + 8, w + 8, h + 10, 6);
+    ctx.fillStyle = MENU_INK; notch(ctx, x - 4, y - 4, w + 8, h + 8, 4);
+    const ga = ctx.globalAlpha; ctx.globalAlpha = ga * (o.alpha || 0.95);
+    const bands = ['#2c2354', '#261e4b', '#211a42', '#1c1639'];
+    bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(x, y + Math.round(h * i / 4), w, Math.ceil(h / 4) + 1); });
+    ctx.globalAlpha = ga;
+    ctx.fillStyle = '#41367a'; ctx.fillRect(x, y, w, P); ctx.fillRect(x, y, P, h);               // bevel light
+    ctx.fillStyle = '#120d27'; ctx.fillRect(x, y + h - P, w, P); ctx.fillRect(x + w - P, y, P, h); // bevel dark
+    const acs = o.accents || [acc];
+    acs.forEach((c, i) => { const sx = x + Math.round(w * i / acs.length), sw = Math.round(w / acs.length);
+      ctx.fillStyle = c; ctx.fillRect(sx, y, sw, 6); ctx.fillStyle = mx(c, '#ffffff', 0.45); ctx.fillRect(sx, y, sw, 2); ctx.fillStyle = sd(c, -0.4); ctx.fillRect(sx, y + 6, sw, 2); });
+    ctx.fillStyle = MENU_INK; ctx.fillRect(x, y, P, P); ctx.fillRect(x + w - P, y, P, P); ctx.fillRect(x, y + h - P, P, P); ctx.fillRect(x + w - P, y + h - P, P, P);
+    ctx.fillStyle = '#4a3f86'; for (const [sx, sy] of [[x + 10, y + h - 14], [x + w - 14, y + h - 14]]) ctx.fillRect(sx, sy, 4, 4);   // corner studs
+    if (o.title) {
+      PixelFont.draw(ctx, o.title, x + 20, y + 30, { scale: 2, color: o.titleColor || acc, align: 'left', shadow: 2 });
+      ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fillRect(x + 16, y + 48, w - 32, 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x + 16, y + 50, w - 32, 2);
+    }
+    ctx.restore();
+  }
+
+  const LEVEL_COLORS = ['#1fc2b1', '#5fd08a', '#b9dc55', '#ffd23f', '#ff9a3c', '#ff5b5b'];
+  /** Colour of level `lv` of `n` (cool for easy, hot for hard). */
+  const levelColor = (lv, n) => LEVEL_COLORS[Math.round((lv - 1) / Math.max(1, n - 1) * (LEVEL_COLORS.length - 1))];
+  /** A segmented level bar: n segments centred on stops from x to x + w, lit up to `lv`, with a glowing knob on it. */
+  function levelBar(ctx, x, y, w, lv, n, t, o = {}) {
+    const seg = w / (n - 1), h = o.h || 22, left = Math.round(x - seg / 2), P = 4;
+    ctx.save();
+    ctx.fillStyle = MENU_INK; notch(ctx, left - 6, y - h / 2 - 6, Math.round(seg * n) + 12, h + 12, 4);
+    ctx.fillStyle = '#0f0b22'; ctx.fillRect(left - 2, y - h / 2 - 2, Math.round(seg * n) + 4, h + 4);
+    for (let i = 0; i < n; i++) {
+      const sx = Math.round(left + i * seg + 3), sw = Math.round(seg - 6), on = i < lv, sy = Math.round(y - h / 2);
+      const c = on ? levelColor(i + 1, n) : '#2c2452';
+      ctx.fillStyle = c; ctx.fillRect(sx, sy, sw, h);
+      ctx.fillStyle = mx(c, '#ffffff', on ? 0.4 : 0.12); ctx.fillRect(sx, sy, sw, P);
+      ctx.fillStyle = sd(c, -0.3); ctx.fillRect(sx, sy + h - P, sw, P);
+      if (on) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(sx + P, sy + P + 2, Math.max(0, sw - 2 * P), 2); }
+    }
+    const kx = Math.round(x + (lv - 1) * seg), kc = levelColor(lv, n), kh = h + 22;
+    glow(ctx, kx - 14, y - kh / 2 - 2, 28, kh + 4, kc, 0.8 + Math.sin(t * 4) * 0.2);
+    ctx.fillStyle = MENU_INK; notch(ctx, kx - 14, y - kh / 2 - 2, 28, kh + 4, 4);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(kx - 10, y - kh / 2 + 2, 20, kh - 4);
+    ctx.fillStyle = '#d9d2f2'; ctx.fillRect(kx - 10, y + kh / 2 - 8, 20, 6); ctx.fillRect(kx + 6, y - kh / 2 + 2, 4, kh - 4);
+    ctx.fillStyle = kc; ctx.fillRect(kx - 4, y - 8, 8, 16);
+    ctx.fillStyle = sd(kc, -0.4); ctx.fillRect(kx - 4, y + 4, 8, 4);
+    ctx.restore();
+  }
+
+  /** A little pixel basketball: square cells, lit from the top left, seams turning with `rot`. */
+  function pixelBall(ctx, x, y, r, rot, squash = 0) {
+    const c = 4, sx = 1 + squash, sy = 1 - squash, n = Math.ceil(r / c) + 1, ca = Math.cos(rot), sa = Math.sin(rot);
+    const x0 = Math.round(x), y0 = Math.round(y);
+    for (let j = -n; j < n; j++) for (let i = -n; i < n; i++) {
+      const px = (i + 0.5) * c / sx, py = (j + 0.5) * c / sy, d = Math.hypot(px, py);
+      if (d > r) continue;
+      let col;
+      if (d > r - c * 1.1) col = MENU_INK;
+      else {
+        const u = px * ca + py * sa, v = -px * sa + py * ca;
+        const seam = Math.abs(u) < c * 0.55 || Math.abs(v) < c * 0.55 || Math.abs(Math.hypot(u - r * 1.05, v) - r * 0.72) < c * 0.55 || Math.abs(Math.hypot(u + r * 1.05, v) - r * 0.72) < c * 0.55;
+        const lit = (-px - py) / (r * 1.4);
+        col = seam ? '#3a1a0c' : lit > 0.45 ? '#ffc07a' : lit > 0.05 ? '#ff9a3c' : lit > -0.4 ? '#e8742a' : '#b5461b';
+      }
+      ctx.fillStyle = col; ctx.fillRect(x0 + i * c, y0 + j * c, c, c);
+    }
+  }
+
+  // The logo, rendered once per word into an offscreen canvas (it only changes when the font arrives).
+  const logoCache = {};
+  function logoWord(word, color, dark, s, k) {
+    const key = [word, color, s, k, window.FONT_OK ? 1 : 0].join('|');
+    if (logoCache[key]) return logoCache[key];
+    const tw = PixelFont.width(word, s) + 2 * s, pad = 50, ext = Math.round(s * 1.1), step = Math.max(2, Math.round(s / 3)), o = Math.max(3, Math.round(s * 0.5));
+    const cw = tw + pad * 2, ch = s * 10 + ext + pad * 2, ax = cw / 2, ay = pad + s * 5;
+    const mk = () => { const c = document.createElement('canvas'); c.width = Math.ceil(cw * k); c.height = Math.ceil(ch * k); const g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0); return [c, g]; };
+    const put = (g, dx, dy, col) => PixelFont.draw(g, word, ax + dx, ay + dy, { scale: s, color: col, shadow: 0 });
+    const ring = (g, dy, col) => { for (const [a, b2] of [[-o, 0], [o, 0], [0, -o], [0, o], [-o, -o], [o, o], [-o, o], [o, -o]]) put(g, a, dy + b2, col); };
+    // the face, with stepped bands painted only where the letters are
+    const [fc, fg] = mk(); put(fg, 0, 0, color);
+    const img = fg.getImageData(0, 0, fc.width, fc.height).data; let top = fc.height, bot = 0;
+    for (let yy = 0; yy < fc.height; yy++) for (let xx = 0; xx < fc.width; xx += 2) if (img[(yy * fc.width + xx) * 4 + 3] > 128) { if (yy < top) top = yy; bot = yy; break; }
+    top /= k; bot /= k; const gh = Math.max(1, bot - top);
+    fg.globalCompositeOperation = 'source-atop';
+    const band = (a, b2, col) => { fg.fillStyle = col; fg.fillRect(0, top + gh * a, cw, gh * (b2 - a) + 0.5); };
+    band(0, 0.2, mx(color, '#ffffff', 0.42)); band(0.2, 0.42, mx(color, '#ffffff', 0.2)); band(0.72, 0.86, sd(color, -0.1)); band(0.86, 1.01, sd(color, -0.22));
+    fg.fillStyle = 'rgba(255,255,255,0.85)'; fg.fillRect(0, top + Math.round(s * 0.55), cw, Math.max(2, Math.round(s * 0.3)));   // inner highlight line
+    // everything else, under the face
+    const [c, g] = mk();
+    g.save(); g.shadowColor = color; g.shadowBlur = 34 * k; g.globalAlpha = 0.7; ring(g, ext / 2, color); g.restore();   // soft glow
+    g.globalAlpha = 0.5; ring(g, ext + s, '#05020c'); g.globalAlpha = 1;                                              // drop shadow
+    for (let d = ext; d >= 0; d -= 1) ring(g, d, MENU_INK);                                                           // outline round face and extrude
+    for (let d = ext; d >= 1; d -= 1) put(g, 0, d, Math.floor(d / step) % 2 ? dark : sd(dark, -0.22));           // stepped extrude
+    put(g, 0, Math.max(2, Math.round(s * 0.3)), MENU_INK);                                                           // the seam between face and side
+    g.drawImage(fc, 0, 0, cw, ch);
+    return (logoCache[key] = { c, cw, ch, ax, ay, top: top - ay, w: tw - 2 * s });
+  }
+  const easeOutBack = u => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); };
+  /**
+   * The FLOP HOOPS title: two extruded words that slide in from the sides over the first 0.8 s of
+   * `intro`, then bob gently; a pixel basketball hops along the letters. `still` (reduced motion)
+   * drops the slide, the bob and the hops.
+   */
+  function menuLogo(ctx, W, y, t, intro, still) {
+    const s = 12, gap = 22, k = Math.max(1, Math.min(3, ctx.getTransform().a));
+    const A = logoWord('FLOP', TEAM_COLORS[0], TEAM_DARK[0], s, k), B = logoWord('HOOPS', TEAM_COLORS[1], TEAM_DARK[1], s, k);
+    const ax = W / 2 - gap - A.w / 2, bx = W / 2 + gap + B.w / 2;
+    const ea = still ? 1 : easeOutBack(clamp01(intro / 0.55)), eb = still ? 1 : easeOutBack(clamp01((intro - 0.12) / 0.55));
+    const bob = still ? 0 : Math.round(Math.sin(t * 2) * 4) * clamp01((intro - 0.6) / 0.3);
+    const land = still ? 0 : Math.max(0, Math.sin(clamp01((intro - 0.5) / 0.3) * Math.PI)) * 0.06;   // a squash as the words land
+    const word = (L, cx, cy, e, from) => {
+      if (e <= 0) return;
+      ctx.save(); ctx.translate(cx + (1 - e) * from, cy); ctx.scale(1 + land, 1 - land);
+      ctx.globalAlpha *= clamp01(e * 1.5); ctx.drawImage(L.c, -L.ax, -L.ay, L.cw, L.ch); ctx.restore();
+    };
+    word(A, ax, y + bob, ea, -760); word(B, bx, y - bob, eb, 760);
+    if (still || intro < 0.7) return;
+    // the ball: drops in, then hops letter to letter and back (the font is monospaced, so letters sit 6 cells apart)
+    const xs = [], tops = [];
+    for (let i = 0; i < 4; i++) { xs.push(ax - A.w / 2 + (i + 0.5) * 6 * s - s / 2); tops.push(y + bob + A.top); }
+    for (let i = 0; i < 5; i++) { xs.push(bx - B.w / 2 + (i + 0.5) * 6 * s - s / 2); tops.push(y - bob + B.top); }
+    const r = 15, hop = 0.42, tt = intro - 0.7, hn = Math.floor(tt / hop), u = (tt % hop) / hop, per = 2 * (xs.length - 1);
+    const at = n => { const m = n % per; return m < xs.length ? m : per - m; };
+    const i0 = at(Math.max(0, hn - 1)), i1 = at(hn);
+    const fx = hn === 0 ? xs[0] - 90 : xs[i0], fy = hn === 0 ? -60 : tops[i0] - r;
+    const bxp = fx + (xs[i1] - fx) * u, base = fy + (tops[i1] - r - fy) * u, by = base - Math.sin(u * Math.PI) * (hn === 0 ? 8 : 20);
+    const sq = u > 0.9 ? (u - 0.9) * 2.2 : u < 0.08 ? (0.08 - u) * 2.5 : 0;
+    ctx.fillStyle = 'rgba(5,2,12,0.45)'; const sw = Math.round(r * (0.6 + 0.6 * (1 - Math.sin(u * Math.PI))));
+    ctx.fillRect(Math.round(xs[i1] - sw / 2), Math.round(tops[i1] - 4), sw, 4);
+    pixelBall(ctx, bxp, by + r * sq, r, tt * 5, sq);
+  }
+
+  // ---- The arena behind the menus ------------------------------------------------------------
+  const ARENA = { floor: 470, board: 426 };
+  let arenaCache = null, hazeCache = null, crowdList = null;
+  function arenaStatic(g, W, H) {
+    const F = ARENA.floor, Bd = ARENA.board;
+    // ceiling and the stands' back wall
+    const sky = ['#06030d', '#0a0617', '#0e0920', '#120b29'];
+    sky.forEach((c, i) => { g.fillStyle = c; g.fillRect(0, i * 30, W, 31); });
+    g.fillStyle = '#140d2e'; g.fillRect(0, 120, W, Bd - 120);
+    // the truss and its lamps
+    g.fillStyle = '#1e1640'; g.fillRect(0, 22, W, 10); g.fillStyle = '#2a2056'; g.fillRect(0, 22, W, 3);
+    for (let x = 0; x < W; x += 40) { g.fillStyle = '#1a1336'; g.fillRect(x, 32, 4, 12); }
+    for (let x = 160; x < W; x += 320) {
+      const rg = g.createRadialGradient(x, 40, 2, x, 40, 70); rg.addColorStop(0, 'rgba(255,240,200,0.35)'); rg.addColorStop(1, 'rgba(255,240,200,0)');
+      g.fillStyle = rg; g.fillRect(x - 70, 0, 140, 110);
+      g.fillStyle = '#fff6dc'; g.fillRect(x - 12, 34, 24, 8); g.fillStyle = '#ffffff'; g.fillRect(x - 8, 36, 16, 4);
+    }
+    // the ribbon board ringing the upper deck: team-colour light dashes
+    g.fillStyle = MENU_INK; g.fillRect(0, 104, W, 16);
+    for (let x = 0; x < W; x += 24) { g.fillStyle = sd(TEAM_COLORS[x < W / 2 ? 0 : 1], -0.35); g.fillRect(x + 4, 108, 14, 8); }
+    // tiers: each row a riser with a lit step edge, darker toward the top
+    for (let r = 0; r < 8; r++) {
+      const y = 124 + r * 38, k = r / 7;
+      g.fillStyle = mx('#0f0a22', '#1d1540', k); g.fillRect(0, y, W, 38);
+      g.fillStyle = mx('#1a1236', '#2e2460', k); g.fillRect(0, y + 34, W, 4);
+    }
+    for (const ax of [214, 640, 1066]) { g.fillStyle = '#0b0819'; g.fillRect(ax - 14, 124, 28, Bd - 124); for (let y = 128; y < Bd; y += 19) { g.fillStyle = '#1c1538'; g.fillRect(ax - 14, y, 28, 3); } }
+    // the scorer's table board (its lights are drawn live) and the floor
+    g.fillStyle = MENU_INK; g.fillRect(0, Bd - 4, W, F - Bd + 4);
+    g.fillStyle = '#0d0a1e'; g.fillRect(0, Bd + 2, W, F - Bd - 8);
+    g.fillStyle = '#2a2056'; g.fillRect(0, Bd - 4, W, 2);
+    const tones = ['#c98a4a', '#d29452', '#c07f43', '#cd8f4e', '#c68547'];
+    let y = F, row = 0, hgt = 8;
+    while (y < H) {
+      const k = (y - F) / (H - F);
+      g.fillStyle = mx(sd(tones[row % tones.length], -0.18), tones[row % tones.length], k); g.fillRect(0, y, W, hgt);
+      g.fillStyle = sd(tones[row % tones.length], -0.32); g.fillRect(0, y + hgt - 2, W, 2);
+      for (let x = (hash(row) * 300) | 0; x < W; x += 260 + ((hash(row * 7 + x) * 120) | 0)) g.fillRect(x, y, 3, hgt - 2);   // board ends
+      y += hgt; row++; hgt = Math.round(8 + k * 16);
+    }
+    // painted court: team keys at the ends, the sideline, the centre line and circle
+    const key = (x0, x1, col) => { g.fillStyle = col; g.globalAlpha = 0.45; g.beginPath(); g.moveTo(x0, F + 4); g.lineTo(x1, F + 4); g.lineTo(x1 + (x1 > x0 ? 60 : -60), H); g.lineTo(x0, H); g.closePath(); g.fill(); g.globalAlpha = 1; };
+    key(0, 190, TEAM_DARK[0]); key(W, W - 190, TEAM_DARK[1]);
+    g.fillStyle = '#f6ecd4'; g.fillRect(0, F + 4, W, 5); g.fillRect(W / 2 - 3, F + 4, 6, H - F);
+    g.strokeStyle = '#f6ecd4'; g.lineWidth = 6;
+    g.beginPath(); g.ellipse(W / 2, 640, 230, 78, 0, 0, Math.PI * 2); g.stroke();
+    g.save(); g.beginPath(); g.ellipse(W / 2, 640, 120, 40, 0, 0, Math.PI * 2); g.clip();
+    g.fillStyle = TEAM_COLORS[0]; g.globalAlpha = 0.55; g.fillRect(W / 2 - 130, 590, 130, 100); g.fillStyle = TEAM_COLORS[1]; g.fillRect(W / 2, 590, 130, 100); g.restore();
+    g.beginPath(); g.ellipse(W / 2, 640, 120, 40, 0, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.ellipse(-40, F + 4, 330, 190, 0, 0, Math.PI / 2); g.stroke();
+    g.beginPath(); g.ellipse(W + 40, F + 4, 330, 190, 0, Math.PI / 2, Math.PI); g.stroke();
+    // the varnish: the board's glow mirrored in the floor, and a broad soft sheen
+    for (const [x0, col] of [[0, TEAM_COLORS[0]], [W / 2, TEAM_COLORS[1]]]) {
+      const lg = g.createLinearGradient(0, F + 6, 0, F + 90); lg.addColorStop(0, mx(col, '#000000', 0.2)); lg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalAlpha = 0.32; g.fillStyle = lg; g.fillRect(x0, F + 9, W / 2, 84); g.globalAlpha = 1;
+    }
+    const sh = g.createLinearGradient(0, F, 0, H); sh.addColorStop(0, 'rgba(255,240,215,0)'); sh.addColorStop(0.45, 'rgba(255,240,215,0.14)'); sh.addColorStop(0.7, 'rgba(255,240,215,0)'); sh.addColorStop(1, 'rgba(10,6,24,0.35)');
+    g.fillStyle = sh; g.fillRect(0, F, W, H - F);
+    // a vignette pulling the eye to the middle
+    const vg = g.createRadialGradient(W / 2, H * 0.45, H * 0.35, W / 2, H * 0.45, H * 1.05); vg.addColorStop(0, 'rgba(6,3,14,0)'); vg.addColorStop(1, 'rgba(6,3,14,0.6)');
+    g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  }
+  function makeCrowd(W) {
+    const list = [];
+    for (let r = 0; r < 7; r++) {
+      const y = 124 + (r + 1) * 38, k = r / 6;
+      for (let x = 12 + (r % 2) * 14; x < W; x += 28) {
+        if ([214, 640, 1066].some(a => Math.abs(x - a) < 22)) continue;
+        const h = hash(r * 131 + x), team = (x < W / 2) === (h > 0.16) ? 0 : 1;
+        const body = mx(TEAM_COLORS[team], '#0d0820', 0.72 - k * 0.22 - hash(x * 3 + r) * 0.1);
+        list.push({ x, y, ph: h * 6.28, cheer: hash(x * 17 + r * 5) > 0.72, body, head: sd(body, -0.3), flash: hash(x + r * 999) });
+      }
+    }
+    return list;
+  }
+  function makeHaze(W) {
+    const c = document.createElement('canvas'); c.width = 400; c.height = 120; const g = c.getContext('2d');
+    for (let i = 0; i < 9; i++) {
+      const x = hash(i * 3) * 400, y = 30 + hash(i * 7) * 60, r = 50 + hash(i * 11) * 60;
+      const rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, 'rgba(190,170,255,0.22)'); rg.addColorStop(1, 'rgba(190,170,255,0)');
+      g.fillStyle = rg; g.fillRect(0, 0, 400, 120);
+    }
+    return c;
+  }
+  /**
+   * The menu backdrop: a lit arena. Cached static layers (ceiling, stands, board, hardwood, court paint,
+   * floor reflection) under a live crowd in both team colours, a scrolling LED board, sweeping
+   * spotlights with pools on the floor, and drifting haze. Drawn at the court's pixel size.
+   */
   function menuBackdrop(ctx, W, H, t) {
-    const horizon = 440, bands = ['#140c2e', '#1d1240', '#2a1650', '#3d1a5c', '#5a1f66', '#7a2a6a', '#a3366a', '#d0506a', '#f27a5e'];
-    const bh = horizon / bands.length;
-    bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, Math.floor(i * bh), W, Math.ceil(bh) + 1); });
-    for (let i = 0; i < 70; i++) { // stars: fixed spots, twinkling
-      const sx = (i * 197) % W, sy = (i * 113) % 260;
-      if (Math.sin(t * 2 + i * 1.7) > -0.3) { ctx.fillStyle = i % 5 ? '#e6ddff' : '#ffd23f'; ctx.fillRect(sx, sy, 5, 5); }
+    const cv = ctx.canvas, tr = ctx.getTransform();
+    if (!arenaCache || arenaCache.width !== cv.width || arenaCache.height !== cv.height || arenaCache.k !== tr.a) {
+      arenaCache = document.createElement('canvas'); arenaCache.width = cv.width; arenaCache.height = cv.height; arenaCache.k = tr.a;
+      const g = arenaCache.getContext('2d'); g.setTransform(tr); arenaStatic(g, W, H);
     }
-    // the sun: stripes cut through its lower half
-    const sx = W / 2, sy = horizon - 40, sr = 150, cols = ['#ffe23b', '#ffc23b', '#ff9a1f', '#ff7a2a', '#ff5a3a'];
-    for (let y = -sr; y < sr; y += 5) {
-      const half = Math.sqrt(Math.max(0, sr * sr - y * y)), band = Math.floor((y + sr) / (2 * sr) * cols.length);
-      const gap = y > 0 && Math.floor(y / 5) % Math.max(2, 6 - Math.floor(y / 30)) === 0;
-      if (!gap && sy + y < horizon) { ctx.fillStyle = cols[Math.min(cols.length - 1, band)]; ctx.fillRect(sx - half, sy + y, half * 2, 5); }
+    if (!crowdList) { crowdList = makeCrowd(W); hazeCache = makeHaze(W); }
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(arenaCache, 0, 0); ctx.restore();
+    // the crowd: a gentle sway, some jumping with arms up, a wave rolling round, and camera flashes
+    const wave = ((t * 300) % (W + 800)) - 400;
+    for (const p of crowdList) {
+      const wv = Math.max(0, 1 - Math.abs(p.x - wave) / 90);
+      let dy = Math.round(Math.sin(t * 1.7 + p.ph) * 1.5);
+      if (p.cheer) dy -= Math.round(Math.max(0, Math.sin(t * 4.2 + p.ph)) * 6);
+      dy -= Math.round(wv * 12);
+      ctx.fillStyle = p.body; ctx.fillRect(p.x - 10, p.y - 20 + dy, 20, 20 - Math.min(0, dy));
+      ctx.fillStyle = p.head; ctx.fillRect(p.x - 6, p.y - 32 + dy, 12, 12);
+      if (dy < -4) { ctx.fillStyle = p.body; ctx.fillRect(p.x - 14, p.y - 36 + dy, 4, 16); ctx.fillRect(p.x + 10, p.y - 36 + dy, 4, 16); }
+      if (((t * 0.35 + p.flash * 17) % 1) < 0.012) { ctx.fillStyle = '#ffffff'; ctx.fillRect(p.x - 4, p.y - 28 + dy, 8, 8); }
     }
-    // the floor and its grid, rushing toward you
-    ctx.fillStyle = '#120a26'; ctx.fillRect(0, horizon, W, H - horizon);
-    ctx.fillStyle = '#ff5a8a'; ctx.fillRect(0, horizon, W, 4);
-    ctx.fillStyle = '#1fc2b1';
-    for (let i = 0; i < 12; i++) {
-      const k = ((i + (t * 0.8) % 1) / 12), y = horizon + Math.pow(k, 2.2) * (H - horizon);
-      ctx.fillRect(0, Math.round(y), W, 3);
+    // the LED board: chevrons running toward the middle in each team's colour, a ball at the centre
+    const Bd = ARENA.board, F = ARENA.floor, by = Bd + 8, bh = F - Bd - 18;
+    ctx.save(); ctx.beginPath(); ctx.rect(0, Bd + 2, W, F - Bd - 8); ctx.clip();
+    const off = (t * 60) % 48;
+    for (let x = -48; x < W + 48; x += 48) {
+      const left = x < W / 2, cx = left ? x + off : x - off;
+      if (Math.abs(cx - W / 2) < 70) continue;
+      ctx.fillStyle = left ? TEAM_COLORS[0] : TEAM_COLORS[1];
+      for (let j = 0; j < 4; j++) { const sx = left ? cx + j * 4 : cx + 16 - j * 4; ctx.fillRect(sx, by + j * 4, 8, 4); ctx.fillRect(sx, by + bh - 4 - j * 4, 8, 4); }
     }
-    ctx.strokeStyle = '#1fc2b1'; ctx.lineWidth = 3;
-    for (let i = -10; i <= 10; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 40, horizon); ctx.lineTo(W / 2 + i * 260, H); ctx.stroke(); }
-    // a pixel basketball bouncing across the grid
-    const bx = ((t * 160) % (W + 200)) - 100, by = H - 70 - Math.abs(Math.sin(t * 3.2)) * 120;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(bx - 20, H - 52, 40, 8);
-    ball(ctx, bx, by, 22, t * 4, false);
+    ctx.restore();
+    pixelBall(ctx, W / 2, by + bh / 2, 14, t * 2, 0);
+    // spotlights: warm beams sweeping from the truss, each with a pool where it meets the floor
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 4; i++) {
+      const sx = 160 + i * 320, a = Math.sin(t * 0.45 + i * 1.9) * 0.5, fx = sx + Math.tan(a) * (F + 60 - 40), fy = F + 70;
+      const col = i % 3 === 1 ? '255,210,140' : i === 2 ? '160,240,230' : '255,236,200';
+      const lg = ctx.createLinearGradient(sx, 40, fx, fy); lg.addColorStop(0, `rgba(${col},0.22)`); lg.addColorStop(1, `rgba(${col},0.05)`);
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(sx - 10, 40); ctx.lineTo(sx + 10, 40); ctx.lineTo(fx + 95, fy); ctx.lineTo(fx - 95, fy); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = `rgba(${col},0.08)`; ctx.beginPath(); ctx.moveTo(sx - 4, 40); ctx.lineTo(sx + 4, 40); ctx.lineTo(fx + 40, fy); ctx.lineTo(fx - 40, fy); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = `rgba(${col},0.12)`; ctx.beginPath(); ctx.ellipse(fx, fy, 120, 26, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(${col},0.1)`; ctx.beginPath(); ctx.ellipse(fx, fy, 64, 13, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    // haze drifting across the stands
+    ctx.save(); ctx.globalAlpha = 0.7;
+    const hx = (t * 14) % W;
+    ctx.drawImage(hazeCache, hx - W, 250, W, 240); ctx.drawImage(hazeCache, hx, 250, W, 240);
+    ctx.globalAlpha = 0.45; ctx.drawImage(hazeCache, -((t * 9) % W), 90, W, 200); ctx.drawImage(hazeCache, W - ((t * 9) % W), 90, W, 200);
+    ctx.restore();
+    // a few glints on the varnish
+    for (let i = 0; i < 6; i++) if (Math.sin(t * 2.3 + i * 2.1) > 0.92) { ctx.fillStyle = 'rgba(255,250,235,0.8)'; const gx = 100 + hash(i * 5) * (W - 200), gy = F + 30 + hash(i * 9) * 200; ctx.fillRect(gx - 6, gy - 1, 12, 3); ctx.fillRect(gx - 1, gy - 5, 3, 11); }
   }
 
 
-
-  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, setFont, pose, world, player, ball, hoopBack, hoopFront, aiIcon, scoreboard, roundCard, button, keycap, crown, text, ink, rr,
+  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, setFont, pose, world, player, ball, hoopBack, hoopFront, aiIcon, scoreboard, roundCard, button, panel, levelBar, levelColor, menuLogo, pixelBall, icon, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();
