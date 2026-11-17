@@ -29,7 +29,12 @@ const Render = (() => {
   function text(ctx, s, x, y, size, fill, o = {}) {
     ctx.font = `${size}px ${FONT}`;   // Departure Mono has one weight: heft comes from the outline
     ctx.textAlign = o.align || 'center'; ctx.textBaseline = 'middle';
-    if (o.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = o.stroke; ctx.strokeStyle = o.strokeColor || INK; ctx.strokeText(s, x, y); }
+    // a hard drop shadow under outlined text, as on the menus (o.shadow overrides its size, 0 turns it off)
+    const sh = o.shadow ?? (o.stroke ? Math.max(2, Math.round(o.stroke / 2.5)) : 0);
+    if (o.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = o.stroke;
+      if (sh) { ctx.strokeStyle = 'rgba(8,4,20,0.6)'; ctx.strokeText(s, x + sh, y + sh); }
+      ctx.strokeStyle = o.strokeColor || INK; ctx.strokeText(s, x, y); }
+    else if (sh) { ctx.fillStyle = 'rgba(8,4,20,0.6)'; ctx.fillText(s, x + sh, y + sh); }
     ctx.fillStyle = fill; ctx.fillText(s, x, y);
   }
 
@@ -494,11 +499,16 @@ const Render = (() => {
 
   /** Scoreboard at the top: names, keys, big scores that pop and the round. */
   function scoreboard(ctx, W, st) {
-    const cx = W / 2, y = 12, w = 600, h = 96;
-    rr(ctx, cx - w / 2, y, w, h, 20); ink(ctx, '#262238', 5);
+    const cx = W / 2, y = 12, w = 600, h = 96, T = st.t || 0;
+    // the menus' own dress: a bevelled panel with the two team colours as a split stripe, studs, a slow bob and a gleam
+    ctx.save(); ctx.translate(0, Math.round(Math.sin(T * 1.6) * 1.5));
+    panel(ctx, cx - w / 2, y, w, h, { accents: [TEAM_COLORS[0], TEAM_COLORS[1]], alpha: 1 });
     for (const team of [0, 1]) {
-      const s = team ? 1 : -1, bx = cx + s * 190;
-      rr(ctx, bx - 100, y + 10, 200, h - 20, 14); ink(ctx, TEAM_COLORS[team], 4);
+      const s = team ? 1 : -1, bx = cx + s * 190, col = TEAM_COLORS[team], x0 = bx - 100, y0 = y + 14, bw = 200, bh = h - 24;
+      ctx.fillStyle = MENU_INK; notch(ctx, x0 - 3, y0 - 3, bw + 6, bh + 6, 4);
+      ctx.fillStyle = sd(col, -0.3); notch(ctx, x0, y0, bw, bh, 4);
+      ctx.fillStyle = col; notch(ctx, x0, y0, bw, bh - 6, 4);
+      ctx.fillStyle = mx(col, '#ffffff', 0.35); ctx.fillRect(x0 + 4, y0 + 2, bw - 8, 3);
       text(ctx, TEAM_NAMES[team].toUpperCase(), bx - s * 28, y + 30, 17, '#ffffff', { stroke: 4 });
       if ((team === 1 && st.cpu) || (team === 0 && st.cpu0)) { const sty = team ? st.cpuStyle : st.cpuStyle0; text(ctx, 'CPU', bx - s * 28, y + (sty ? 58 : 62), 18, '#ffffff', { stroke: 4 }); if (sty) text(ctx, sty, bx - s * 28, y + 76, 12, '#ffffff', { stroke: 3 }); }   // the computer plays this side
       else { keycap(ctx, bx - s * 28 - 18, y + 62, team ? 'up' : 'W', 0.55); keycap(ctx, bx - s * 28 + 14, y + 62, team ? 'down' : 'S', 0.55); }
@@ -511,7 +521,18 @@ const Render = (() => {
     text(ctx, `FIRST TO ${st.target}`, cx, y + 30, 15, '#ffd23f');
     text(ctx, `ROUND ${st.round}`, cx, y + 54, 20, '#ffffff');
     text(ctx, st.leader < 0 ? 'LEVEL' : `${TEAM_NAMES[st.leader].toUpperCase()} LEAD`, cx, y + 77, 13,
-      st.leader < 0 ? '#c9c3e0' : TEAM_COLORS[st.leader]);
+      st.leader < 0 ? '#c9c3e0' : TEAM_COLORS[st.leader], { shadow: 2 });
+    gleam(ctx, cx - w / 2, y, w, h, T);
+    ctx.restore();
+  }
+  /** A white sheen that sweeps diagonally across a panel every few seconds, like the menu buttons' gleam. */
+  function gleam(ctx, x, y, w, h, t, every = 5.5) {
+    const ph = (t % every) / 0.7; if (ph >= 1) return;
+    const gx = x - 60 + ph * (w + 120);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + 36, y); ctx.lineTo(gx + 6, y + h); ctx.lineTo(gx - 30, y + h); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.moveTo(gx + 44, y); ctx.lineTo(gx + 54, y); ctx.lineTo(gx + 24, y + h); ctx.lineTo(gx + 14, y + h); ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
 
   /** The round card: flips in with the round number, ends on GO. */
@@ -530,14 +551,10 @@ const Render = (() => {
     // a square panel in the scoreboard's dress: dark fill, ink outline, a hard drop shadow, the two team colours as a
     // split stripe on top, pixel corner studs; ROUND in the HUD's yellow, the number white with an ink outline
     const pw = 300, ph = 250, x0 = -pw / 2, y0 = -ph / 2 + 6;
-    ctx.fillStyle = INK; ctx.fillRect(x0 + 10, y0 + 10, pw, ph);                                  // drop shadow
-    rr(ctx, x0, y0, pw, ph); ink(ctx, '#262238', 7);
-    ctx.fillStyle = TEAM_COLORS[0]; ctx.fillRect(x0 + 4, y0 + 4, pw / 2 - 4, 22);
-    ctx.fillStyle = TEAM_COLORS[1]; ctx.fillRect(0, y0 + 4, pw / 2 - 4, 22);
-    ctx.fillStyle = INK; ctx.fillRect(x0 + 4, y0 + 26, pw - 8, 5);
-    rr(ctx, x0 + 18, y0 + 46, pw - 36, ph - 64); ink(ctx, '#1d1a2b', 4);                         // inner bezel
-    ctx.fillStyle = '#ffd23f';
-    for (const [sx2, sy2] of [[x0 + 10, y0 + ph - 18], [x0 + pw - 18, y0 + ph - 18]]) ctx.fillRect(sx2, sy2, 8, 8);   // corner studs
+    panel(ctx, x0, y0, pw, ph, { accents: [TEAM_COLORS[0], TEAM_COLORS[1]], alpha: 1 });          // the menus' panel
+    ctx.fillStyle = MENU_INK; ctx.fillRect(x0 + 18, y0 + 46, pw - 36, ph - 64);                  // inner bezel
+    ctx.fillStyle = '#120d27'; ctx.fillRect(x0 + 22, y0 + 50, pw - 44, ph - 72);
+    gleam(ctx, x0, y0, pw, ph, t * 3.2, 2.4);
     text(ctx, 'ROUND', 0, y0 + 76, 28, '#ffd23f', { weight: 900, stroke: 5 });
     text(ctx, String(S.round), 0, y0 + 142, 92, '#ffffff', { weight: 900, stroke: 10 });
     text(ctx, S.venueName.toUpperCase(), 0, y0 + 206, 15, '#c9c3e0', { weight: 700, stroke: 3 });
@@ -971,7 +988,39 @@ const Render = (() => {
     for (let i = 0; i < 6; i++) if (Math.sin(t * 2.3 + i * 2.1) > 0.92) { ctx.fillStyle = 'rgba(255,250,235,0.8)'; const gx = 100 + hash(i * 5) * (W - 200), gy = F + 30 + hash(i * 9) * 200; ctx.fillRect(gx - 6, gy - 1, 12, 3); ctx.fillRect(gx - 1, gy - 5, 3, 11); }
   }
 
+  /**
+   * The arena's stage lights, switched on for a great play. A spotlight cuts the venue dark round the moment,
+   * and four truss lamps (the menu backdrop's) swing their beams in on it, each with a pool on the floor.
+   * L = { t, max, x, y, cols }: seconds left, the whole span, the focus, and the beams' colours. Drawn over the
+   * court, under the HUD.
+   */
+  function stageLights(ctx, W, H, t, L, floorY) {
+    const up = clamp01((L.max - L.t) / 0.18), down = clamp01(L.t / 0.7), k = up * down;
+    if (k <= 0) return;
+    const rgb = c => { const n = parseInt(toHex(c).slice(1), 16); return `${n >> 16},${(n >> 8) & 255},${n & 255}`; };
+    const fx = L.x, fy = L.y;
+    ctx.save();
+    // the house dims, except in a pool of light on the moment
+    const dim = ctx.createRadialGradient(fx, fy, 70, fx, fy, 520);
+    dim.addColorStop(0, 'rgba(6,3,14,0)'); dim.addColorStop(1, `rgba(6,3,14,${0.5 * k})`);
+    ctx.fillStyle = dim; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 4; i++) {
+      const sx = 160 + i * 320, col = rgb(L.cols[i % L.cols.length]);
+      const sway = Math.sin(t * 4.2 + i * 1.9) * 40 * (0.4 + 0.6 * k), px = sx + (fx - sx) * 0.7 + (i - 1.5) * 55 + sway, py = floorY + 50;
+      const lg = ctx.createLinearGradient(sx, 40, px, py); lg.addColorStop(0, `rgba(${col},${0.5 * k})`); lg.addColorStop(1, `rgba(${col},${0.12 * k})`);
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(sx - 12, 40); ctx.lineTo(sx + 12, 40); ctx.lineTo(px + 110, py); ctx.lineTo(px - 110, py); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = `rgba(${col},${0.16 * k})`; ctx.beginPath(); ctx.moveTo(sx - 4, 40); ctx.lineTo(sx + 4, 40); ctx.lineTo(px + 44, py); ctx.lineTo(px - 44, py); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = `rgba(${col},${0.3 * k})`; ctx.beginPath(); ctx.ellipse(px, py, 140, 30, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(${col},${0.22 * k})`; ctx.beginPath(); ctx.ellipse(px, py, 70, 14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,248,225,${0.95 * k})`; ctx.fillRect(sx - 14, 34, 28, 9); ctx.fillRect(sx - 20, 36, 40, 5);   // the lamp flares
+    }
+    const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 200); const fc = rgb(L.cols[0]);
+    fg.addColorStop(0, `rgba(${fc},${0.3 * k})`); fg.addColorStop(1, `rgba(${fc},0)`);
+    ctx.fillStyle = fg; ctx.fillRect(fx - 200, fy - 200, 400, 400);
+    ctx.restore();
+  }
 
-  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, setFont, pose, world, player, ball, hoopBack, hoopFront, aiIcon, scoreboard, roundCard, button, panel, levelBar, levelColor, menuLogo, pixelBall, icon, keycap, crown, text, ink, rr,
+  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, stageLights, setFont, pose, world, player, ball, hoopBack, hoopFront, aiIcon, scoreboard, roundCard, button, panel, levelBar, levelColor, menuLogo, pixelBall, icon, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();
