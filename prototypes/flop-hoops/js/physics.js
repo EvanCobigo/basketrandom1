@@ -70,7 +70,7 @@ const Physics = (() => {
     const p = { team, idx, dir, torso, head, legs, arm, dims: d, look, group,
       parts: [torso, head, legs[0], legs[1], arm],
       touch: false, foot: false, sinceGround: 0, sinceFoot: 0, sinceJump: 9, cd: 0, grabCD: 0, downT: 0,
-      prevHeld: false, boosting: false, dribbleT: 0, followT: 0, back: 0, slamRel: null, windSpin: null };
+      prevHeld: false, boosting: false, dribbleT: 0, followT: 0, back: 0, slamRel: null, windSpin: null, backDunk: null, dunkLean: 0 };
     tag(torso, 'torso', p); tag(head, 'head', p); legs.forEach(l => tag(l, 'leg', p)); tag(arm, 'arm', p);
 
     const hx = d.hipX;
@@ -294,8 +294,8 @@ const Physics = (() => {
       }
     } else {
       const k = grounded || p.slam ? T.upright : T.upright * T.upright_air;   // (a dunker stays upright in the air)
-      // dribbling off the ground: sloppy taps make the body sway
-      const lean = dribbling ? Math.sin(w.time * 9 + p.idx) * T.dribble_sway * Math.min(p.sloppy || 0, 8) * 0.05 : 0;
+      // dribbling off the ground: sloppy taps make the body sway; a dunker leans into his swing (p.dunkLean, set by stepDunk)
+      const lean = dribbling ? Math.sin(w.time * 9 + p.idx) * T.dribble_sway * Math.min(p.sloppy || 0, 8) * 0.05 : p.dunkLean || 0;
       let omega = torso.angularVelocity * 60;
       omega += (-wrap(a - lean) * k - omega * T.upright_damp) * dt;
       Body.setAngularVelocity(torso, omega / 60);
@@ -331,13 +331,14 @@ const Physics = (() => {
     const err = wrap(target - rel);
     const fast = slamming || contest, amax = contest ? 0.9 : slamming ? T.dunk_arm_speed : T.arm_max_speed;
     const want = tav + clamp(err * (fast ? 0.6 : T.arm_gain), -amax, amax);
-    if (p.windSpin != null) Body.setAngularVelocity(p.arm, tav + p.windSpin);   // a windmill: the arm is turned, at full length, all the way round
+    if (p.windSpin != null) Body.setAngularVelocity(p.arm, tav + p.windSpin);   // a dunk's swing: the arm is turned at the speed stepDunk asks (a windmill's full circle too)
     else Body.setAngularVelocity(p.arm, lerp(p.arm.angularVelocity, want, fast ? 0.9 : 0.55));
     // The back arm is drawn only (no body): its angle from the torso eases toward a pose. It
     // guides the ball up while cocking, then stays extended behind, lagging, through the release.
     // (a real jump shot moves the off arm very little: it lifts a bit as a guide and settles back)
-    const backTarget = slamming ? rel * 0.4 : cocking || following ? -p.dir * T.back_arm_guide : -a * T.arm_hang;
-    p.back = lerp(p.back || 0, backTarget, cocking || following || slamming ? 0.12 : 0.4);   // idle: keeps up with the body, so it hangs still
+    // (a dunk poses it itself, p.backDunk: both hands on the ball for a hammer, a counter-swing for the others; eased the short way round)
+    const backTarget = p.backDunk != null ? p.backDunk : slamming ? rel * 0.4 : cocking || following ? -p.dir * T.back_arm_guide : -a * T.arm_hang;
+    p.back = wrap((p.back || 0) + wrap(backTarget - (p.back || 0)) * (p.backDunk != null ? 0.5 : cocking || following || slamming ? 0.12 : 0.4));   // idle: keeps up with the body, so it hangs still
 
     // Jump: a tap is a short hop; keeping the key down lifts it to full height. Holding keeps
     // hopping on landing, except for a ball carrier, who is busy with the ball.
@@ -854,7 +855,7 @@ const Physics = (() => {
     return apexGap >= T.dunk_min_gap && apexGap <= T.dunk_reach_x * bonus && handTop <= hoop.rimY - w.ball.r * 0.4 + slack;
   }
 
-  const DUNK_STYLES = ['tomahawk', 'windmill', 'elbow'];
+  const DUNK_STYLES = ['tomahawk', 'windmill', 'elbow', 'hammer'];   // (elbow: the honey dip)
   /** Where the arm must point (as an angle from the torso) for the ball to be at (x, y). */
   function armToward(p, x, y) {
     const t = p.torso, a = t.angle, oy = -p.dims.torsoH / 2 + 10;
@@ -862,26 +863,72 @@ const Physics = (() => {
     return wrap(Math.atan2(-(x - sx), y - sy) - a);
   }
 
+  const TAU = Math.PI * 2;
+  const ease = s => s * s * (3 - 2 * s);               // smoothstep: eases out of one pose and into the next
+  const ahead = (a, from) => from + (((a - from) % TAU) + TAU) % TAU;   // the angle a, the first time it comes turning up from `from`
+  const behind = (a, from) => from - (((from - a) % TAU) + TAU) % TAU;  // ... turning down from `from`
+  /**
+   * The arm's swing of a dunk: where the arm should be at clock `tau` (0 at take-off, 1 at the top of the jump), as ψ, the angle
+   * from the torso times the player's direction (0 hangs straight down, -π/2 points forward at the rim, +π/2 back, ±π straight up).
+   * Unwrapped, so a swing can turn further than half a circle. `aim` is ψ of the ball just over the rim, now. Each style first dips
+   * the other way (anticipation), then:
+   *  - tomahawk: up the front and over, cocked behind the head (tomahawk_cock past straight up), a beat, then whipped down;
+   *  - hammer: the same with both hands, a deeper load and a longer beat: cocked far behind the head (hammer_cock), then hammered;
+   *  - windmill: from the ball held out in front (windmill_start), one full-length circle down, back, up and over the top;
+   *  - honey dip: one sweep up the back, over the head and on into the rim, no beat.
+   * Every style has the ball over the rim by dunk_strike_at; after that it follows the aim until the slam.
+   */
+  function dunkSwing(d, T, tau, aim) {
+    const s0 = d.psi0, dipT = T.dunk_dip_time, strike = T.dunk_strike_at;
+    const seg = (t0, t1, a, b) => lerp(a, b, ease(clamp((tau - t0) / Math.max(1e-6, t1 - t0), 0, 1)));
+    if (d.style === 'windmill') {
+      const start = s0 + wrap(-T.windmill_start - s0);                    // the ball out in front (the nearest way there)
+      let end = ahead(aim, start); if (end - start < Math.PI) end += TAU;   // down, back, up and over: always the long way round
+      d.arcFrom = start;
+      return tau < dipT ? seg(0, dipT, s0, start) : seg(dipT, strike, start, end);
+    }
+    // the others: the ball is swung up to over the head, cocked behind it, and held a beat (a tomahawk, longer a hammer), then brought
+    // over the top into the rim. A tomahawk or hammer raises it up the front, early (dunk_cock_at), while the body is still well under
+    // the rim; a honey dip swings it up the back. (A ball raised up the front any later, at full arm length, is still on its way up as
+    // it reaches the front rim and snags under it: measured, a third of them.) The dip goes the other way to the raise
+    const hammer = d.style === 'hammer', back = d.style === 'elbow', cockAt = T.dunk_cock_at;
+    const dip = s0 + wrap((back ? -1 : 1) * (hammer ? 1.3 : 1) * T.dunk_dip - s0);
+    const up = Math.PI - (hammer ? T.hammer_cock : back ? 0.15 : T.tomahawk_cock);   // cocked: this far round from straight down, behind
+    const cock = back ? ahead(up, dip) : behind(up, dip);
+    const hold = cockAt + (hammer ? 0.22 : back ? 0 : 0.12);
+    if (tau < dipT) return seg(0, dipT, s0, dip);
+    if (tau < hold) return seg(dipT, cockAt, dip, cock);
+    if (back) return seg(hold, strike, cock, ahead(aim, cock));
+    // a tomahawk or hammer keeps the ball cocked until the body nears the top of the jump (stepDunk sets d.strikeAt), then whips it
+    // down over the rim in dunk_strike_steps
+    if (d.strikeAt == null) return cock;
+    return lerp(cock, ahead(aim, cock), ease(clamp((tau * d.N - d.strikeAt) / T.dunk_strike_steps, 0, 1)));
+  }
+
   /**
    * Start a dunk. From the floor the player takes a small jump planned to top out at exactly the
    * height the dunk needs; in the air they simply go for it from where they are. Either way the
-   * ARM does the work: it carries the ball up to the rim in the dunk's style (tomahawk: cocked back
-   * behind the head, then swung down; windmill: a full clockwise circle at full arm length, mirrored
-   * for the team attacking left; honey dip: straight in, then hanging by the forearm inside the rim),
-   * and when the ball is over the rim's opening it is slammed down through it. If the arm misses,
-   * the ball hits the rim and pops out of the hand. Tomahawks and windmills hang on the rim by the
-   * hand afterwards with chance T.dunk_hang_chance; a honey dip always hangs.
+   * ARM does the work: it swings the ball up to the rim in the dunk's style, timed to the jump (see
+   * dunkSwing: tomahawk, two-hand hammer, windmill, honey dip), and when the ball is over the rim's
+   * opening it is slammed down through it, the arm following through. If the arm misses, the ball
+   * hits the rim and pops out of the hand. Tomahawks, windmills and hammers hang on the rim by the
+   * hand afterwards with chance T.dunk_hang_chance; a honey dip always hangs (by the forearm, inside
+   * the rim). A test may force the style with w.forceDunkStyle.
    */
   function startDunk(w, T, hoop) {
     const p = w.hold.p, grounded = p.sinceGround <= 0.08;
     if (p.dribbled) return false;   // (dribbled into it: no dunk, see noDunkAfterDribble)
     const plan = grounded ? planDunk(w, T, p, hoop) : null;
     if (grounded && !plan) return false;
-    const style = DUNK_STYLES[Math.floor(w.rng() * DUNK_STYLES.length) % DUNK_STYLES.length];
+    const rolled = DUNK_STYLES[Math.floor(w.rng() * DUNK_STYLES.length) % DUNK_STYLES.length];
+    const style = DUNK_STYLES.includes(w.forceDunkStyle) ? w.forceDunkStyle : rolled;   // (the roll is made either way: the same rng draws)
     const hang = style === 'elbow' || w.rng() < T.dunk_hang_chance;
     const oop = w.hold.fromPass && w.hold.t < T.oop_window;   // alley-oop: dunked straight off a pass
     const giveGo = !!w.hold.giveGo, putback = !!w.hold.putback && !oop;
-    w.dunk = { p, hoop, style, hang, oop, giveGo, putback, plan, grounded, t: 0, slammed: false, y0: p.torso.position.y, done: false, hangT: 0, con: null, turn: null, steps: 0 };
+    // the swing's clock runs over the rise of the planned jump (N steps to its top), or a fixed time from the air
+    const N = plan ? Math.max(10, plan.n) : T.dunk_air_steps, psi0 = wrap(p.arm.angle - p.torso.angle) * p.dir;
+    w.dunk = { p, hoop, style, hang, oop, giveGo, putback, plan, grounded, t: 0, slammed: false, y0: p.torso.position.y, done: false, hangT: 0, con: null, steps: 0,
+      N, psi0, th: psi0, arcFrom: null, thSlam: null, pin: null };
     p.slam = true; p.windSpin = null;
     if (plan) { for (const part of p.parts) Body.setVelocity(part, { x: plan.vx, y: plan.vy }); p.sinceGround = 99; p.sinceFoot = 99; p.cd = T.jump_cooldown; }
     w.onEvent({ type: 'dunkstart', team: p.team, style, oop, giveGo, putback, x: w.ball.position.x, y: w.ball.position.y });
@@ -891,7 +938,7 @@ const Physics = (() => {
   function endDunk(w) {
     const d = w.dunk; if (!d) return;
     if (d.con) Composite.remove(w.engine.world, d.con);
-    d.p.slam = false; d.p.slamRel = null; d.p.windSpin = null; w.dunk = null;
+    d.p.slam = false; d.p.slamRel = null; d.p.windSpin = null; d.p.backDunk = null; d.p.dunkLean = 0; w.dunk = null;
   }
 
   /** A defender's hand or head met the ball on its way into the rim: swatted back out, away from the hoop. */
@@ -929,6 +976,11 @@ const Physics = (() => {
           for (const part of [t, p.head, ...p.legs]) Body.setVelocity(part, { x: lerp(part.velocity.x, vx, 0.9), y: lerp(part.velocity.y, -v, 0.6) });   // (the arm's swing pushes the body; this pushes back)
         }
       }
+      // over the top: the body is held over its planned spot (a full swing of the arm and ball pushes it back, short of the rim)
+      if (d.plan && d.grounded && (t.velocity.y >= 0 || t.position.y - d.plan.apexY <= 2)) {
+        const vx = clamp((d.plan.apexX - t.position.x) * 0.3, -4, 4);
+        for (const part of [t, p.head, ...p.legs]) Body.setVelocity(part, { x: lerp(part.velocity.x, vx, 0.5), y: part.velocity.y });
+      }
       // from the air (no planned jump): steer him over the rim and hold him up, so a dunker already falling still gets there
       if (!d.plan && !d.grounded && T.dunk_air_assist > 0) {
         const A = d.air || (d.air = dunkAnchor(w, T, p, h)), k = T.dunk_air_assist;
@@ -937,23 +989,18 @@ const Physics = (() => {
         const vyT = below > 3 ? -Math.min(9, below * 0.3) : Math.min(t.velocity.y, 1);
         for (const part of [t, p.head, ...p.legs]) Body.setVelocity(part, { x: lerp(part.velocity.x, vx, 0.6 * k), y: lerp(part.velocity.y, vyT, 0.7 * k) });
       }
-      // the arm: where the ball has to go, by style
-      const aim = armToward(p, slot.x, slot.y);
-      const u = d.plan ? clamp((d.y0 - t.position.y) / Math.max(1, d.y0 - d.plan.apexY), 0, 1) : clamp(d.t / 0.3, 0, 1);
-      p.windSpin = null;
-      if (d.style === 'tomahawk') p.slamRel = u < 0.55 ? -dir * T.arm_cock_angle : aim;              // back behind the head, then down
-      else if (d.style === 'windmill') {                                                              // a full circle, clockwise (mirrored)
-        const rel = wrap(p.arm.angle - t.angle);
-        if (d.turn === null) d.turn = ((((aim - rel) * dir) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) + 2 * Math.PI;
-        const left = Math.max(3, (d.plan ? d.plan.n : 16) - d.steps);
-        if (u < 0.82 && d.turn > 0.3) { const spin = d.turn / left; d.turn = Math.max(0, d.turn - spin); p.windSpin = dir * spin; p.slamRel = aim; }
-        else p.slamRel = aim;
-      } else {                                                                                        // honey dip: a steady sweep straight to the slot, paced to arrive with the top of the jump
-        const direct = wrap(aim - wrap(p.arm.angle - t.angle));
-        const front = ((((aim - wrap(p.arm.angle - t.angle)) * dir) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) * dir;   // the way round past the chest, not back through the head
-        const err = Math.abs(direct) > 0.8 && Math.abs(front) < 4.3 && !d.backed ? front : direct;   // (swings up in front of the body, then settles)
-        p.slamRel = aim; if (Math.abs(err) > 0.03) p.windSpin = clamp(err * 0.3, -0.45, 0.45);
-      }
+      // the arm: the style's swing (dunkSwing), timed to the jump. The arm is turned straight at where the swing will be next step
+      // (closing dunk_track of the gap), so a fast circle is followed without lag; the body leans into it and the back arm is posed
+      const aim = armToward(p, slot.x, slot.y), psiA = wrap(aim * dir), rel = wrap(p.arm.angle - t.angle);
+      // (a tomahawk or hammer, cocked: the whip starts once the body is nearly at the top, so the ball comes down through the rim
+      // with the slam instead of waiting over it; at the latest at dunk_strike_at)
+      if ((d.style === 'tomahawk' || d.style === 'hammer') && d.strikeAt == null && d.steps / d.N >= T.dunk_cock_at + (d.style === 'hammer' ? 0.22 : 0.12)
+        && (t.velocity.y > -T.dunk_apex_vy * 1.6 || d.steps / d.N >= T.dunk_strike_at)) d.strikeAt = d.steps;
+      d.th = dunkSwing(d, T, d.steps / d.N, psiA);
+      const next = dunkSwing(d, T, (d.steps + 2) / d.N, psiA);   // (two steps ahead: what is asked now is seen a step late, and the ball drags)
+      p.slamRel = wrap(dir * next);
+      p.windSpin = clamp(wrap(dir * next - rel) * T.dunk_track, -T.dunk_arm_speed, T.dunk_arm_speed);
+      dunkPose(d, T, d.th);
       const dist = Math.hypot(ball.position.x - slot.x, ball.position.y - slot.y);   // (kept for the miss report: how close the arm ever got)
       if (!d.best || dist < d.best.dist) d.best = { dist, dx: Math.round(ball.position.x - slot.x), dy: Math.round(ball.position.y - slot.y), tx: Math.round(t.position.x - (d.plan ? d.plan.apexX : t.position.x)), ty: Math.round(t.position.y - (d.plan ? d.plan.apexY : t.position.y)), top: d.plan ? Math.round(d.topY - d.plan.apexY) : 0, t: +d.t.toFixed(2), vy: +t.velocity.y.toFixed(1) };
       // the slam: the ball is over the rim's opening, at or past the top of the jump
@@ -963,13 +1010,9 @@ const Physics = (() => {
         release(w, T, 0.35);
         Body.setVelocity(ball, { x: clamp((h.cx - ball.position.x) * 0.5, -5, 5), y: T.dunk_speed });
         ball.shot = { team: p.team, t: w.time, kind: 'dunk', style: d.style, oop: d.oop, giveGo: d.giveGo, putback: d.putback, by: p.idx, dir, clean: true };
-        d.slammed = true; d.hangT = 0; h.wobble = 2; h.flex = 1; p.windSpin = null; d.ghosts = null;   // (the rim bends down under the slam)
-        if (d.hang) {   // hang by the hand: a pin from the hand to the rim (a honey dip puts the forearm inside the basket)
-          const hp = d.style === 'elbow' ? { x: h.cx + dir * 0, y: h.rimY + 8 } : { x: h.frontX, y: h.rimY };
-          const aa = p.arm.angle, tip = p.dims.armL / 2;
-          d.con = Constraint.create({ bodyA: p.arm, pointA: { x: -Math.sin(aa) * tip, y: Math.cos(aa) * tip }, pointB: hp, length: 0, stiffness: 0.9, damping: 0.08 });
-          Composite.add(w.engine.world, d.con);
-        }
+        // (the rim bends down under the slam: a two-hand hammer bends it hammer_flex times as far)
+        d.slammed = true; d.hangT = 0; h.wobble = d.style === 'hammer' ? 3 : 2; h.flex = d.style === 'hammer' ? T.hammer_flex : 1; d.ghosts = null;
+        d.thSlam = d.th + wrap(wrap(p.arm.angle - t.angle) * dir - d.th);   // where the arm really is: the follow-through goes on from there
         w.onEvent({ type: 'dunk', team: p.team, x: h.cx, y: h.rimY, style: d.style, hang: d.hang, oop: d.oop, giveGo: d.giveGo, putback: d.putback });
         return;
       }
@@ -984,12 +1027,47 @@ const Physics = (() => {
       }
       return;
     }
-    // after the slam: hanging on the rim, swaying, then letting go
+    // after the slam: the follow-through (the arm carries on down through the rim), then hanging on the rim, or letting go
     d.hangT += dt;
-    if (d.hang) p.legs.forEach((l, i) => Body.setAngularVelocity(l, l.angularVelocity + Math.sin(d.hangT * 13 + i * Math.PI) * 0.035));   // hanging on: the legs swing
-    if (d.hang) { h.wobble = Math.max(h.wobble, 0.5); p.slamRel = armToward(p, h.frontX, h.rimY); }
-    const hangFor = d.hang ? T.dunk_rim_hang * (d.style === 'elbow' ? 1.2 : 1) : T.dunk_hang;
+    const fT = T.dunk_follow_time * (d.hang ? 0.6 : 1), rel = wrap(p.arm.angle - t.angle);
+    if (!d.con) {
+      const reach = (d.hang ? 0.5 : 1) * T.dunk_follow_angle, at = s => d.thSlam + reach * ease(clamp(s / fT, 0, 1));
+      d.th = at(d.hangT); const next = at(d.hangT + dt);
+      p.slamRel = wrap(dir * next); p.windSpin = clamp(wrap(dir * next - rel) * T.dunk_track, -T.dunk_arm_speed, T.dunk_arm_speed);
+      if (d.hang && d.hangT >= fT) {
+        // the hand takes the rim (a honey dip puts the forearm inside the basket): a pin from the hand to it, made at the length it is
+        // now and drawn in over a few steps, so the body drops in under the hand instead of being snapped there
+        const hp = handPos(p), pin = d.style === 'elbow' ? { x: h.cx, y: h.rimY + 8 } : { x: h.frontX, y: h.rimY }, aa = p.arm.angle, tip = p.dims.armL / 2;
+        d.pin = pin;
+        d.con = Constraint.create({ bodyA: p.arm, pointA: { x: -Math.sin(aa) * tip, y: Math.cos(aa) * tip }, pointB: pin, length: Math.hypot(hp.x - pin.x, hp.y - pin.y), stiffness: 0.9, damping: 0.08 });
+        Composite.add(w.engine.world, d.con);
+      }
+    } else {
+      // hanging: the arm straight up at the rim, the body drawn in under the hand (dunk_hang_pull), the legs swinging
+      d.con.length *= 0.6;
+      p.windSpin = null; p.slamRel = armToward(p, d.pin.x, d.pin.y); d.th = d.th + wrap(p.slamRel * dir - d.th);
+      const under = d.pin.x - dir * 4;
+      for (const part of [t, p.head]) Body.setVelocity(part, { x: lerp(part.velocity.x, clamp((under - t.position.x) * 0.25, -4, 4), T.dunk_hang_pull), y: part.velocity.y });
+      p.legs.forEach((l, i) => Body.setAngularVelocity(l, l.angularVelocity + Math.sin(d.hangT * 13 + i * Math.PI) * 0.035));
+      h.wobble = Math.max(h.wobble, 0.5);
+    }
+    dunkPose(d, T, d.th);
+    const hangFor = d.hang ? T.dunk_rim_hang * (d.style === 'elbow' ? 1.2 : 1) : Math.max(T.dunk_hang, fT);
     if (d.hangT >= hangFor) endDunk(w);
+  }
+
+  /**
+   * The body around a dunk's swing (`th` as in dunkSwing): the lean into it, back as the ball goes back and forward into the slam
+   * (dunk_lean, most for a hammer, least for a honey dip), and the drawn back arm: on the ball beside the other hand for a hammer,
+   * swinging against the arm for a tomahawk or windmill, tucked for a honey dip. Hanging: a hammer hangs by both hands, the others
+   * let the free arm dangle.
+   */
+  function dunkPose(d, T, th) {
+    const p = d.p, s = d.style, k = s === 'hammer' ? 1.3 : s === 'windmill' ? 1 : s === 'tomahawk' ? 0.7 : 0.4;
+    p.dunkLean = d.con ? 0 : p.dir * -Math.sin(th) * T.dunk_lean * k;
+    const b = d.con ? (s === 'hammer' ? th + 0.2 : 0.25 + 0.3 * Math.sin(d.hangT * 7))
+      : s === 'hammer' ? th + 0.22 : s === 'elbow' ? 0.35 : -0.25 - 0.9 * Math.sin(th);
+    p.backDunk = wrap(p.dir * b);
   }
 
   /**

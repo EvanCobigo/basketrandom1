@@ -372,6 +372,53 @@ const Render = (() => {
     ctx.fillRect(x - 14, f - 22, 28, 8);
   }
 
+  /**
+   * A dunk's motion in the air, by style. Every style leaves afterimages of the ball and a swoosh through them: a tomahawk's in
+   * the dunker's colour with a white core; a two-hand hammer's wider and heavier (an ink edge, a yellow core); a honey dip's in
+   * honey gold, dripping. A windmill draws a circular arc instead, in the team colour, round the shoulder along the hand's path
+   * (from where the circle began to where the hand is now), with no afterimages, kept through the follow-through, fading after the slam.
+   */
+  function dunkTrail(ctx, d, B, r, al) {
+    const p = d.p, col = TEAM_COLORS[p.team], G = d.ghosts, style = d.style;
+    if (style === 'windmill' && d.arcFrom !== null && (!d.slammed || d.hangT < 0.3)) {
+      const T = pose(p.torso, al), A = pose(p.arm, al), oy = -p.dims.torsoH / 2 + 10;
+      const sx = T.x - Math.sin(T.a) * oy, sy = T.y + Math.cos(T.a) * oy, R = p.dims.armL + 2;   // round the shoulder, just past the hand
+      const head = d.th + Math.atan2(Math.sin((A.a - T.a) * p.dir - d.th), Math.cos((A.a - T.a) * p.dir - d.th));   // the hand as drawn
+      const from = Math.max(d.arcFrom, head - 5.6), fade = d.slammed ? 1 - d.hangT / 0.3 : 1, n = 28;
+      if (head > from + 0.1) {
+        ctx.lineCap = 'round';
+        for (let i = 0; i < n; i++) {   // tail to head: thin and faint to full width
+          const a0 = T.a + p.dir * lerp(from, head, i / n), a1 = T.a + p.dir * lerp(from, head, (i + 1) / n), k = (i + 1) / n;
+          ctx.beginPath(); ctx.moveTo(sx - Math.sin(a0) * R, sy + Math.cos(a0) * R); ctx.lineTo(sx - Math.sin(a1) * R, sy + Math.cos(a1) * R);
+          ctx.globalAlpha = fade * (0.15 + 0.75 * k); ctx.strokeStyle = col; ctx.lineWidth = 3 + r * 1.0 * k; ctx.stroke();
+          ctx.globalAlpha = fade * (0.2 + 0.8 * k); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 + r * 0.4 * k; ctx.stroke();
+        }
+        ctx.lineCap = 'butt'; ctx.globalAlpha = 1;
+      }
+    }
+    if (!G || !G.length) return;
+    const n = G.length, path = () => { ctx.beginPath(); G.forEach((g, i) => i ? ctx.lineTo(g.x, g.y) : ctx.moveTo(g.x, g.y)); ctx.lineTo(B.x, B.y); };
+    ctx.lineCap = 'round';
+    if (style === 'hammer') {   // heavy: an ink edge, the team colour, a yellow core
+      path(); ctx.globalAlpha = 0.7; ctx.strokeStyle = INK; ctx.lineWidth = r * 1.45 + 6; ctx.stroke();
+      ctx.globalAlpha = 0.75; ctx.strokeStyle = col; ctx.lineWidth = r * 1.45; ctx.stroke();
+      ctx.globalAlpha = 0.95; ctx.strokeStyle = '#ffe23b'; ctx.lineWidth = r * 0.5; ctx.stroke();
+    } else if (style === 'elbow') {   // honey: gold over orange, with drips falling off the afterimages
+      path(); ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ff9a1f'; ctx.lineWidth = r * 1.3; ctx.stroke();
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = r * 0.5; ctx.stroke();
+      ctx.fillStyle = '#ffd23f';
+      G.forEach((g, i) => { const k = (n - i) / n; ctx.globalAlpha = 0.3 + 0.5 * (1 - k); ctx.fillRect(g.x - 3, g.y + r * 0.6 + k * 16, 6, 6 + k * 6); });
+    } else if (style !== 'windmill') {   // a tomahawk: the team colour with a white core
+      path(); ctx.globalAlpha = 0.8; ctx.strokeStyle = col; ctx.lineWidth = r * 1.3; ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.9; ctx.lineWidth = r * 0.45; ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+    const big = style === 'hammer' ? 1.1 : 1;
+    if (style === 'windmill') { ctx.globalAlpha = 1; return; }   // (the arc is the windmill's trail: afterimages over it only muddy it)
+    G.forEach((g, i) => { if (style === 'hammer' && i % 2) return; ctx.globalAlpha = 0.25 + 0.45 * i / n; ball(ctx, g.x, g.y, r * big * (0.8 + 0.2 * i / n), B.a, false); });
+    ctx.globalAlpha = 1;
+  }
+
   /** The whole court: venue, hoops, players, ball, nets. */
   function world(ctx, w, al, t, W, H) {
     venue(ctx, w, W, H);
@@ -397,14 +444,8 @@ const Render = (() => {
       player(ctx, p, al, w.S.kits[p.team]);
     }
     if (w.trail) trail(ctx, w.trail, r, t);
-    if (w.dunk && w.dunk.ghosts) {   // a dunk in the air: the ball's afterimages and a swoosh through them, in the dunker's colour
-      const G = w.dunk.ghosts, col = TEAM_COLORS[w.dunk.p.team];
-      ctx.lineCap = 'round'; ctx.strokeStyle = col; ctx.globalAlpha = 0.8; ctx.lineWidth = r * 1.3;
-      ctx.beginPath(); G.forEach((g, i) => i ? ctx.lineTo(g.x, g.y) : ctx.moveTo(g.x, g.y)); ctx.lineTo(B.x, B.y); ctx.stroke();
-      ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.9; ctx.lineWidth = r * 0.45; ctx.stroke(); ctx.lineCap = 'butt';
-      G.forEach((g, i) => { ctx.globalAlpha = 0.25 + 0.45 * i / G.length; ball(ctx, g.x, g.y, r * (0.8 + 0.2 * i / G.length), B.a, false); });
-      ctx.globalAlpha = 1;
-    }
+    // (a replay draws a view made with Object.create over the world: the live dunk is not that moment's, so it is drawn live only)
+    if (w.dunk && Object.getPrototypeOf(w) === Object.prototype) dunkTrail(ctx, w.dunk, B, r, al);
     const nearFloor = B.y + r > F() - 5, vy = w.ball.velocity.y;
     const sq = nearFloor && !w.hold ? Math.min(0.3, Math.abs(vy) * 0.035) : 0;
     ball(ctx, B.x, B.y, r, B.a, true, sq);

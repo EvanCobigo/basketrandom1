@@ -307,11 +307,15 @@ function onPhysEvent(ev) {
   if (ev.type === 'dunkstart' && ev.putback) { sfx.grab(); callout('PUTBACK!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 18, { speed: 360, life: 0.6, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team]], size: 9, g: 500, drag: 0.92 }); events.push({ type: 'dunkstart', team: ev.team, style: ev.style, putback: true }); return; }
   if (ev.type === 'dunkstart') { sfx.grab(); if (ev.oop) { callout(ev.giveGo ? 'GIVE-AND-GO!' : 'ALLEY-OOP!', ev.team, ev.x, ev.y); world.hype = 1; state.shake = Math.max(state.shake, tune.shake * 0.5); puff(ev.x, ev.y, 22, { speed: 380, life: 0.7, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 500, drag: 0.92 }); } events.push({ type: 'dunkstart', team: ev.team, style: ev.style, oop: !!ev.oop, giveGo: !!ev.giveGo }); return; }
   if (ev.type === 'dunk') {   // the slam: an impact ring at the rim, a burst of chalk dust, and the view punches in for a moment
-    state.rings = (state.rings || []).concat([{ x: ev.x, y: ev.y, r: 6, max: ev.oop || ev.giveGo ? 150 : 110, t: 0, life: 0.3 }]);
-    puff(ev.x, ev.y + 30, 10, { speed: 200, angle: Math.PI / 2, cone: 2.2, life: 0.5, colors: ['#ffffff', '#e8e2d6'], size: 7, g: 200, drag: 0.9 });
-    state.zoom = { x: ev.x, y: ev.y, t: 0.28, max: 0.28, k: ev.oop || ev.giveGo || ev.putback ? 0.08 : 0.05 };
+    // (a two-hand hammer jam lands heavier: a second, wider ring, more dust thrown down, a deeper punch-in)
+    const heavy = ev.style === 'hammer', big = ev.oop || ev.giveGo ? 150 : 110;
+    state.rings = (state.rings || []).concat([{ x: ev.x, y: ev.y, r: 6, max: big * (heavy ? 1.3 : 1), t: 0, life: 0.3 }], heavy ? [{ x: ev.x, y: ev.y + 10, r: 4, max: big * 0.7, t: 0, life: 0.42 }] : []);
+    puff(ev.x, ev.y + 30, heavy ? 20 : 10, { speed: heavy ? 300 : 200, angle: Math.PI / 2, cone: 2.2, life: 0.5, colors: ['#ffffff', '#e8e2d6'], size: heavy ? 9 : 7, g: 200, drag: 0.9 });
+    state.zoom = { x: ev.x, y: ev.y, t: 0.28, max: 0.28, k: (ev.oop || ev.giveGo || ev.putback ? 0.08 : 0.05) + (heavy ? 0.03 : 0) };
   }
-  if (ev.type === 'dunk') { markDunk(ev); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk(); state.shake = tune.shake * (ev.oop ? 1 : 0.6); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
+  if (ev.type === 'dunk') { const heavy = ev.style === 'hammer'; markDunk(ev); state.fire = { hoop: world.hoops.find(h => h.team === ev.team), t: tune.fire_time }; sparkShow(); puff(ev.x, ev.y, 18, { speed: 360, life: 0.55, colors: ['#ffd23f', '#ffffff', Render.TEAM_COLORS[ev.team], '#ff9a1f'], size: 9, g: 700 }); sfx.dunk();
+    if (heavy) { tone(52, 0.9, 'sine', 0.5, 0, 26, { att: 0.002, glide: 0.5, verb: 0.35 }); noise(0.5, 0.26, 480, 0.01, { to: 110, q: 0.7, verb: 0.3 }); }   // the hammer: a deeper boom under the slam
+    state.shake = tune.shake * (ev.oop ? 1 : 0.6) * (heavy ? tune.hammer_shake : 1); state.hitstop = tune.dunk_hitstop * (ev.oop ? 1.8 : 1) * (heavy ? 1.5 : 1); events.push({ type: 'dunk', team: ev.team, style: ev.style, hang: ev.hang }); return; }
   if (ev.type === 'rimblast') {   // a rim left red hot under a player blows: fire, a boom, a shake, and a small call
     sfx.swat(); tone(70, 0.6, 'sine', 0.45, 0, 30, { att: 0.002, glide: 0.4, verb: 0.35 }); noise(0.35, 0.3, 700, 0, { to: 160, q: 0.6, verb: 0.3 });
     state.shake = Math.max(state.shake, tune.shake * 1.5); state.hitstop = Math.max(state.hitstop, 0.06);
@@ -407,7 +411,7 @@ function courtAlpha() { return Math.min(1, physAcc + ALPHA * tune.game_speed); }
 function heldKeys() { return KEYS.map(k => down.has(k)); }
 const DUST = () => (world && Render.VENUES[world.S.venue].line) || '#ffffff';
 const SCORE_KINDS = { dunk: 'DUNK!', fade: 'FADEAWAY!', shot: 'JUMP SHOT!' };
-const DUNK_NAMES = { tomahawk: 'TOMAHAWK DUNK!', windmill: 'WINDMILL DUNK!', elbow: 'HONEY DIP!' };
+const DUNK_NAMES = { tomahawk: 'TOMAHAWK DUNK!', windmill: 'WINDMILL DUNK!', elbow: 'HONEY DIP!', hammer: 'HAMMER JAM!' };
 /** A dunk's replay moment: a give-and-go, alley-oop or putback by what led to it, otherwise by its style (FANCY_DUNKS) and hang. */
 function markDunk(ev) {
   const k = ev.giveGo ? 'giveGo' : ev.oop ? 'oop' : ev.putback ? 'putback' : FANCY_DUNKS.includes(ev.style) ? 'fancyDunk' : ev.hang ? 'hangDunk' : 'dunk';
@@ -679,7 +683,7 @@ function drawGame(opts = {}) {
     const d = state.dribble, shaky = d.sloppy >= 4;
     text(`DRIBBLE x${d.n}${shaky ? '  (losing it!)' : d.clean ? '  IN RHYTHM' : ''}`, W / 2, (state.aiDebug && cpu ? 250 : 154) + aiN * 20, 18, shaky ? '#ff5b5b' : d.clean ? '#7ee08a' : Render.TEAM_COLORS[d.team], { weight: 900, stroke: 5 });
   }
-  if (world && world.hold && world.hold.dunkReady && (scene === 'play') && !(world.hold.p.team === 1 && cpu) && !(world.hold.p.team === 0 && cpuA)) {   // (a person's prompt: the computer does not need one)
+  if (world && world.hold && world.hold.dunkReady && !world.dunk && (scene === 'play') && !(world.hold.p.team === 1 && cpu) && !(world.hold.p.team === 0 && cpuA)) {   // (a person's prompt: the computer does not need one)
     const p = world.hold.p, h = world.hoops.find(q => q.team === p.team), on = Math.floor(state.t * 4) % 2;
     text(`TAP ${p.team ? 'UP' : 'W'} TO DUNK`, h.cx, h.boardTop - 30, 18, on ? '#ffd23f' : '#ffffff', { weight: 900, stroke: 5 });
   }
