@@ -101,7 +101,7 @@ const Physics = (() => {
     engine.positionIterations = 10; engine.velocityIterations = 8; engine.constraintIterations = 4;
     const half = S.courtW / 2, L = CX - half, R = CX + half;
     const w = Object.assign(wRef, { engine, S, L, R, cx: CX, floorY: FLOOR_Y, players: [], hoops: [], kicks: [], rng, onEvent,
-      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, dribbleBall: null, dribCap: [0, 0], noDunkAfterDribble: [false, false], cut: null, hot: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] });
+      time: 0, hold: null, ignoreUntil: 0, trail: null, dunk: null, dribbleBall: null, dribCap: [0, 0], dribZone: [null, null], noDunkAfterDribble: [false, false], cut: null, hot: null, passGuard: null, prevB: [false, false], bheld: [false, false], hustle: [false, false] });
 
     const statics = [
       box(CX, FLOOR_Y + 200, 4000, 400, 'floor', { friction: 1 }),
@@ -240,6 +240,17 @@ const Physics = (() => {
   }
   function attackedHoop(w, p) { return w.hoops.find(h => h.team === p.team); }
   const carrier = w => (w.hold ? w.hold.p : null);
+  /** The feet: the average x of the two legs (the swing tilts the torso back and forth over them). */
+  const feetOf = p => (p.legs[0].position.x + p.legs[1].position.x) / 2;
+  /**
+   * Whether player p may dribble here: a team with a dribble zone (w.dribZone, {lo, hi}: the CPU's, the middle third of the court)
+   * dribbles only with its feet and the ball inside it. A team without one dribbles anywhere.
+   */
+  function inDribZone(w, p) {
+    const z = w.dribZone && w.dribZone[p.team]; if (!z) return true;
+    const fx = feetOf(p), bx = w.ball.position.x;
+    return fx >= z.lo && fx <= z.hi && bx >= z.lo && bx <= z.hi;
+  }
 
   /** Steer one ragdoll: planted rocking, floppy legs, getting up, arm motor, and the jump. */
   function drive(w, p, held, T, dt) {
@@ -272,8 +283,11 @@ const Physics = (() => {
     // part's forward speed is taken away (its swing back and forth still goes on)
     // (looked at one step ahead, and applied again at the end of the step, after any hop, so nothing carries it past)
     const cap = w.dribCap[p.team], capOn = cap > 0 && !!w.dribbleBall && w.lastBouncer === p && !w.hold;   // (only while his own dribble is out of the hand)
-    const feetX = (p.legs[0].position.x + p.legs[1].position.x) / 2, feetV = (p.legs[0].velocity.x + p.legs[1].velocity.x) / 2;   // (the feet: the swing tilts the torso back and forth over them)
-    const capped = capOn && (feetX + feetV - (p.dribX0 ?? feetX)) * p.dir >= cap;
+    const feetX = feetOf(p), feetV = (p.legs[0].velocity.x + p.legs[1].velocity.x) / 2;   // (the feet: the swing tilts the torso back and forth over them)
+    // a team with a dribble zone (the CPU): its edge on the rim side stops the dribble's slide the same way, the feet looked at one step
+    // ahead (after the catch too, while the slide lasts: the dribble carries nobody past it), and zoneEdge() stops the rest
+    const zone = w.dribZone && w.dribZone[p.team];
+    const capped = capOn && (feetX + feetV - (p.dribX0 ?? feetX)) * p.dir >= cap || !!zone && (feetX + feetV - (p.dir > 0 ? zone.hi : zone.lo)) * p.dir >= -1;
     // the swing only takes over once the body is fairly upright: a player who lands tilted is
     // righted gently by the upright spring first, never snapped round in one step
     const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < T.rock_engage;   // dribbling too: the swing steers it
@@ -372,6 +386,19 @@ const Physics = (() => {
     p.prevHeld = held;
     if (capOn && ((p.legs[0].position.x + p.legs[1].position.x) / 2 + (p.legs[0].velocity.x + p.legs[1].velocity.x) / 2 - (p.dribX0 ?? feetX)) * p.dir >= cap)
       for (const part of p.parts) if (part.velocity.x * p.dir > 0) Body.setVelocity(part, { x: 0, y: part.velocity.y });
+    zoneEdge(w, p);
+  }
+
+  /**
+   * A zoned team's dribbler, while his dribble is out of the hand: every part's motion out past one of the zone's edges (both: behind
+   * him only a knock carries him out) is taken away, the feet looked at one step ahead. Run at the end of drive() and again after spread().
+   */
+  function zoneEdge(w, p) {
+    const z = w.dribZone && w.dribZone[p.team];
+    if (!z || !w.dribbleBall || w.lastBouncer !== p || w.hold) return;
+    const fx = feetOf(p) + (p.legs[0].velocity.x + p.legs[1].velocity.x) / 2;
+    // (a pixel early: the solver still nudges the body a little after the speed is gone)
+    for (const [edge, s] of [[z.hi, 1], [z.lo, -1]]) if ((fx - edge) * s >= -1) for (const part of p.parts) if (part.velocity.x * s > 0) Body.setVelocity(part, { x: 0, y: part.velocity.y });
   }
 
   /** Players crowding one spot are eased apart, so they never melt into one blob. */
@@ -1070,6 +1097,8 @@ const Physics = (() => {
       if (h.bouncing && !bk) {
         // no dribble from a seated player: the tap is lost and the ball stays in the hand (a pass still goes)
         if (h.bcharge < T.dribble_threshold && seated(w, p, T)) { h.bouncing = false; h.bcharge = 0; w.onEvent({ type: 'seatedtap', team: p.team }); }
+        // nor from outside his team's dribble zone (the CPU's middle third: feet or ball past an edge): lost the same way, a pass still goes
+        else if (h.bcharge < T.dribble_threshold && !inDribZone(w, p)) { h.bouncing = false; h.bcharge = 0; w.onEvent({ type: 'zonetap', team: p.team }); }
         else { bounce(w, T); return; }
       }
       const hoop = attackedHoop(w, p);
@@ -1103,7 +1132,8 @@ const Physics = (() => {
       if (own || shareInHandBox(p, ball, T) > 0.5 || touchesAbdomen(p, ball, T)) {
         const again = p === w.lastBouncer && p.queued; p.queued = false;   // a queued dribble tap fires however the dribbler catches it
         grab(w, p, T, own ? 'dribble' : 'grab', held[p.team]);
-        if (again && !seated(w, p, T)) { w.hold.bcharge = 0; bounce(w, T); }   // (not from a seated catch: no dribbling sitting down)   // the queued tap: back down at once
+        if (again && !seated(w, p, T) && inDribZone(w, p)) { w.hold.bcharge = 0; bounce(w, T); }   // (not from a seated catch: no dribbling sitting down)   // the queued tap: back down at once
+        else if (again && !inDribZone(w, p)) w.onEvent({ type: 'zonetap', team: p.team, queued: true });   // (nor outside the zone: the ball stays in the hand)
         break;
       }
     }
@@ -1133,6 +1163,7 @@ const Physics = (() => {
     stepLob(w, T); stepCut(w, T);
     for (const p of w.players) drive(w, p, busy(p) ? false : held[p.team], T, dt);
     spread(w, T);
+    for (const p of w.players) zoneEdge(w, p);   // (again: the spread's push would carry a dribbler past the edge)
     w.kicks.length = 0;
     Engine.update(w.engine, DELTA);
     for (const p of w.players) {
@@ -1144,7 +1175,14 @@ const Physics = (() => {
     possession(w, held, bheld, T, dt);
     rimHeat(w, T, dt);
     { const db = w.dribbleBall, cap = db ? w.dribCap[db.team] : 0;   // a capped team's dribbled ball goes no further than dribCap either
-      if (cap > 0 && !w.hold && db.x0 !== undefined && (w.ball.position.x + w.ball.velocity.x - db.x0) * db.dir >= cap && w.ball.velocity.x * db.dir > 0) Body.setVelocity(w.ball, { x: 0, y: w.ball.velocity.y }); }
+      if (cap > 0 && !w.hold && db.x0 !== undefined && (w.ball.position.x + w.ball.velocity.x - db.x0) * db.dir >= cap && w.ball.velocity.x * db.dir > 0) Body.setVelocity(w.ball, { x: 0, y: w.ball.velocity.y });
+      // a zoned team's dribbled ball stops at the zone's edges too (looked at one step ahead), as its dribbler does; one pushed past an edge by
+      // a body (a teammate still meets a dribble; the solver moves it with no speed to take away) is put back on the edge
+      const z = db && w.dribZone ? w.dribZone[db.team] : null, b = w.ball;
+      if (z && !w.hold) {
+        if (b.position.x > z.hi || b.position.x < z.lo) Body.setPosition(b, { x: clamp(b.position.x, z.lo, z.hi), y: b.position.y });
+        if ((b.position.x + b.velocity.x >= z.hi && b.velocity.x > 0) || (b.position.x + b.velocity.x <= z.lo && b.velocity.x < 0)) Body.setVelocity(b, { x: 0, y: b.velocity.y });
+      } }
     const ball = w.ball;
     if (w.trail) {
       w.trail.t += dt;
