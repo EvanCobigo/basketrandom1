@@ -19,6 +19,7 @@ const Settings = (() => {
     ['JUMPING AND MOVING', k => k.startsWith('jump_') || ['hop_reach', 'coyote_time', 'spread_distance', 'spread_push', 'hustle_gap', 'hustle_jump'].includes(k)],
     ['CATCHING', ['regrab_delay', 'palm_offset', 'belly_margin', 'hand_box', 'steal_guard', 'strip_speed', 'block_window', 'block_pop']],
     ['SHOOTING', k => k.startsWith('shot_') || k.startsWith('fade_') || k.startsWith('fake_')],
+    ['TWO-POINT LINE (NEXT ROUND)', k => k.startsWith('line_')],
     ['DUNKS', k => k.startsWith('dunk_')],
     ['PASSING AND DRIBBLING', k => k.startsWith('bounce_') || k.startsWith('pass_') || k.startsWith('dribble_')],
     ['TRAILS', k => k.startsWith('perfect_') || k.startsWith('trail_') || k === 'soft_touch'],
@@ -41,11 +42,12 @@ const Settings = (() => {
   const TABS = ['MATCH', 'FEEL', 'LOOK AND SOUND'];
   const styleName = v => v <= 0 ? 'RANDOM' : (typeof AI !== 'undefined' && AI.STYLES[v - 1] ? AI.STYLES[v - 1].name : String(v));
   const SIMPLE = [
-    { tab: 0, key: 'win_score', label: 'POINTS TO WIN', desc: 'FIRST TEAM TO THIS MANY POINTS WINS. LONG SHOTS ARE WORTH 2.', fmt: v => v + ' POINTS' },
+    { tab: 0, key: 'win_score', label: 'POINTS TO WIN', desc: 'FIRST TEAM TO THIS MANY POINTS WINS. A SHOT FROM BEYOND THE TWO-POINT LINE IS WORTH 2.', fmt: v => v + ' POINTS' },
     { tab: 0, key: 'game_speed', label: 'GAME SPEED', desc: 'SLOWER IS EASIER TO FOLLOW, FASTER IS MORE FRANTIC.', fmt: (v, k) => pct(v, k) },
     { tab: 0, key: 'ai_level', label: 'CPU LEVEL', desc: 'HOW GOOD THE COMPUTER IS IN A VS CPU MATCH, FROM ROOKIE TO MYTHIC.', fmt: v => ['ROOKIE', 'AMATEUR', 'PRO', 'ALL-STAR', 'LEGEND', 'MYTHIC'][v - 1] || String(v) },
     { tab: 0, key: 'ai_style', label: 'CPU STYLE', desc: 'HOW THE COMPUTER LIKES TO PLAY. RANDOM PICKS A NEW STYLE EACH MATCH; STREET BALL GOES FOR FLASHY PLAYS.', fmt: styleName },
     { tab: 0, key: 'ai_air_miss', label: 'CPU AIM IN THE AIR', desc: 'HOW MUCH THE COMPUTER MISSES SHOTS TAKEN HIGH IN A JUMP. A SHOT FROM THE FLOOR IS ITS BEST ONE. 0 TURNS IT OFF.', fmt: v => v <= 0 ? 'OFF' : v <= 35 ? 'LOW' : v <= 75 ? 'NORMAL' : 'HIGH' },
+    { tab: 1, key: 'line_frac', label: '2-POINT LINE', desc: 'HOW FAR OUT EACH TEAM\'S TWO-POINT LINE IS FROM THE BASKET IT ATTACKS, AS A SHARE OF THE WAY TO THE CENTRE LINE. APPLIES FROM THE NEXT ROUND.', fmt: v => Math.round(v * 100) + '% OUT' },
     { tab: 1, key: 'jump_height', label: 'JUMP POWER', desc: 'HOW HIGH A FULL JUMP GOES.', fmt: (v, k) => pct(v, k) },
     { tab: 1, key: 'dunk_reach_x', label: 'DUNK REACH', desc: 'HOW CLOSE TO THE RIM YOU NEED TO BE TO DUNK. SMALLER IS HARDER.', fmt: (v, k) => pct(v, k) },
     { tab: 1, key: 'fold_stiffness', label: 'BODY STIFFNESS', desc: 'HOW STIFF THE HIPS ARE. HIGHER FOLDS LESS, LOWER IS FLOPPIER.', fmt: v => Math.round(v * 100) + '%' },

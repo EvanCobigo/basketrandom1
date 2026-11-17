@@ -22,15 +22,16 @@ const Scoring = {
     return null;
   },
   /**
-   * Points for a basket: 2 for a jump shot released on the far side of the centre line from the
-   * hoop it went in, 1 for anything else (dunks, close shots, scrambles).
+   * Points for a basket: 2 for a jump shot released beyond the scorer's two-point line (on the far side of it from the hoop it
+   * went in; the line is halfway between that hoop and the centre line, see Physics.createWorld lineX), 1 for anything else
+   * (dunks, close shots, scrambles).
    * @param {{kind:string, fromX:number}|null} shot the shot that went in, if it was the scorer's own
    * @param {number} hoopX the hoop's centre
-   * @param {number} centreX the court's centre line
+   * @param {number} lineX the scorer's two-point line
    */
-  points(shot, hoopX, centreX) {
+  points(shot, hoopX, lineX) {
     if (!shot || shot.kind === 'dunk' || shot.fromX === undefined) return 1;
-    return (shot.fromX - centreX) * Math.sign(hoopX - centreX) < 0 ? 2 : 1;
+    return (shot.fromX - lineX) * Math.sign(hoopX - lineX) < 0 ? 2 : 1;
   },
   /** Index of the team that has reached `target`, or -1. */
   winner(score, target) {

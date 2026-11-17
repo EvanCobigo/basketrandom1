@@ -425,8 +425,33 @@ const Render = (() => {
   }
 
   /** The whole court: venue, hoops, players, ball, nets. */
+  /**
+   * Each team's two-point line, painted on the floor in that team's colour (the line for the oranges is on the teal half, between the
+   * teal basket and the centre line, and the other way round) with a faint beam above it so it reads in the air. A shooter of that team
+   * holding the ball on the line's hot spot (inside line_zone) makes it flash: a shot from there goes in.
+   */
+  function twoLines(ctx, w, t, H) {
+    if (!w.lineX) return;
+    const zone = CONFIG.line_zone.value;
+    for (const team of [0, 1]) {
+      const x = Math.round(w.lineX[team]), col = TEAM_COLORS[team];
+      const hot = !!w.hold && w.hold.p.team === team && Math.abs(Physics.handPos(w.hold.p).x - x) <= zone && w.hold.p.sinceGround < 0.06;
+      const bg = ctx.createLinearGradient(0, F() - 260, 0, F());   // a faint beam up from the floor
+      bg.addColorStop(0, 'rgba(0,0,0,0)'); bg.addColorStop(1, mixAlpha(col, hot ? 0.5 : 0.26));
+      ctx.fillStyle = bg; ctx.fillRect(x - 7, F() - 260, 14, 260);
+      ctx.fillStyle = '#14111f'; ctx.fillRect(x - 8, F() + 1, 16, H - F());                 // an ink edge so it reads on any floor
+      ctx.fillStyle = hot && Math.floor(t * 8) % 2 ? '#ffffff' : col;                       // a painted stripe down the floor
+      for (let y = F() + 3; y < H; y += 20) ctx.fillRect(x - 6, y, 12, 14);
+      ctx.fillStyle = col; ctx.fillRect(x - 18, F() + 1, 36, 7);
+      text(ctx, '2', x, F() + 44, 40, col, { stroke: 7 });
+    }
+  }
+  /** `hex` as an rgba() string at alpha a. */
+  function mixAlpha(c, a) { const n = parseInt(toHex(c).slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+
   function world(ctx, w, al, t, W, H) {
     venue(ctx, w, W, H);
+    twoLines(ctx, w, t, H);
     for (const x of [w.L - 40, w.R + 40]) sparkMachine(ctx, x, F(), w.sparkT || 0, t);
     for (const h of w.hoops) hoopBack(ctx, h);
     if (w.hold) { // the dunk zone: a floor marker under the attacked rim while its carrier is near

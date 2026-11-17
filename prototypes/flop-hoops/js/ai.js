@@ -335,10 +335,10 @@ const AI = (() => {
       s.shot = sh; prof.shots++;
       const dist = Math.abs(sh.fromX - dfn.cx);
       prof.shotDist = prof.shots === 1 ? dist : lerp(prof.shotDist, dist, 0.25);
-      if ((sh.fromX - w.cx) * sh.dir < 0) prof.longShots++;
+      if ((sh.fromX - w.lineX[sh.team]) * sh.dir < 0) prof.longShots++;   // (beyond the shooter's two-point line)
       const pressed = w.players.some(q => q.team === c.team && Math.abs(q.torso.position.x - sh.fromX) < 130);
       // the scouting record: their long shots by distance from our rim, in 100 px bands
-      c.pending = { shot: sh, pressed, score: score[X.foeTeam], band: (sh.fromX - w.cx) * sh.dir < 0 ? Math.floor(dist / 100) : undefined };
+      c.pending = { shot: sh, pressed, score: score[X.foeTeam], band: (sh.fromX - w.lineX[sh.team]) * sh.dir < 0 ? Math.floor(dist / 100) : undefined };
     }
     if (w.dunk && w.dunk.p.team !== c.team && w.dunk !== s.dunk) { s.dunk = w.dunk; prof.dunks++; }
     if (w.pass && w.pass.team !== c.team && w.pass !== s.pass) { s.pass = w.pass; prof.passes++; }
@@ -363,7 +363,7 @@ const AI = (() => {
     if (c.lobPend !== null && c.tick - c.lobPend > 180) c.lobPend = null;
     if (sh && sh.team === c.team && sh.kind !== 'dunk' && !sh.lob && sh !== s.myShot) {
       s.myShot = sh;
-      const kind = sh.kind === 'fade' ? 'fade' : (sh.fromX - w.cx) * sh.dir < 0 ? 'long' : 'shot';
+      const kind = sh.kind === 'fade' ? 'fade' : (sh.fromX - w.lineX[sh.team]) * sh.dir < 0 ? 'long' : 'shot';
       const pressedMe = w.players.some(q => q.team !== c.team && Math.abs(q.torso.position.x - sh.fromX) < 130);
       c.myPending = { shot: sh, kind, score: score[c.team], bait: c.tick - c.afterFake < 150, pressed: pressedMe };   // a shot soon after a pump fake
     }
@@ -425,7 +425,7 @@ const AI = (() => {
    * coming down near it counts double. The lower levels read it less well (scaled by skill).
    */
   function dribbleRisk(c, X, p) {
-    const { w, T } = X, b = w.ball, dir = p.dir, steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);
+    const { w, T } = X, b = w.ball, dir = Physics.dribbleDir(w, p), steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);   // (a dribble goes toward the two-point line)
     const sx = dir * (0.45 + 0.55 * Math.max(0, steer * dir));
     const path = Physics.pathFrom(w, T, b.position.x, b.position.y, T.dribble_vx * (sx + 0.25 * dir), T.dribble_vy, 28);
     let risk = 0;
@@ -632,7 +632,7 @@ const AI = (() => {
     // a defender baited by a pump fake is out of the play for a moment
     const baited = c.tick - c.afterFake < 90;
     const press = pressure * (screened ? 0.4 : 1) * (baited ? 0.35 : 1);
-    const ownHalf = (ball.position.x - w.cx) * dir < 0;
+    const ownHalf = (ball.position.x - w.lineX[c.team]) * dir < 0;   // (beyond its two-point line: the name is from when it was the centre line)
     const far = Physics.previewShot(w, T, p, 1);
     const inRange = far.err !== null && far.err >= -span * 0.9;
     const qi = inRange ? quality(c, w, T, p) : { q: 0, width: 0 }, q = qi.q;
@@ -687,15 +687,17 @@ const AI = (() => {
       if (level < 3 || !r || !r.att) return prior;
       return lerp(prior, r.made / r.att, conf(r.att, X.K + 2) * learnOf(X) * 0.7);
     };
+    // a still shot on its two-point line goes in at nearly any cock-back (Physics shotVelocity): it takes it the moment it has it
+    const lineBonus = p.sinceGround < 0.06 && Math.abs(wrap(p.torso.angle)) <= T.line_sway_max && Math.abs(Physics.handPos(p).x - w.lineX[c.team]) <= T.line_zone ? 0.35 : 0;
     if (takesShot) {
       const pS0 = pBase * (1 - 0.3 * press);
       const pS = learned(ownHalf ? 'long' : 'shot', pS0);   // (pressure costs a shot less than it did: it shoots through a defender more readily)
       if (ownHalf) {
         const openLong = q >= 1 && near(p) > 200 ? (level >= 5 ? 0.15 : level >= 3 ? 0.08 : 0) : 0;   // left open out there, it takes the two
         const bonus = 0.2 * (st.range - 1) + (sit.behind >= 2 ? 0.15 : 0) + form(c, 'long', X.K) * 0.3 * learnOf(X) + (foeClose ? -0.1 : 0) + openLong;
-        add('long', 0.1 + X.W.shot * pS * pts + bonus + urgS + (role < 0 ? roleTilt : 0), startAim('long', openLong ? 'OPEN: TAKING THE TWO' : 'TAKING A LONG SHOT FOR 2'), 'LONG');
+        add('long', 0.1 + X.W.shot * pS * pts + bonus + lineBonus + urgS + (role < 0 ? roleTilt : 0), startAim('long', openLong ? 'OPEN: TAKING THE TWO' : 'TAKING A LONG SHOT FOR 2'), 'LONG');
       } else {
-        add('shot', 0.1 + X.W.shot * pS * pts + form(c, 'shot', X.K) * 0.3 * learnOf(X) + (screened ? 0.1 : 0) + (baited ? 0.35 : 0) + urgS + (role < 0 ? roleTilt : 0) + (rimHome ? 0.05 : 0), startAim('shot', 'GOING UP FOR A JUMP SHOT'), 'SHOT');
+        add('shot', 0.1 + X.W.shot * pS * pts + lineBonus + form(c, 'shot', X.K) * 0.3 * learnOf(X) + (screened ? 0.1 : 0) + (baited ? 0.35 : 0) + urgS + (role < 0 ? roleTilt : 0) + (rimHome ? 0.05 : 0), startAim('shot', 'GOING UP FOR A JUMP SHOT'), 'SHOT');
       }
       // a fadeaway when a defender is on it IN FRONT (between it and the rim): the lean takes the ball away from his hand.
       // It drifts back as it goes, so it needs room behind: never toward the rim it defends (that is how a fade ended in its own basket)
@@ -727,6 +729,12 @@ const AI = (() => {
       if (X.protect) u += 0.1;                                                                  // ahead near the end: run the clock
       u += (role > 0 ? roleTilt : 0) + 0.25 * form(c, 'dunk') * learnOf(X) - (rimHome ? 0.1 : 0);    // the front man drives; my dunks going in (or not) move it
       if (behind) u -= 0.25;                                                                    // (behind the basket a dribble goes nowhere)
+      // THE TWO-POINT LINE (iteration 50): a dribble now carries it toward its line, from either side, and a still shot on the line is the
+      // easiest one there is. So a dribble is worth taking to get there, and not once it is there; and one that would carry it back
+      // away from a rim it is closing on is worth much less
+      const lineGap = Math.abs(w.lineX[c.team] - px), away = Physics.dribbleDir(w, p) * dir < 0;
+      u += lineGap > 30 ? 0.3 * clamp(lineGap / 220, 0, 1) : -0.45;
+      if (away) u -= 0.3 + (gap < zone + 200 ? 0.3 : 0);
       if (st.street) u += 0.3;                                                                  // (street ball: the handle is the show)
       if (noDunk) u -= 0.3 * (1 - progress) + 0.15;                                              // (no dunk at the end of this drive: dribbling on is worth less, the nearer the rim the less)
       // dribbles of mine lost near a defender: dribbling into one is worth less (learned)
@@ -734,7 +742,7 @@ const AI = (() => {
       if (foeClose) u -= 0.5 * lossRate * conf(dl.n / 3) * learnOf(X) * (foeNear ? 1 : 0.5);
       u -= dribbleRisk(c, X, p) * (level >= 3 ? 0.6 : 0.3);                                  // (a dribble into a defender's hands: it reads the path first)
       if (screened) u += 0.25;                                                                 // (pick and roll: off the screen, turn the corner)
-      add('dribble', u, () => { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; say(c, st.street && gap < zone + 160 ? 'STREET BALL: SHOWING OFF THE HANDLE' : gap > zone + 160 ? 'DRIBBLING UPCOURT FOR A DUNK' : 'DRIVING TO THE RIM'); return c; }, 'DRIB', 24);
+      add('dribble', u, () => { c.bounce = true; c.bholdT = tap; c.dribs++; c.dribRec.n++; say(c, st.street && lineGap <= 30 ? 'STREET BALL: SHOWING OFF THE HANDLE' : lineGap > 30 ? 'DRIBBLING TO THE 2-POINT LINE' : 'DRIVING TO THE RIM'); return c; }, 'DRIB', 24);
     }
 
     // ---- the self-pass, from about halfway to the rim: it throws the ball ahead, hops after it, takes it out of the air near the rim
@@ -934,7 +942,7 @@ const AI = (() => {
    */
   function longThreat(c, X, foe) {
     const { w, T, dfn, level } = X;
-    if (level < 3 || (foe.torso.position.x - w.cx) * foe.dir >= 0) return 0;
+    if (level < 3 || (foe.torso.position.x - w.lineX[foe.team]) * foe.dir >= 0) return 0;
     const fq = foeQuality(c, w, T, foe).q, dist = Math.abs(foe.torso.position.x - dfn.cx), sc = c.scout[Math.floor(dist / 100)];
     let tv = fq === 2 ? 1 : fq === 1 ? 0.6 : 0;
     if (sc && sc.att) tv += (sc.made / sc.att - 0.3) * 0.8 * conf(sc.att, X.K) * Math.min(1, X.L.learn);
@@ -1014,7 +1022,7 @@ const AI = (() => {
     const predicted = th.shoot !== null && th.shoot <= lead;
     const early = L.look < 14 && hold.cocking && hold.charge > 0.4;
     // a long shot (level 4+): fly its early path from the release it predicts, and jump when a raised hand meets it on the way up
-    if (X.level >= 4 && hold.cocking && th.shoot !== null && (foe.torso.position.x - w.cx) * foe.dir < 0) {
+    if (X.level >= 4 && hold.cocking && th.shoot !== null && (foe.torso.position.x - w.lineX[foe.team]) * foe.dir < 0) {
       const k0 = th.shoot, b = w.ball, ch = Math.min(1, hold.charge + k0 * X.dt / T.shot_charge_time);
       const from = { x: b.position.x + b.velocity.x * k0, y: b.position.y + b.velocity.y * k0 };
       const v = Physics.shotVelocity(w, T, foe, ch, from), path = Physics.pathFrom(w, T, from.x, from.y, v.vx * foe.dir, -v.vy, 22);

@@ -60,6 +60,8 @@ After play: improve the AI intelligence allowing for more flashy plays that play
 After play: Shots should be more inaccurate the higher they are in the air while more accurate on ground (CPU only), allow dribbling anywhere on the court. AI's should spend a bit less time in the air but keep their guarding ability. Add a third archetype of AI called street ball which attempts flashier plays. Add more defensive maneuvers. Allow the AI archetype to be chosen in the secondary menu. Improve settings to be more legible and more user friendly.
 Answers: Archetype: add STREET BALL as a 9th style and make all styles pickable. Shot accuracy: CPU only. Dribble zone: remove both limits, near-rim dribbles allowed too. Settings: grouped sections, clearer values and toggles, description and preview, mouse friendly.
 
+After play: Add a new two point line where characters dribble towards the 2-point line instead of just dribbling forwards. There should be two of them: for oranges the 2-point line would be the teal side and vice versa. The character always dribbles in the direction of the two-point line. The closer the character is to the two-point line, the easier it is to shoot if they aren't swaying nor jumping. Make the cock-back timer make any length of press lead to goals save the extremities, only for the two point line. Make the line around the halfway point between the basket and the middle line.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -89,12 +91,12 @@ Every touch is contested from second one: the skill is timing your hop against t
 - First to 12 points (long shots 2, everything else 1) → victory screen → rematch
 
 ## Goal & fail state
-- Win: first team to 12 points. Lose: the other team reaches 12 first. A jump shot released on the far side of the centre line scores 2; dunks, close shots and scrambles score 1.
+- Win: first team to 12 points. Lose: the other team reaches 12 first. A jump shot released beyond the shooter's own two-point line (halfway between the basket and the centre line) scores 2; dunks, close shots and scrambles score 1.
 
 ## Features
 - [x] Multi-body ragdoll players (head, torso, arms, legs) on one key per team
 - [x] Ball physics with ground, player, rim and backboard collisions
-- [x] Basket detection, scoreboard, score animation, screen shake, round reset; long shots from past the centre line score 2 (+2 LONG SHOT! with sparks), dunks and everything else 1; first to 12
+- [x] Basket detection, scoreboard, score animation, screen shake, round reset; shots from beyond the team's two-point line score 2 (+2 TWO-POINTER! with sparks), dunks and everything else 1; first to 12
 - [x] Rounds: same rules every round (no modifiers); venue colours and player looks change
 - [x] Settings menu (title and pause): every coefficient in config.js by section, with sliders, keys and mouse; saved in this browser; RESET ALL
 - [x] A live crowd in the stands: heads bobbing on their own beats, on their feet with arms up when the sparks fly and on every basket
@@ -109,6 +111,10 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] More defensive moves: STRIP THE CATCH (a hand goes for a ball only just picked up), RECOVER (a carrier who got past it is chased in long hops), DEFLECT THE PASS (a hand up to meet a pass in the air), and street ball's steal gambles
 - [x] The CPU's style is picked on the title screen under the level (arrows or click: RANDOM, then the nine styles, each with a plain line) and in settings (CPU STYLE)
 - [x] Settings opens on three tabs (MATCH, FEEL, LOOK AND SOUND) of big rows: arrows each side of a bar, notches for named stops, a tick where the default is, an orange dot on changed rows, ON/OFF switches for anything 0/1, the value in words, a plain note and the default under the list; Tab or Q/E switch tabs, the mouse hovers, clicks arrows and tabs, drags bars
+- [x] Two two-point lines, one per team, painted on the floor in the team's colour (with a "2" and a faint beam) halfway (`line_frac` 0.5) between the basket the team attacks and the centre line: the oranges' is on the teal half and the teal team's on the orange half. A shot released beyond a team's own line scores 2 (this replaces the centre-line rule)
+- [x] A dribble always carries the dribbler toward his team's line, from either side of it (and bounces in place within 14 px of it); the lean in his swing only sets how far it carries
+- [x] The closer a shooter is to his line, the easier the shot, while he is still: feet down and the swing's lean under `line_sway_max` (0.3 rad); swaying more or jumping gives no help. Within `line_zone` (60 px) of the line any cock-back from `line_charge_min` (0.12) to `line_charge_max` (0.92) goes in; only the two extremes (a bare tap, a hold to the very end) miss. Nothing of this applies away from the line
+- [x] The CPU reads the line too: its 2-point test, scouting and long-shot defence use its own line; dribbling to the line is worth taking and not once it is there; a still shot on the line is taken at once
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held

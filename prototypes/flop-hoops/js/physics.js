@@ -182,6 +182,8 @@ const Physics = (() => {
       }
     });
     Events.on(engine, 'collisionActive', e => { for (const pr of e.pairs) touchPair(pr.bodyA, pr.bodyB); });
+    // each team's two-point line: line_frac of the way from the hoop it attacks to the centre line (so on the other team's half)
+    w.lineX = [0, 1].map(t => { const h = w.hoops.find(q => q.team === t); return h.cx + (w.cx - h.cx) * T.line_frac; });
     return w;
   }
 
@@ -252,6 +254,13 @@ const Physics = (() => {
     return fx >= z.lo && fx <= z.hi && bx >= z.lo && bx <= z.hi;
   }
 
+  /** Which way p's dribble carries him: toward his team's two-point line (+1 right, -1 left), 0 when he is within 14 px of it. */
+  function dribbleDir(w, p) {
+    const lx = w.lineX && w.lineX[p.team]; if (lx === undefined) return p.dir;
+    const d = lx - feetOf(p);
+    return Math.abs(d) < 14 ? 0 : Math.sign(d);
+  }
+
   /** Steer one ragdoll: planted rocking, floppy legs, getting up, arm motor, and the jump. */
   function drive(w, p, held, T, dt) {
     const S = w.S, g = gravityPx(w), grounded = p.sinceGround <= T.coyote_time;
@@ -282,12 +291,12 @@ const Physics = (() => {
     // a capped team (the CPU): one dribble carries the dribbler no further than dribCap toward the rim it attacks; past it every
     // part's forward speed is taken away (its swing back and forth still goes on)
     // (looked at one step ahead, and applied again at the end of the step, after any hop, so nothing carries it past)
-    const cap = w.dribCap[p.team], capOn = cap > 0 && !!w.dribbleBall && w.lastBouncer === p && !w.hold;   // (only while his own dribble is out of the hand)
+    const cap = w.dribCap[p.team], capOn = cap > 0 && !!w.dribbleBall && w.lastBouncer === p && !w.hold, cdir = p.dribDir || p.dir;   // (only while his own dribble is out of the hand)
     const feetX = feetOf(p), feetV = (p.legs[0].velocity.x + p.legs[1].velocity.x) / 2;   // (the feet: the swing tilts the torso back and forth over them)
     // a team with a dribble zone (the CPU): its edge on the rim side stops the dribble's slide the same way, the feet looked at one step
     // ahead (after the catch too, while the slide lasts: the dribble carries nobody past it), and zoneEdge() stops the rest
     const zone = w.dribZone && w.dribZone[p.team];
-    const capped = capOn && (feetX + feetV - (p.dribX0 ?? feetX)) * p.dir >= cap || !!zone && (feetX + feetV - (p.dir > 0 ? zone.hi : zone.lo)) * p.dir >= -1;
+    const capped = capOn && (feetX + feetV - (p.dribX0 ?? feetX)) * cdir >= cap || !!zone && (feetX + feetV - (p.dir > 0 ? zone.hi : zone.lo)) * p.dir >= -1;
     // the swing only takes over once the body is fairly upright: a player who lands tilted is
     // righted gently by the upright spring first, never snapped round in one step
     const swinging = planted && p.sinceJump > 0.2 && Math.abs(a) < T.rock_engage;   // dribbling too: the swing steers it
@@ -385,8 +394,8 @@ const Physics = (() => {
       for (const part of p.parts) Body.setVelocity(part, { x: part.velocity.x, y: part.velocity.y - add });
     } else if (!held) p.boosting = false;
     p.prevHeld = held;
-    if (capOn && ((p.legs[0].position.x + p.legs[1].position.x) / 2 + (p.legs[0].velocity.x + p.legs[1].velocity.x) / 2 - (p.dribX0 ?? feetX)) * p.dir >= cap)
-      for (const part of p.parts) if (part.velocity.x * p.dir > 0) Body.setVelocity(part, { x: 0, y: part.velocity.y });
+    if (capOn && ((p.legs[0].position.x + p.legs[1].position.x) / 2 + (p.legs[0].velocity.x + p.legs[1].velocity.x) / 2 - (p.dribX0 ?? feetX)) * cdir >= cap)
+      for (const part of p.parts) if (part.velocity.x * cdir > 0) Body.setVelocity(part, { x: 0, y: part.velocity.y });
     zoneEdge(w, p);
   }
 
@@ -552,7 +561,17 @@ const Physics = (() => {
       if (sol !== null) return { vx: sol, vy };
     }
     // (a hot player gets more help; the CPU's easy close shot, hold.easy, gets it all: a soft shot from under the rim is not a gamble)
-    const assist = w.hold && w.hold.p === p && w.hold.easy ? 1 : w.hold && w.hold.p === p && w.hold.assist !== undefined ? w.hold.assist : w.hot === p ? Math.max(T.shot_assist, T.heat_assist) : T.shot_assist;   // a hot player (a heat check) gets more help
+    let assist = w.hold && w.hold.p === p && w.hold.easy ? 1 : w.hold && w.hold.p === p && w.hold.assist !== undefined ? w.hold.assist : w.hot === p ? Math.max(T.shot_assist, T.heat_assist) : T.shot_assist;   // a hot player (a heat check) gets more help
+    // THE TWO-POINT LINE: a still shooter (feet down, the swing's lean under line_sway_max) is helped more the nearer he is to his line. On it
+    // (line_zone either side) any cock-back from line_charge_min to line_charge_max goes in: the help is total; only the extremes miss
+    if (!lob && w.hold && w.hold.p === p && w.lineX) {
+      const d = Math.abs(from.x - w.lineX[p.team]), lean = Math.abs(wrap(p.torso.angle));
+      if (p.sinceGround < 0.06 && lean <= T.line_sway_max && d < T.line_range) {
+        const inZone = d <= T.line_zone;
+        const boost = inZone ? (charge >= T.line_charge_min && charge <= T.line_charge_max ? 1 : 0) : (1 - (d - T.line_zone) / Math.max(1, T.line_range - T.line_zone)) * (1 - 0.5 * lean / T.line_sway_max);
+        assist = Math.max(assist, lerp(assist, 1, boost));
+      }
+    }
     if (assist > 0 && (hoop.cx - from.x) * p.dir > 30) {
       // a ball dropped on the exact centre clips the front rim on a shallow arc, so the help aims a little toward the board
       const sol = solveVx(w, T, hoop, from.x, from.y, vy, p.dir, hoop.cx + p.dir * T.aim_bias);
@@ -753,13 +772,15 @@ const Physics = (() => {
       const wild = (p.sloppy + Math.max(0, p.dribbleChain - T.dribble_safe_chain) * 0.5) * T.dribble_error;
       const steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);
       // every dribble carries you a little forward; leaning forward in the swing carries you further
-      p.dribbleSteer = p.dir * (0.45 + 0.55 * Math.max(0, steer * p.dir));
+      // (iteration 50: it goes toward the team's two-point line, from either side of it, not toward the rim; at the line it bounces in place)
+      const dd = dribbleDir(w, p); p.dribDir = dd;
+      p.dribbleSteer = dd * (0.45 + 0.55 * Math.max(0, steer * dd));
       // a dribbled ball passes through opponents' bodies: only an opponent's hand can take it
       ball.collisionFilter.mask = 0x1 | TEAM_CAT[p.team];
-      w.dribbleBall = { team: p.team, until: w.time + T.dribble_time + 0.6, x0: ball.position.x, dir: p.dir };
+      w.dribbleBall = { team: p.team, until: w.time + T.dribble_time + 0.6, x0: ball.position.x, dir: dd || p.dir };
       p.dribX0 = (p.legs[0].position.x + p.legs[1].position.x) / 2;
       if (w.noDunkAfterDribble[p.team]) p.dribbled = true;   // (a team under the rule: no dunk for him until the ball leaves him)   // (where this dribble started: a capped team's dribble carries nobody further than dribCap)
-      Body.setVelocity(ball, { x: T.dribble_vx * (p.dribbleSteer + 0.25 * p.dir) + (w.rng() * 2 - 1) * wild, y: T.dribble_vy + (w.rng() * 2 - 1) * wild * 0.5 });
+      Body.setVelocity(ball, { x: T.dribble_vx * (p.dribbleSteer + 0.25 * dd) + (w.rng() * 2 - 1) * wild, y: T.dribble_vy + (w.rng() * 2 - 1) * wild * 0.5 });
       Body.setAngularVelocity(p.torso, p.torso.angularVelocity + (w.rng() * 2 - 1) * T.dribble_sway * p.sloppy * 0.01);
       p.dribbleT = T.dribble_time; p.cd = 0;
       p.lastQuality = quality;
@@ -1328,5 +1349,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, seated, handPos, startCut, createWorld, step, dropBall, squircle, dunkReady, previewShot, predictLine, ballPath, pathFrom, riseOf, gravityPx, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
+  return { FLOOR_Y, CX, DELTA, dribbleDir, seated, handPos, startCut, createWorld, step, dropBall, squircle, dunkReady, previewShot, predictLine, ballPath, pathFrom, riseOf, gravityPx, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
 })();

@@ -578,10 +578,10 @@ function score(hoop) {
     shot.perfect = soft;
     if (world.trail && world.trail.shot === shot) world.trail.mode = soft ? 'rainbow' : shot.kind === 'fade' ? 'blue' : 'green';
   }
-  const pts = Scoring.points(own ? shot : null, hoop.cx, world.cx);
+  const pts = Scoring.points(own ? shot : null, hoop.cx, world.lineX[team]);   // (2 from beyond the scorer's two-point line)
   state.scoreKind = own ? (shot.perfect ? 'PERFECT SWISH!' : shot.kind !== 'dunk' && shot.clean ? 'SWISH! ' + SCORE_KINDS[shot.kind] : SCORE_KINDS[shot.kind])
     : (world.hold ? 'CARRIED IN!' : 'SCRAMBLE!');
-  if (pts === 2) state.scoreKind = (shot.perfect ? 'PERFECT ' : '') + 'LONG SHOT!';
+  if (pts === 2) state.scoreKind = (shot.perfect ? 'PERFECT ' : '') + 'TWO-POINTER!';
   if (own && shot.kind === 'dunk' && DUNK_NAMES[shot.style]) state.scoreKind = (shot.giveGo ? 'GIVE-AND-GO ' : shot.oop ? 'ALLEY-OOP ' : shot.putback ? 'PUTBACK ' : '') + DUNK_NAMES[shot.style];
   // the heat check: the same player scoring heat_streak times in a row (his own shots and dunks) is hot until the other team scores
   if (state.streak && state.streak.team !== team) { if (state.hot && state.hot.team !== team) callout('COOLED OFF', state.hot.team, hoop.cx, hoop.rimY - 40); state.streak = null; if (state.hot && state.hot.team !== team) state.hot = null; }
@@ -995,10 +995,12 @@ const scenes = {
       ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(898, 392, 2, 100);
       ptext('HOLD JUMP, LET GO TO SHOOT · TAP NEAR THE RIM TO DUNK', 899, 530, 1.5, '#b9b1d6', { shadow: 1 });
       ptext('TAP BOUNCE TO DRIBBLE · HOLD IT TO PASS', 899, 552, 1.5, '#b9b1d6', { shadow: 1 });
+      ptext('DRIBBLES GO TO YOUR 2-POINT LINE', 899, 580, 1.5, '#ffd23f', { shadow: 1 });
+      ptext('SHOOT STILL ON IT FOR AN EASY TWO', 899, 598, 1.5, '#ffd23f', { shadow: 1 });
       // secondary actions
       btn('SETTINGS', W / 2 - 274, 626, 260, 54, openSettings, '', 3, { kind: 'secondary', icon: 'gear' });
       btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W / 2 + 14, 626, 260, 54, () => setMuted(!muted), '', 3, { kind: 'secondary', icon: muted ? 'mute' : 'sound' });
-      ptext(`FIRST TO ${tune.win_score} POINTS  ·  LONG SHOTS +2  ·  ESC / P PAUSES  ·  M MUTES  ·  ARROWS + ENTER PICK`, W / 2, H - 20, 1.5, '#b3acd2', { shadow: 1 });
+      ptext(`FIRST TO ${tune.win_score} POINTS  ·  SHOTS FROM BEYOND THE LINE +2  ·  ESC / P PAUSES  ·  M MUTES  ·  ARROWS + ENTER PICK`, W / 2, H - 20, 1.5, '#b3acd2', { shadow: 1 });
       ctx.restore();
     },
   },
