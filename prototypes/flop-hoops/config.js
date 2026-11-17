@@ -22,6 +22,12 @@ window.CONFIG = {
   ai_dribble_reach: { value: 20, min: 0, max: 200, step: 5 },  // px: the most one CPU dribble carries the ball and the dribbler toward the rim it attacks (0: no limit)
   ai_dribble_zone: { value: 1, min: 0, max: 1, step: 1 },      // 1: the CPU dribbles anywhere but near a basket (ai_dribble_rim_gap), never down to the rim (0: anywhere)
   ai_dribble_rim_gap: { value: 230, min: 0, max: 500, step: 10 }, // px from either end of the court (where the baskets are) the CPU does not dribble into
+  ai_self_min_gap: { value: 220, min: 0, max: 600, step: 10 },  // px from the rim it attacks: the nearest a CPU self-pass is thrown from (levels 4+)
+  ai_self_max_gap: { value: 600, min: 100, max: 900, step: 10 }, // px: the farthest a CPU self-pass is thrown from
+  ai_self_lane_past: { value: 100, min: 0, max: 400, step: 10 }, // px past the CPU self-pass's second bounce that must be clear of defenders (it may throw over one in between)
+  ai_self_reach: { value: 150, min: 80, max: 400, step: 10 },    // px above the floor a defender reaches: a self-pass flying higher than this passes over him
+  ai_self_air: { value: 0.35, min: 0, max: 1, step: 0.05 },      // s: a CPU self-pass may also be thrown this long into a hop (0.1: from the floor only)
+  ai_self_front: { value: 60, min: 20, max: 300, step: 10 },     // px in front of the CPU thrower where a defender would take the self-pass throw
   ai_no_dribble_dunk: { value: 1, min: 0, max: 1, step: 1 },   // 1: a CPU player who has dribbled may not dunk until the ball leaves him (a pass, a self-pass, a shot)
   ai_fade_room: { value: 260, min: 0, max: 600, step: 10 },     // px the CPU needs between it and the rim it defends to fade away (the fade drifts back)
   ai_lob_guard: { value: 150, min: 0, max: 400, step: 10 },     // px: a defender this near the board stops a CPU alley-oop lob (levels 4+)

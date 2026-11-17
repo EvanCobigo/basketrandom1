@@ -441,6 +441,22 @@ const AI = (() => {
    * Where a floor pass (bounce key held for `ch` of bounce_charge_time) thrown from the held ball now comes back down:
    * the bounce's own velocity flown out (floor and walls) to its second floor contact, the end of its first hop.
    */
+  /**
+   * A thrown ball's lane, relative to the thrower (+ toward the rim): `low` the x's where it passes within a defender's reach
+   * (ai_self_reach above the floor) up to its second bounce, `second` where that second bounce is.
+   */
+  function passLane(X, p, ch) {
+    const { w, T } = X, b = w.ball, px = p.torso.position.x, dir = p.dir, low = [];
+    const path = Physics.pathFrom(w, T, b.position.x, b.position.y, lerp(T.bounce_vx_min, T.bounce_vx_max, ch) * p.dir, lerp(T.bounce_vy_min, T.bounce_vy_max, ch), 160);
+    let hits = 0, second = (path[path.length - 1].x - px) * dir;
+    for (let i = 1; i < path.length; i++) {
+      const x = (path[i].x - px) * dir;
+      if (w.floorY - path[i].y < T.ai_self_reach) low.push(x);
+      if (path[i].vy < 0 && path[i - 1].vy >= 0 && ++hits === 2) { second = x; break; }
+    }
+    return { low, second };
+  }
+
   function passLanding(X, p, ch) {
     const { w, T } = X, b = w.ball;
     const path = Physics.pathFrom(w, T, b.position.x, b.position.y, lerp(T.bounce_vx_min, T.bounce_vx_max, ch) * p.dir, lerp(T.bounce_vy_min, T.bounce_vy_max, ch), 160);
@@ -729,11 +745,17 @@ const AI = (() => {
     // ---- the self-pass, from about halfway to the rim: it throws the ball ahead, hops after it, takes it out of the air near the rim
     // itself and dunks (about 7 in 10 from 310-400 px out in the empty-lane test; further out the catch comes too late). It needs a
     // clear lane: the ball is loose on the floor on the way, so nobody may stand between it and the rim.
-    if (X.selfPass && !behind && c.tick > c.selfCool && p.sinceGround < 0.1 && gap >= 270 && gap <= 480 && !foes.some(f => { const fx = (f.torso.position.x - px) * dir; return fx > 20 && fx < gap + 40; })) {   // (from level 4, a wider window than the tested 310-420)
+    // (iteration 49: the window is wider, ai_self_min_gap..ai_self_max_gap)
+    const selfCh = () => c.selfCharge || clamp(0.62 + (gap - 270) / 1000, 0.6, 0.86) - 0.05 * clamp((gap - 380) / 40, 0, 1);   // (measured: 0.8 from 310-380 px out, 0.75 a little further; selfCharge lets a test override it)
+    const selfWin = X.selfPass && !behind && c.tick > c.selfCool && p.sinceGround < T.ai_self_air && gap >= T.ai_self_min_gap && gap <= T.ai_self_max_gap;
+    // it may throw it OVER a defender: a defender blocks it only where the ball passes low enough for him to reach (ai_self_reach above
+    // the floor: the bounce just in front, the second bounce), or within ai_self_lane_past beyond that second bounce (he gets to it first)
+    const selfLane = selfWin ? passLane(X, p, selfCh()) : null;
+    if (selfWin && !foes.some(f => { const fx = (f.torso.position.x - px) * dir; return fx > 20 && (fx < T.ai_self_front || (fx > selfLane.second && fx < selfLane.second + T.ai_self_lane_past) || selfLane.low.some(x => Math.abs(x - fx) < 30)); })) {
       const ss = c.selfStats, rate = ss.tries >= 3 ? ss.dunks / ss.tries : 0.45;   // its own record with the play
       const u = 0.9 + 0.6 * (rate - 0.4) * conf(ss.tries, 2) + 0.2 * (st.flash - 1) + 0.2 * (st.attack - 1);
       add('self', u, () => {
-        const ch = c.selfCharge || clamp(0.62 + (gap - 270) / 1000, 0.62, 0.86) - 0.05 * clamp((gap - 380) / 40, 0, 1);   // (measured: 0.8 from 310-380 px out, 0.75 a little further; selfCharge lets a test override it)
+        const ch = selfCh();
         c.selfLast = { gap: Math.round(gap), ch };
         c.bounce = true; c.bholdT = ch * T.bounce_charge_time; c.dribs = 0; c.selfCool = c.tick + 120; c.selfStats.tries++;
         c.self = { t0: c.tick, from: p, thrown: false };
