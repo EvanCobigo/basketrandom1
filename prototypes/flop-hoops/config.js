@@ -83,8 +83,25 @@ window.CONFIG = {
   heat_assist: { value: 0.85, min: 0, max: 1, step: 0.05 },        // a hot player's shot help (instead of shot_assist) until the other team scores
   oop_bonus: { value: 1.3, min: 1, max: 2, step: 0.05 },          // an alley-oop catch gets this much more dunk reach
   dunk_hang: { value: 0.18, min: 0, max: 0.6, step: 0.02 },      // s the dunker hangs on the rim after the slam
-  dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk or windmill ends hanging on the rim
+  dunk_hang_chance: { value: 0.5, min: 0, max: 1, step: 0.05 },   // chance a tomahawk, windmill or hammer ends hanging on the rim
   dunk_rim_hang: { value: 0.9, min: 0.2, max: 2, step: 0.05 },    // s of hanging on the rim when it happens
+  // ---- Dunk animation: every style is a swing of the arm timed to the jump (clock 0 at take-off, 1 at the top) ----
+  dunk_dip: { value: 0.45, min: 0, max: 1.2, step: 0.05 },        // rad the arm first dips back, the other way to its swing (anticipation)
+  dunk_dip_time: { value: 0.14, min: 0.04, max: 0.3, step: 0.01 }, // share of the jump the dip takes
+  dunk_cock_at: { value: 0.25, min: 0.15, max: 0.6, step: 0.01 },  // share of the jump by which the ball is up over the head (later, raised up the front, it snags under the rim)
+  dunk_strike_at: { value: 0.72, min: 0.5, max: 1, step: 0.01 },   // share of the jump by which every swing has the ball over the rim (later: short of it more often)
+  dunk_strike_steps: { value: 5, min: 2, max: 12, step: 1 },     // steps a tomahawk's or hammer's whip takes, from cocked to over the rim (it starts near the top of the jump)
+  dunk_track: { value: 1, min: 0.3, max: 1, step: 0.05 },       // share of the gap to the swing's next angle the arm closes in one step
+  dunk_air_steps: { value: 18, min: 8, max: 40, step: 1 },          // steps the swing takes in a dunk started in the air (no planned jump)
+  dunk_lean: { value: 0.16, min: 0, max: 0.6, step: 0.02 },         // rad the body leans into the swing: back as the ball goes back, forward into the slam
+  tomahawk_cock: { value: 0.45, min: 0, max: 1.2, step: 0.05 },     // rad past straight up a tomahawk cocks the ball behind the head
+  hammer_cock: { value: 0.8, min: 0.2, max: 1.4, step: 0.05 },      // rad past straight up a two-hand hammer cocks the ball (far behind the head)
+  windmill_start: { value: 1.1, min: 0.3, max: 1.6, step: 0.05 },   // rad in front of straight down a windmill's circle starts (the ball held out in front)
+  dunk_follow_angle: { value: 1.0, min: 0, max: 1.8, step: 0.05 },  // rad the arm carries on down through the rim after the slam
+  dunk_follow_time: { value: 0.13, min: 0.03, max: 0.4, step: 0.01 }, // s of that follow-through (a hang grabs the rim at 60% of it)
+  dunk_hang_pull: { value: 0.18, min: 0, max: 0.6, step: 0.02 },    // how strongly a dunker hanging on the rim is drawn in under his hand
+  hammer_flex: { value: 1.7, min: 1, max: 3, step: 0.1 },           // how far a hammer jam bends the rim (1: as far as any other dunk)
+  hammer_shake: { value: 1.6, min: 1, max: 3, step: 0.1 },          // times the screen shake of any other dunk a hammer jam gives
   block_window: { value: 0.9, min: 0.2, max: 2, step: 0.05 },   // s after a shot a defender's touch is a block
   block_pop: { value: 8, min: 2, max: 16, step: 0.5 },          // px/step a blocked ball flies back
   strip_speed: { value: 9, min: 3, max: 20, step: 0.5 },        // px/step hit that knocks a held ball loose
