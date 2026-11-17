@@ -988,39 +988,7 @@ const Render = (() => {
     for (let i = 0; i < 6; i++) if (Math.sin(t * 2.3 + i * 2.1) > 0.92) { ctx.fillStyle = 'rgba(255,250,235,0.8)'; const gx = 100 + hash(i * 5) * (W - 200), gy = F + 30 + hash(i * 9) * 200; ctx.fillRect(gx - 6, gy - 1, 12, 3); ctx.fillRect(gx - 1, gy - 5, 3, 11); }
   }
 
-  /**
-   * The arena's stage lights, switched on for a great play. A spotlight cuts the venue dark round the moment,
-   * and four truss lamps (the menu backdrop's) swing their beams in on it, each with a pool on the floor.
-   * L = { t, max, x, y, cols }: seconds left, the whole span, the focus, and the beams' colours. Drawn over the
-   * court, under the HUD.
-   */
-  function stageLights(ctx, W, H, t, L, floorY) {
-    const up = clamp01((L.max - L.t) / 0.18), down = clamp01(L.t / 0.7), k = up * down;
-    if (k <= 0) return;
-    const rgb = c => { const n = parseInt(toHex(c).slice(1), 16); return `${n >> 16},${(n >> 8) & 255},${n & 255}`; };
-    const fx = L.x, fy = L.y;
-    ctx.save();
-    // the house dims, except in a pool of light on the moment
-    const dim = ctx.createRadialGradient(fx, fy, 70, fx, fy, 520);
-    dim.addColorStop(0, 'rgba(6,3,14,0)'); dim.addColorStop(1, `rgba(6,3,14,${0.5 * k})`);
-    ctx.fillStyle = dim; ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 4; i++) {
-      const sx = 160 + i * 320, col = rgb(L.cols[i % L.cols.length]);
-      const sway = Math.sin(t * 4.2 + i * 1.9) * 40 * (0.4 + 0.6 * k), px = sx + (fx - sx) * 0.7 + (i - 1.5) * 55 + sway, py = floorY + 50;
-      const lg = ctx.createLinearGradient(sx, 40, px, py); lg.addColorStop(0, `rgba(${col},${0.5 * k})`); lg.addColorStop(1, `rgba(${col},${0.12 * k})`);
-      ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(sx - 12, 40); ctx.lineTo(sx + 12, 40); ctx.lineTo(px + 110, py); ctx.lineTo(px - 110, py); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = `rgba(${col},${0.16 * k})`; ctx.beginPath(); ctx.moveTo(sx - 4, 40); ctx.lineTo(sx + 4, 40); ctx.lineTo(px + 44, py); ctx.lineTo(px - 44, py); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = `rgba(${col},${0.3 * k})`; ctx.beginPath(); ctx.ellipse(px, py, 140, 30, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = `rgba(${col},${0.22 * k})`; ctx.beginPath(); ctx.ellipse(px, py, 70, 14, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = `rgba(255,248,225,${0.95 * k})`; ctx.fillRect(sx - 14, 34, 28, 9); ctx.fillRect(sx - 20, 36, 40, 5);   // the lamp flares
-    }
-    const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 200); const fc = rgb(L.cols[0]);
-    fg.addColorStop(0, `rgba(${fc},${0.3 * k})`); fg.addColorStop(1, `rgba(${fc},0)`);
-    ctx.fillStyle = fg; ctx.fillRect(fx - 200, fy - 200, 400, 400);
-    ctx.restore();
-  }
 
-  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, stageLights, setFont, pose, world, player, ball, hoopBack, hoopFront, aiIcon, scoreboard, roundCard, button, panel, levelBar, levelColor, menuLogo, pixelBall, icon, keycap, crown, text, ink, rr,
+  return { RAINBOW, CONTESTED, FADE_BLUE, ICE, VENUES, menuBackdrop, setFont, pose, world, player, ball, hoopBack, hoopFront, aiIcon, scoreboard, roundCard, button, panel, levelBar, levelColor, menuLogo, pixelBall, icon, keycap, crown, text, ink, rr,
     TEAM_NAMES, TEAM_COLORS, TEAM_DARK, INK, VENUES };
 })();
