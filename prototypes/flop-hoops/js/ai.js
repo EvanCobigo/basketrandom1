@@ -425,7 +425,7 @@ const AI = (() => {
    * coming down near it counts double. The lower levels read it less well (scaled by skill).
    */
   function dribbleRisk(c, X, p) {
-    const { w, T } = X, b = w.ball, dir = Physics.dribbleDir(w, p), steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);   // (a dribble goes toward the two-point line)
+    const { w, T } = X, b = w.ball, dir = Physics.dribbleDir(w, p), steer = clamp(wrap(p.torso.angle) / Math.max(0.05, T.rock_angle), -1, 1);   // (a dribble goes toward the two-point line)
     const sx = dir * (0.45 + 0.55 * Math.max(0, steer * dir));
     const path = Physics.pathFrom(w, T, b.position.x, b.position.y, T.dribble_vx * (sx + 0.25 * dir), T.dribble_vy, 28);
     let risk = 0;

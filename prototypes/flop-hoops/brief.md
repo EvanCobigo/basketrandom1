@@ -65,6 +65,8 @@ After play: Add a new two point line where characters dribble towards the 2-poin
 After play: Aim assist should only apply when you're near the 2 point line shooting toward the nearest basket, not the 2 point line for the basket your opponent attempts to shoot on.
 Answers: Rule: only on the half with the basket you shoot at. Range: tighten to about 180 px. Dribble: leave as it is.
 
+After play: Bug fix and prepare for first release.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -119,6 +121,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] The closer a shooter is to his line, the easier the shot, while he is still: feet down and the swing's lean under `line_sway_max` (0.3 rad); swaying more or jumping gives no help. Within `line_zone` (60 px) of the line any cock-back from `line_charge_min` (0.12) to `line_charge_max` (0.92) goes in; only the two extremes (a bare tap, a hold to the very end) miss. Nothing of this applies away from the line
 - [x] The line's help is for the shooter's own line only and only on the half of the court holding the basket he shoots at (so none near the other team's line, none at centre court); it reaches `line_range` 180 px (tightened from 260) either side of the line, and the line's hot spot flashes by the same rule
 - [x] The CPU reads the line too: its 2-point test, scouting and long-shot defence use its own line; dribbling to the line is worth taking and not once it is there; a still shot on the line is taken at once
+- [x] Release 1.0.0 candidate (`production/releases/v1.0.0.md`): version on the title, `LICENSES.txt` (Matter.js MIT, Departure Mono OFL), a favicon and page description, a keyboard-needed notice on touch-only devices, `tools/release.sh` (dist/ plus the zip); fixes: `rock_angle` 0 broke physics, bad saved settings crashed the title, no Web Audio stopped the game from starting, a tie read "LEVEL"
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held

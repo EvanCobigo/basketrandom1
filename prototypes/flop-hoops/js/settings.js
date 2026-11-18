@@ -117,7 +117,12 @@ const Settings = (() => {
   function load() {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
-      for (const k of Object.keys(saved)) if (k in defaults && typeof saved[k] === 'number') CONFIG[k].value = Math.min(CONFIG[k].max, Math.max(CONFIG[k].min, saved[k]));
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+      for (const k of Object.keys(saved)) {   // (a saved value is clamped and snapped to the step like one set in the menu: hand-edited or old storage never breaks a screen)
+        if (!(k in defaults) || typeof saved[k] !== 'number' || !Number.isFinite(saved[k])) continue;
+        const c = CONFIG[k], v = Math.min(c.max, Math.max(c.min, saved[k]));
+        c.value = +(Math.round((v - c.min) / c.step) * c.step + c.min).toFixed(6);
+      }
     } catch (e) { /* nothing saved, or storage blocked */ }
   }
   function reset() { for (const k of Object.keys(defaults)) CONFIG[k].value = defaults[k]; save(); dispatchEvent(new Event('tune')); }

@@ -545,7 +545,7 @@ const Render = (() => {
     }
     text(ctx, `FIRST TO ${st.target}`, cx, y + 30, 15, '#ffd23f');
     text(ctx, `ROUND ${st.round}`, cx, y + 54, 20, '#ffffff');
-    text(ctx, st.leader < 0 ? 'LEVEL' : `${TEAM_NAMES[st.leader].toUpperCase()} LEAD`, cx, y + 77, 13,
+    text(ctx, st.leader < 0 ? 'TIED' : `${TEAM_NAMES[st.leader].toUpperCase()} LEAD`, cx, y + 77, 13,
       st.leader < 0 ? '#c9c3e0' : TEAM_COLORS[st.leader], { shadow: 2 });
     gleam(ctx, cx - w / 2, y, w, h, T);
     ctx.restore();

@@ -30,3 +30,9 @@
   licence: {id: OFL-1.1}
   date: 2026-11-14
   ships: true
+- path: LICENSES.txt
+  origin: code
+  tool: "written for the release: the licences and credits of the two third-party files"
+  model: "claude-sonnet-5-5"
+  date: 2026-11-18
+  ships: true

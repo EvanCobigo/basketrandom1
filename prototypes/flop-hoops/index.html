@@ -7,6 +7,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flop Hoops</title>
+<meta name="description" content="Flop Hoops: two wobbly ballers a side, one jump key each. A retro physics basketball game for two players or against the computer. Plays offline in the browser; a keyboard is needed.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='1' width='12' height='14' fill='%23ff8a1f'/%3E%3Crect x='1' y='3' width='14' height='10' fill='%23ff8a1f'/%3E%3Crect x='7' y='1' width='2' height='14' fill='%23141018'/%3E%3Crect x='1' y='7' width='14' height='2' fill='%23141018'/%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; height: 100%; background: #14111f; overflow: hidden; }
   body { font-variant-numeric: tabular-nums; }
@@ -37,6 +39,8 @@ const params = new URLSearchParams(location.search);
 const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.speed is CONFIG.speed.value
 const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
 const W = 1280, H = 720;        // logical size
+const VERSION = '1.0.0';   // the release this build is (shown on the title)
+const TOUCH = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches);   // a phone or tablet with no mouse: there are no keys to play with
 const PIXEL = false;
 const FONT = '"Departure Mono", "Courier New", ui-monospace, Menlo, Consolas, monospace'; // Departure Mono (js/font.js)
 const TITLE = 'Flop Hoops';
@@ -127,7 +131,13 @@ function menuKeys() {
 // low-mid body, a high shelf set by sfx_warmth, a gentle compressor and a soft limit), and a share of each goes to a short,
 // dark generated room. Repeats vary a little in pitch, level and timing (sfx_variation), so nothing sounds stamped out.
 let audio = null, muted = false;
+let audioFailed = false;
+/** Start the sound on the first input. A browser without Web Audio (or one that refuses it) leaves the game silent; it never stops it. */
 function startAudio() {
+  if (audioFailed) return;
+  try { startAudioNow(); } catch (e) { audio = null; audioFailed = true; }
+}
+function startAudioNow() {
   if (!audio) {
     const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)(); // a check may inject one
     const has = f => typeof ac[f] === 'function';
@@ -959,7 +969,9 @@ const scenes = {
       drawCourt(c => Render.menuBackdrop(c, W, H, state.t), false);
       Render.menuLogo(ctx, W, 100, state.t, introT, REDUCED_MOTION);
       ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, (introT - 0.3) / 0.45));   // the rest fades in behind the logo
-      ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 184, 3, '#fff1a8');
+      if (TOUCH) ptext('A KEYBOARD IS NEEDED TO PLAY', W / 2, 184, 3, '#ff9a3c');
+      else ptext('TWO WOBBLY BALLERS A SIDE. JUMP, SHOOT, BOUNCE, DUNK.', W / 2, 184, 3, '#fff1a8');
+      ptext('V' + VERSION, 24, H - 20, 1.5, '#8f88b0', { align: 'left', shadow: 1 });
       buttons = [];
       // the modes: one strong primary row
       [['VS CPU', 'YOU VS COMPUTER', 'controller', Render.TEAM_COLORS[0], () => newMatch('cpu')],

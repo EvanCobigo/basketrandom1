@@ -382,7 +382,7 @@ const Physics = (() => {
       const goalX = c && c.team === p.team ? attackedHoop(w, p).cx : w.ball.position.x;
       const chase = clamp((goalX - torso.position.x) / 200, -1, 1) * T.jump_chase;
       // the swing steers the hop: lean one way and the hop carries you that way, up to hop_reach
-      const vx = jx * v + Math.sin(ja) / Math.sin(T.rock_angle) * T.hop_reach + p.dir * T.jump_forward + chase, vy = jy * v;
+      const vx = jx * v + Math.sin(ja) / Math.sin(Math.max(0.05, T.rock_angle)) * T.hop_reach + p.dir * T.jump_forward + chase, vy = jy * v;
       for (const part of p.parts) {
         Body.setVelocity(part, { x: part.velocity.x * 0.25 + vx, y: Math.min(part.velocity.y, 0) * 0.25 + vy });
       }
@@ -771,7 +771,7 @@ const Physics = (() => {
       p.sloppy = Math.max(0, (p.sloppy || 0) + (quality === 'sloppy' ? 2 : quality === 'clean' ? -1 : 0));
       p.lastDribble = w.time;
       const wild = (p.sloppy + Math.max(0, p.dribbleChain - T.dribble_safe_chain) * 0.5) * T.dribble_error;
-      const steer = clamp(wrap(p.torso.angle) / T.rock_angle, -1, 1);
+      const steer = clamp(wrap(p.torso.angle) / Math.max(0.05, T.rock_angle), -1, 1);
       // every dribble carries you a little forward; leaning forward in the swing carries you further
       // (iteration 50: it goes toward the team's two-point line, from either side of it, not toward the rim; at the line it bounces in place)
       const dd = dribbleDir(w, p); p.dribDir = dd;

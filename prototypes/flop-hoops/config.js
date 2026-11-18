@@ -168,7 +168,7 @@ window.CONFIG = {
   gravity: { value: 1.0, min: 0.3, max: 2, step: 0.05 },       // Matter gravity.y
   upright: { value: 26, min: 0, max: 80, step: 1 },            // rad/s^2 per rad pulling the torso upright
   upright_air: { value: 0.35, min: 0, max: 1, step: 0.05 },    // share of the upright pull in the air
-  rock_angle: { value: 0.55, min: 0, max: 0.9, step: 0.01 },    // rad of the forward-and-back rock while planted
+  rock_angle: { value: 0.55, min: 0.1, max: 0.9, step: 0.01 },    // rad of the forward-and-back rock while planted
   rock_rate: { value: 0.75, min: 0.2, max: 3, step: 0.05 },      // rocks a second
   rock_follow: { value: 0.6, min: 0.05, max: 1, step: 0.05 },   // how tightly a planted body tracks its swing
   rock_engage: { value: 0.75, min: 0.3, max: 1.5, step: 0.05 },  // rad of tilt under which the planted swing takes over
