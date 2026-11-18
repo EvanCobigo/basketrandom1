@@ -62,6 +62,9 @@ Answers: Archetype: add STREET BALL as a 9th style and make all styles pickable.
 
 After play: Add a new two point line where characters dribble towards the 2-point line instead of just dribbling forwards. There should be two of them: for oranges the 2-point line would be the teal side and vice versa. The character always dribbles in the direction of the two-point line. The closer the character is to the two-point line, the easier it is to shoot if they aren't swaying nor jumping. Make the cock-back timer make any length of press lead to goals save the extremities, only for the two point line. Make the line around the halfway point between the basket and the middle line.
 
+After play: Aim assist should only apply when you're near the 2 point line shooting toward the nearest basket, not the 2 point line for the basket your opponent attempts to shoot on.
+Answers: Rule: only on the half with the basket you shoot at. Range: tighten to about 180 px. Dribble: leave as it is.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -114,6 +117,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Two two-point lines, one per team, painted on the floor in the team's colour (with a "2" and a faint beam) halfway (`line_frac` 0.5) between the basket the team attacks and the centre line: the oranges' is on the teal half and the teal team's on the orange half. A shot released beyond a team's own line scores 2 (this replaces the centre-line rule)
 - [x] A dribble always carries the dribbler toward his team's line, from either side of it (and bounces in place within 14 px of it); the lean in his swing only sets how far it carries
 - [x] The closer a shooter is to his line, the easier the shot, while he is still: feet down and the swing's lean under `line_sway_max` (0.3 rad); swaying more or jumping gives no help. Within `line_zone` (60 px) of the line any cock-back from `line_charge_min` (0.12) to `line_charge_max` (0.92) goes in; only the two extremes (a bare tap, a hold to the very end) miss. Nothing of this applies away from the line
+- [x] The line's help is for the shooter's own line only and only on the half of the court holding the basket he shoots at (so none near the other team's line, none at centre court); it reaches `line_range` 180 px (tightened from 260) either side of the line, and the line's hot spot flashes by the same rule
 - [x] The CPU reads the line too: its 2-point test, scouting and long-shot defence use its own line; dribbling to the line is worth taking and not once it is there; a still shot on the line is taken at once
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height

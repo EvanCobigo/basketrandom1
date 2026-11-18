@@ -58,7 +58,7 @@ window.CONFIG = {
   // ---- The two-point line: one per team, on the far half (the other team's side), between the basket it attacks and the centre line ----
   line_frac: { value: 0.5, min: 0.2, max: 0.9, step: 0.05 },       // how far from the basket it attacks to the centre line the team's two-point line is (0.5: halfway); a shot released beyond it scores 2 (from the next round)
   line_zone: { value: 60, min: 10, max: 150, step: 5 },            // px either side of the line where a still shooter's shot goes in at ANY cock-back from line_charge_min to line_charge_max
-  line_range: { value: 260, min: 60, max: 600, step: 10 },         // px from the line over which a still shooter's aim help grows: the closer to the line, the easier the shot
+  line_range: { value: 180, min: 60, max: 600, step: 10 },         // px from the line over which a still shooter's aim help grows: the closer to the line, the easier the shot (only on the half with the basket he shoots at)
   line_sway_max: { value: 0.3, min: 0.05, max: 0.55, step: 0.05 }, // rad of lean (the swing) a shooter may have and still get the line's help; more sway or any jump and he gets none
   line_charge_min: { value: 0.12, min: 0, max: 0.5, step: 0.02 },  // on the line: a cock-back below this (a bare tap) misses (an extreme)
   line_charge_max: { value: 0.92, min: 0.5, max: 1, step: 0.02 },  // on the line: a cock-back above this (held to the end) misses (the other extreme)

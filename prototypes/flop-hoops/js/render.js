@@ -435,7 +435,7 @@ const Render = (() => {
     const zone = CONFIG.line_zone.value;
     for (const team of [0, 1]) {
       const x = Math.round(w.lineX[team]), col = TEAM_COLORS[team];
-      const hot = !!w.hold && w.hold.p.team === team && Math.abs(Physics.handPos(w.hold.p).x - x) <= zone && w.hold.p.sinceGround < 0.06;
+      const hot = !!w.hold && w.hold.p.team === team && Math.abs(Physics.handPos(w.hold.p).x - x) <= zone && (Physics.handPos(w.hold.p).x - w.cx) * w.hold.p.dir > 0 && w.hold.p.sinceGround < 0.06;
       const bg = ctx.createLinearGradient(0, F() - 260, 0, F());   // a faint beam up from the floor
       bg.addColorStop(0, 'rgba(0,0,0,0)'); bg.addColorStop(1, mixAlpha(col, hot ? 0.5 : 0.26));
       ctx.fillStyle = bg; ctx.fillRect(x - 7, F() - 260, 14, 260);

@@ -564,7 +564,8 @@ const Physics = (() => {
     let assist = w.hold && w.hold.p === p && w.hold.easy ? 1 : w.hold && w.hold.p === p && w.hold.assist !== undefined ? w.hold.assist : w.hot === p ? Math.max(T.shot_assist, T.heat_assist) : T.shot_assist;   // a hot player (a heat check) gets more help
     // THE TWO-POINT LINE: a still shooter (feet down, the swing's lean under line_sway_max) is helped more the nearer he is to his line. On it
     // (line_zone either side) any cock-back from line_charge_min to line_charge_max goes in: the help is total; only the extremes miss
-    if (!lob && w.hold && w.hold.p === p && w.lineX) {
+    // (only on the half of the court holding the basket he shoots at, so his own line is the nearest one and the nearest basket is his target: nothing near the other team's line)
+    if (!lob && w.hold && w.hold.p === p && w.lineX && (from.x - w.cx) * p.dir > 0) {
       const d = Math.abs(from.x - w.lineX[p.team]), lean = Math.abs(wrap(p.torso.angle));
       if (p.sinceGround < 0.06 && lean <= T.line_sway_max && d < T.line_range) {
         const inZone = d <= T.line_zone;
