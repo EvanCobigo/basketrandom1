@@ -115,7 +115,7 @@ canvas.addEventListener('pointermove', e => {
   else if (scene === 'settings') settingsHover(mouse.x, mouse.y);
 });
 /** Press a button: it squashes for a moment, then its action runs (on the game step, not a timer). */
-function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14, action: b.action, label: b.label }; }
+function activate(b) { if (menuPress) return; sfx.click(); menuPress = { t: 0.14, action: b.action, label: b.label, x: b.x, y: b.y }; }   // (x, y too: the two '<' and the two '>' on the title share a label, and only the one pressed squashes)
 /** Arrow / W / S focus moves and Enter / Space presses, for any menu scene. */
 function menuKeys() {
   if (!buttons.length) return false;
@@ -913,7 +913,7 @@ function overlay(a = 0.55) { ctx.fillStyle = `rgba(20,16,36,${a})`; ctx.fillRect
 /** A menu button. `o` (optional) adds the look: { kind: 'primary'|'secondary', icon, sub, accent, glyphOnly }. */
 function btn(label, x, y, w, h, action, hint, scale, o) {
   const i = buttons.length, b = Object.assign({ label, x, y, w, h, action, hint, scale, i, t: state.t + i * 0.4,
-    hot: menuFocus === i, pressT: menuPress && menuPress.label === label ? menuPress.t : 0 }, o);
+    hot: menuFocus === i, pressT: menuPress && menuPress.label === label && menuPress.x === x && menuPress.y === y ? menuPress.t : 0 }, o);
   buttons.push(b); Render.button(ctx, b);
 }
 /** Split `s` into lines of at most `n` characters, at spaces. */
@@ -980,23 +980,19 @@ const scenes = {
         .forEach(([label, sub, icon, accent, fn], i) => btn(label, 132 + i * 348, 214, 320, 100, fn, '', 4, { kind: 'primary', icon, sub, accent }));
       // CPU difficulty: a segmented bar with a glowing knob, the level's name and what it does
       const lv = AI.levelOf(tune), L = AI.LEVELS[lv - 1], n = AI.LEVELS.length;
-      Render.panel(ctx, 132, 344, 498, 272, { title: 'CPU LEVEL AND STYLE', accent: '#ffd23f' });
-      ptext(`${lv} / ${n}`, 610, 374, 2, '#c9c3e0', { align: 'right' });
+      Render.panel(ctx, 132, 344, 498, 214, { title: 'CPU LEVEL AND STYLE', accent: '#ffd23f' });
       ptext(L.name, LEVEL.x + LEVEL.w / 2, 410, 4, Render.levelColor(lv, n), { shadow: 3 });
       btn('<', 139, 428, 40, 48, () => Settings.set('ai_level', lv - 1), '', 4, { kind: 'secondary', icon: 'left', glyphOnly: true });
       btn('>', 583, 428, 40, 48, () => Settings.set('ai_level', lv + 1), '', 4, { kind: 'secondary', icon: 'right', glyphOnly: true });
       Render.levelBar(ctx, LEVEL.x, LEVEL.y, LEVEL.w, lv, n, state.t);
-      wrapText(L.does, 38).slice(0, 2).forEach((l, i) => ptext(l, LEVEL.x + LEVEL.w / 2, 504 + i * 24, 2, '#e6ddff', { shadow: 2 }));
       // the CPU's style: pick one (or RANDOM, a new one each match) with the arrows or by clicking
-      const sv = tune.ai_style, sn = sv <= 0 ? 'RANDOM' : AI.STYLES[sv - 1].name, sd = sv <= 0 ? 'A DIFFERENT STYLE EACH MATCH' : AI.STYLES[sv - 1].does;
-      ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(152, 536, 458, 2);
+      const sv = tune.ai_style, sn = sv <= 0 ? 'RANDOM' : AI.STYLES[sv - 1].name;   // (what each level and style does is in the settings, under the highlighted row)
       const cycleStyle = d => { Settings.set('ai_style', (CONFIG.ai_style.value + d + 10) % 10); };
-      btn('<', 139, 544, 40, 48, () => cycleStyle(-1), '', 4, { kind: 'secondary', icon: 'left', glyphOnly: true });
-      btn('>', 583, 544, 40, 48, () => cycleStyle(1), '', 4, { kind: 'secondary', icon: 'right', glyphOnly: true });
-      ptext(sn, 381, 566, 3, sv === 9 ? '#ff9a3c' : sv <= 0 ? '#c9c3e0' : '#ffd23f', { shadow: 3 });
-      ptext(sd, 381, 602, 1.5, '#e6ddff', { shadow: 1 });
+      btn('<', 139, 498, 40, 48, () => cycleStyle(-1), '', 4, { kind: 'secondary', icon: 'left', glyphOnly: true });
+      btn('>', 583, 498, 40, 48, () => cycleStyle(1), '', 4, { kind: 'secondary', icon: 'right', glyphOnly: true });
+      ptext(sn, 381, 522, 3, sv === 9 ? '#ff9a3c' : sv <= 0 ? '#c9c3e0' : '#ffd23f', { shadow: 3 });
       // the controls: each team's two keys, then the finer points
-      Render.panel(ctx, 650, 344, 498, 272, { title: 'CONTROLS', accents: Render.TEAM_COLORS });
+      Render.panel(ctx, 650, 344, 498, 214, { title: 'CONTROLS', accents: Render.TEAM_COLORS });
       for (const team of [0, 1]) {
         const x0 = team ? 916 : 672, col = Render.TEAM_COLORS[team];
         ctx.fillStyle = col; ctx.fillRect(x0, 394, 8, 12);
@@ -1005,14 +1001,12 @@ const scenes = {
         Render.keycap(ctx, x0 + 20, 476, team ? 'down' : 'S', 0.62); ptext('BOUNCE / PASS', x0 + 50, 478, 2, '#ffffff', { align: 'left', shadow: 2 });
       }
       ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(898, 392, 2, 100);
-      ptext('HOLD JUMP, LET GO TO SHOOT · TAP NEAR THE RIM TO DUNK', 899, 530, 1.5, '#b9b1d6', { shadow: 1 });
-      ptext('TAP BOUNCE TO DRIBBLE · HOLD IT TO PASS', 899, 552, 1.5, '#b9b1d6', { shadow: 1 });
-      ptext('DRIBBLES GO TO YOUR 2-POINT LINE', 899, 580, 1.5, '#ffd23f', { shadow: 1 });
-      ptext('SHOOT STILL ON IT FOR AN EASY TWO', 899, 598, 1.5, '#ffd23f', { shadow: 1 });
+      ptext('HOLD JUMP, LET GO TO SHOOT · TAP NEAR THE RIM TO DUNK', 899, 520, 1.5, '#b9b1d6', { shadow: 1 });
+      ptext('TAP BOUNCE TO DRIBBLE · HOLD IT TO PASS', 899, 540, 1.5, '#b9b1d6', { shadow: 1 });
       // secondary actions
-      btn('SETTINGS', W / 2 - 274, 626, 260, 54, openSettings, '', 3, { kind: 'secondary', icon: 'gear' });
-      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W / 2 + 14, 626, 260, 54, () => setMuted(!muted), '', 3, { kind: 'secondary', icon: muted ? 'mute' : 'sound' });
-      ptext(`FIRST TO ${tune.win_score} POINTS  ·  SHOTS FROM BEYOND THE LINE +2  ·  ESC / P PAUSES  ·  M MUTES  ·  ARROWS + ENTER PICK`, W / 2, H - 20, 1.5, '#b3acd2', { shadow: 1 });
+      btn('SETTINGS', W / 2 - 274, 598, 260, 54, openSettings, '', 3, { kind: 'secondary', icon: 'gear' });
+      btn(muted ? 'SOUND: OFF' : 'SOUND: ON', W / 2 + 14, 598, 260, 54, () => setMuted(!muted), '', 3, { kind: 'secondary', icon: muted ? 'mute' : 'sound' });
+      ptext('ARROWS + ENTER PICK  ·  M MUTES  ·  ESC PAUSES', W / 2, H - 34, 1.5, '#b3acd2', { shadow: 1 });
       ctx.restore();
     },
   },

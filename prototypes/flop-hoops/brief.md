@@ -69,6 +69,8 @@ After play: Bug fix and prepare for first release.
 
 After play: Move the backboard a bit backwards so the ball doesn't get stuck up there in the gap. Don't allow dribbling when the hand is touching the floor. Play-test a full match before shipping.
 
+After play: Declutter the main menu. When one button is pressed any other button with the same sprite also plays the click animation: fix that.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -126,6 +128,7 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] Release 1.0.0 candidate (`production/releases/v1.0.0.md`): version on the title, `LICENSES.txt` (Matter.js MIT, Departure Mono OFL), a favicon and page description, a keyboard-needed notice on touch-only devices, `tools/release.sh` (dist/ plus the zip); fixes: `rock_angle` 0 broke physics, bad saved settings crashed the title, no Web Audio stopped the game from starting, a tie read "LEVEL"
 - [x] The backboards stand flush against the side walls (`board_inset` 6, the court 792 px wide so the hoops are where they were): a ball can no longer lodge in the gap between the wall and the board (35 of 300 test drops stuck before, none after)
 - [x] A hand within `dribble_hand_floor` (16 px) of the floor cannot start a dribble: the tap is lost and the ball stays in the hand, a pass still goes; the CPU knows the rule
+- [x] A decluttered title: the CPU panel shows just the level (name and bar) and the style (name), the controls panel the two key rows and two hint lines, one short footer line; what each level and style does is under the highlighted row in settings (MATCH tab). Pressing a button squashes only that button: the pressed state is matched by label and position, so the two `<` and two `>` arrows no longer move together
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held

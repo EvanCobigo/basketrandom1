@@ -44,9 +44,9 @@ const Settings = (() => {
   const SIMPLE = [
     { tab: 0, key: 'win_score', label: 'POINTS TO WIN', desc: 'FIRST TEAM TO THIS MANY POINTS WINS. A SHOT FROM BEYOND THE TWO-POINT LINE IS WORTH 2.', fmt: v => v + ' POINTS' },
     { tab: 0, key: 'game_speed', label: 'GAME SPEED', desc: 'SLOWER IS EASIER TO FOLLOW, FASTER IS MORE FRANTIC.', fmt: (v, k) => pct(v, k) },
-    { tab: 0, key: 'ai_level', label: 'CPU LEVEL', desc: 'HOW GOOD THE COMPUTER IS IN A VS CPU MATCH, FROM ROOKIE TO MYTHIC.', fmt: v => ['ROOKIE', 'AMATEUR', 'PRO', 'ALL-STAR', 'LEGEND', 'MYTHIC'][v - 1] || String(v) },
-    { tab: 0, key: 'ai_style', label: 'CPU STYLE', desc: 'HOW THE COMPUTER LIKES TO PLAY. RANDOM PICKS A NEW STYLE EACH MATCH; STREET BALL GOES FOR FLASHY PLAYS.', fmt: styleName },
-    { tab: 0, key: 'ai_air_miss', label: 'CPU AIM IN THE AIR', desc: 'HOW MUCH THE COMPUTER MISSES SHOTS TAKEN HIGH IN A JUMP. A SHOT FROM THE FLOOR IS ITS BEST ONE. 0 TURNS IT OFF.', fmt: v => v <= 0 ? 'OFF' : v <= 35 ? 'LOW' : v <= 75 ? 'NORMAL' : 'HIGH' },
+    { tab: 0, key: 'ai_level', label: 'CPU LEVEL', desc: v => (typeof AI !== 'undefined' && AI.LEVELS[v - 1] ? AI.LEVELS[v - 1].name + ': ' + AI.LEVELS[v - 1].does : 'HOW GOOD THE COMPUTER IS.'), fmt: v => ['ROOKIE', 'AMATEUR', 'PRO', 'ALL-STAR', 'LEGEND', 'MYTHIC'][v - 1] || String(v) },
+    { tab: 0, key: 'ai_style', label: 'CPU STYLE', desc: v => v <= 0 ? 'RANDOM: A DIFFERENT STYLE EACH MATCH.' : (typeof AI !== 'undefined' && AI.STYLES[v - 1] ? AI.STYLES[v - 1].name + ': ' + AI.STYLES[v - 1].does : 'HOW THE COMPUTER LIKES TO PLAY.'), fmt: styleName },
+    { tab: 0, key: 'ai_air_miss', label: 'CPU AIR AIM', desc: 'HOW MUCH THE COMPUTER MISSES SHOTS TAKEN HIGH IN A JUMP. A SHOT FROM THE FLOOR IS ITS BEST ONE. 0 TURNS IT OFF.', fmt: v => v <= 0 ? 'OFF' : v <= 35 ? 'LOW' : v <= 75 ? 'NORMAL' : 'HIGH' },
     { tab: 1, key: 'line_frac', label: '2-POINT LINE', desc: 'HOW FAR OUT EACH TEAM\'S TWO-POINT LINE IS FROM THE BASKET IT ATTACKS, AS A SHARE OF THE WAY TO THE CENTRE LINE. APPLIES FROM THE NEXT ROUND.', fmt: v => Math.round(v * 100) + '% OUT' },
     { tab: 1, key: 'jump_height', label: 'JUMP POWER', desc: 'HOW HIGH A FULL JUMP GOES.', fmt: (v, k) => pct(v, k) },
     { tab: 1, key: 'dunk_reach_x', label: 'DUNK REACH', desc: 'HOW CLOSE TO THE RIM YOU NEED TO BE TO DUNK. SMALLER IS HARDER.', fmt: (v, k) => pct(v, k) },
@@ -77,7 +77,7 @@ const Settings = (() => {
   /** "jump_tap_frac" -> "JUMP TAP FRAC"; the short list has its own plain names. */
   const label = (k, simple) => simple && simpleOf(k) ? simpleOf(k).label : k.replace(/_/g, ' ').toUpperCase();
   const EXTRA_DESC = { ai_level: 'WHICH BRAIN THE CPU PLAYS WITH. EACH LEVEL HAS ITS OWN REACTION TIME AND AIM.' };
-  const describe = k => simpleOf(k) ? simpleOf(k).desc : EXTRA_DESC[k] || '';
+  const describe = k => { const d = simpleOf(k) ? simpleOf(k).desc : EXTRA_DESC[k] || ''; return typeof d === 'function' ? d(CONFIG[k].value) : d; };
   /** The value in plain words, for the short list. */
   const showSimple = k => simpleOf(k).fmt(CONFIG[k].value, k);
   /** A 0-or-1 value is an ON/OFF switch. */
