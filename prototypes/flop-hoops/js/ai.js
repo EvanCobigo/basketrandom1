@@ -414,7 +414,7 @@ const AI = (() => {
     // EMERGENCY COOK RESET: a cock-back about to run out (80% charged, or 80% of the hold limit gone) may pump out of the dribble
     // zone to start over, as long as it is not over its own rim and the dribble's path is safe (both checked anyway below)
     const h = X.w.hold, emergency = !!h && h.p === p && (h.charge >= 0.8 || h.t >= 0.8 * X.T.ai_hold_limit);
-    return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x) && !ownRimSoon(c, X.w, X.T)
+    return c.dribs < Math.min(maxDribsOf(X.level), c.budget) && !Physics.seated(X.w, p, X.T) && !Physics.handOnFloor(X.w, p, X.T) && !underOwnRim(c, X.w, X.T, p.torso.position.x) && !ownRimSoon(c, X.w, X.T)
       && (dribZoneOk(X.w, p) || emergency) && (air || onFloor(X.w, p)) && dribbleRisk(c, X, p) < 0.5;
   }
 
@@ -720,7 +720,7 @@ const AI = (() => {
     if (noDunk && gap < zone + 80 && !behind) say(c, 'NO DUNK OFF THE DRIBBLE: FINDING ANOTHER WAY');
     // a HARD cap: this possession's budget (BUDGETS, rolled when the ball is won), and never from a seated player
     // and only inside its dribble zone (the middle third, w.dribZone): outside it the pass, the shot, the lob, the self-pass and the outlet take over
-    if (c.dribs < Math.min(maxDribs, c.budget) && !underOwn && !Physics.seated(w, p, T) && dribZoneOk(w, p)) {   // (anywhere on the court, the rim included, but under its own rim it passes, never dribbles)
+    if (c.dribs < Math.min(maxDribs, c.budget) && !underOwn && !Physics.seated(w, p, T) && !Physics.handOnFloor(w, p, T) && dribZoneOk(w, p)) {   // (anywhere on the court, the rim included, but under its own rim it passes, never dribbles)
       const progress = clamp((gap - zone) / 500, 0, 1);
       const reach = foeNear ? 0.3 : foeClose ? 0.6 : 0.85;
       let u = X.W.dribble + 0.5 * clamp(st.attack * 0.62, 0, 1) * reach * (0.4 + 0.6 * progress);   // the standing taste for it is W.dribble

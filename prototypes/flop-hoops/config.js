@@ -194,6 +194,7 @@ window.CONFIG = {
   hand_floor_px: { value: 3, min: 0, max: 20, step: 1 },        // px: a hand this close to the floor pushes off it
   hand_push: { value: 0.1, min: 0, max: 0.3, step: 0.01 },     // rad/step: the push a hand on the floor gives, turning the wobble the other way
   seat_margin: { value: 4, min: 0, max: 20, step: 1 },
+  dribble_hand_floor: { value: 16, min: 0, max: 60, step: 1 },   // px: a hand this close to the floor (or lower) cannot start a dribble: the tap is lost and the ball stays in the hand (a pass still goes); 0 turns the rule off
   rim_heat_time: { value: 2, min: 0.5, max: 6, step: 0.1 },     // s a player can stay on a rim before it is red hot
   rim_cool_time: { value: 1, min: 0.2, max: 5, step: 0.1 },     // s for a red-hot rim nobody is on to cool right down
   rim_gleam_time: { value: 0.45, min: 0.1, max: 1.5, step: 0.05 }, // s of the white gleam before the rim blows
@@ -223,12 +224,12 @@ window.CONFIG = {
   drop_height: { value: 430, min: 200, max: 520, step: 10 },   // px above the floor the ball drops from
 
   // ---- Court ----
-  court_width: { value: 860, min: 700, max: 1240, step: 10 }, // px
+  court_width: { value: 792, min: 700, max: 1240, step: 2 }, // px (the backboards stand 6 px from the side walls: 792 puts the hoops where 860 did with the boards 40 px out)
   rim_height: { value: 235, min: 200, max: 420, step: 5 },     // px from floor to rim
   rim_span_min: { value: 40, min: 30, max: 160, step: 2 },     // px rim opening (grows with the ball)
   rim_ball_ratio: { value: 1.4, min: 1.05, max: 2, step: 0.05 }, // rim opening as a multiple of the ball's width: 1.4 balls fit
   board_height: { value: 135, min: 60, max: 200, step: 5 },    // px backboard height
-  board_inset: { value: 40, min: 20, max: 120, step: 2 },      // px from side wall to backboard
+  board_inset: { value: 6, min: 4, max: 120, step: 2 },        // px from side wall to the backboard's centre (the board is 10 px thick: 6 leaves no gap behind it for a ball to wedge in; below about 26 a ball can lodge between the board's top and the wall)
 
 
   // ---- Look and juice ----

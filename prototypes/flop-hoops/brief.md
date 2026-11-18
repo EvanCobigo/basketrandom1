@@ -67,6 +67,8 @@ Answers: Rule: only on the half with the basket you shoot at. Range: tighten to 
 
 After play: Bug fix and prepare for first release.
 
+After play: Move the backboard a bit backwards so the ball doesn't get stuck up there in the gap. Don't allow dribbling when the hand is touching the floor. Play-test a full match before shipping.
+
 **Pitch:** Two wobbly ragdoll ballers a side, one jump key each, swinging on their feet and hurling a squircle ball.
 
 **Genre:** arcade sports (floppy physics sport)
@@ -80,7 +82,7 @@ After play: Bug fix and prepare for first release.
 **Intent:** needs 2 players *(you said)*
 
 ## Look and references
-- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court (860 px); everything chunky (3.5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
+- Look: really retro: the court drawn at low resolution, snapped to each round's small palette and scaled up under scanlines, with a monospace square-cornered HUD; flat plain backgrounds (sky, one horizon band, floor, centre line); slim faceless characters built like a 6 ft 4 in player with a +4 in wingspan (long legs, small squircle heads, small hands, plain shirts); a rounded ball with a white trail when fired (rainbow on a perfect line); a smaller ball; hoops whose rim fits 1.4 balls, with a taller backboard and deeper net, 10 ft high on a narrower court (792 px); everything chunky (3.5 px art pixels, square-cornered outlines, near-square heads, thicker bodies); thick dark outlines; tangerine vs teal teams; a bright orange seamed ball; each round a new venue (school gym, dusk rooftop, beach, night street court) in its own two-tone palette, background darker and calmer than play; signature: the rainbow trail of a perfectly lined-up shot. Every figure drawn, no emoji, no plain circles. *(inferred (strong))*
 - References: the floppy one-button basketball genre (Basket Random and others) for its feel only: one-key jumps, ragdoll chaos, random rounds.
 - View: 2D side view · Camera: static, whole court visible, scaled to the window.
 
@@ -122,6 +124,8 @@ Every touch is contested from second one: the skill is timing your hop against t
 - [x] The line's help is for the shooter's own line only and only on the half of the court holding the basket he shoots at (so none near the other team's line, none at centre court); it reaches `line_range` 180 px (tightened from 260) either side of the line, and the line's hot spot flashes by the same rule
 - [x] The CPU reads the line too: its 2-point test, scouting and long-shot defence use its own line; dribbling to the line is worth taking and not once it is there; a still shot on the line is taken at once
 - [x] Release 1.0.0 candidate (`production/releases/v1.0.0.md`): version on the title, `LICENSES.txt` (Matter.js MIT, Departure Mono OFL), a favicon and page description, a keyboard-needed notice on touch-only devices, `tools/release.sh` (dist/ plus the zip); fixes: `rock_angle` 0 broke physics, bad saved settings crashed the title, no Web Audio stopped the game from starting, a tie read "LEVEL"
+- [x] The backboards stand flush against the side walls (`board_inset` 6, the court 792 px wide so the hoops are where they were): a ball can no longer lodge in the gap between the wall and the board (35 of 300 test drops stuck before, none after)
+- [x] A hand within `dribble_hand_floor` (16 px) of the floor cannot start a dribble: the tap is lost and the ball stays in the hand, a pass still goes; the CPU knows the rule
 - [x] Catch: hand hitbox (over half the ball inside) or abdomen contact snaps the ball to the hand; feet never catch
 - [x] Hold with the ball to cock back, let go to fire; a catch made with the key down needs one let-go first; cock-back grows forward speed far more than height
 - [x] Jump height follows how long the key is held

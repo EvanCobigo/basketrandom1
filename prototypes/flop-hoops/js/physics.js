@@ -207,6 +207,8 @@ const Physics = (() => {
     const a = p.arm.angle, h = p.dims.armL / 2;
     return { x: p.arm.position.x - Math.sin(a) * h, y: p.arm.position.y + Math.cos(a) * h };
   }
+  /** The hand is on the floor (within T.dribble_hand_floor px of it): no dribble can be started from here. */
+  function handOnFloor(w, p, T) { return T.dribble_hand_floor > 0 && handPos(p).y >= w.floorY - T.dribble_hand_floor; }
   /**
    * Sitting: the bottom edge of the torso (where the hips are) within T.seat_margin of the floor. A seated
    * player cannot dribble (a pass still goes).
@@ -1234,7 +1236,7 @@ const Physics = (() => {
       else if (bk) { h.bouncing = true; h.bcharge = Math.min(1, h.bcharge + dt / T.bounce_charge_time); }
       if (h.bouncing && !bk) {
         // no dribble from a seated player: the tap is lost and the ball stays in the hand (a pass still goes)
-        if (h.bcharge < T.dribble_threshold && seated(w, p, T)) { h.bouncing = false; h.bcharge = 0; w.onEvent({ type: 'seatedtap', team: p.team }); }
+        if (h.bcharge < T.dribble_threshold && (seated(w, p, T) || handOnFloor(w, p, T))) { h.bouncing = false; h.bcharge = 0; w.onEvent({ type: 'seatedtap', team: p.team }); }
         // nor from outside his team's dribble zone (the CPU's middle third: feet or ball past an edge): lost the same way, a pass still goes
         else if (h.bcharge < T.dribble_threshold && !inDribZone(w, p)) { h.bouncing = false; h.bcharge = 0; w.onEvent({ type: 'zonetap', team: p.team }); }
         else { bounce(w, T); return; }
@@ -1270,7 +1272,7 @@ const Physics = (() => {
       if (own || shareInHandBox(p, ball, T) > 0.5 || touchesAbdomen(p, ball, T)) {
         const again = p === w.lastBouncer && p.queued; p.queued = false;   // a queued dribble tap fires however the dribbler catches it
         grab(w, p, T, own ? 'dribble' : 'grab', held[p.team]);
-        if (again && !seated(w, p, T) && inDribZone(w, p)) { w.hold.bcharge = 0; bounce(w, T); }   // (not from a seated catch: no dribbling sitting down)   // the queued tap: back down at once
+        if (again && !seated(w, p, T) && !handOnFloor(w, p, T) && inDribZone(w, p)) { w.hold.bcharge = 0; bounce(w, T); }   // (not from a seated catch: no dribbling sitting down)   // the queued tap: back down at once
         else if (again && !inDribZone(w, p)) w.onEvent({ type: 'zonetap', team: p.team, queued: true });   // (nor outside the zone: the ball stays in the hand)
         break;
       }
@@ -1350,5 +1352,5 @@ const Physics = (() => {
     }
   }
 
-  return { FLOOR_Y, CX, DELTA, dribbleDir, seated, handPos, startCut, createWorld, step, dropBall, squircle, dunkReady, previewShot, predictLine, ballPath, pathFrom, riseOf, gravityPx, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
+  return { FLOOR_Y, CX, DELTA, dribbleDir, seated, handOnFloor, handPos, startCut, createWorld, step, dropBall, squircle, dunkReady, previewShot, predictLine, ballPath, pathFrom, riseOf, gravityPx, landingX, shotVelocity, lobTarget, lobPossible, lobPlan, lobReceiver, swingAt };
 })();
